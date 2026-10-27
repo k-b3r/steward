@@ -7,7 +7,10 @@ module.exports = {
       // Each feature module's index.ts is its only entry from outside.
       publicApis: [],
       // Heavy or side-effecting packages and the one file allowed to import each.
-      heavyDeps: [{ packages: ['pg'], owner: 'src/platform/db.ts' }],
+      heavyDeps: [
+        { packages: ['pg'], owner: 'src/platform/db.ts' },
+        { packages: ['bullmq', 'ioredis'], owner: 'src/worker/queue.ts' },
+      ],
       inner: ['src/platform'],
       // src/processes (flows spanning modules, created when a second caller needs one) goes here too:
       // it may import modules, modules never import it.

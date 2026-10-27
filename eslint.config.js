@@ -9,7 +9,13 @@ export default [
     delayModules: ['src/platform/delay.ts'],
     // Pure decision code (no clock, randomness, fetch, process). Uncomment once the
     // architecture fit check has modules; pure code defaults to a module's domain/ (list files instead if the repo lays it out differently, and record that in CODING_STANDARDS.md).
-    pureCorePaths: ['src/transitions.ts', 'src/allocate.ts', 'src/linear-map.ts', 'src/retry-policy.ts'],
+    pureCorePaths: [
+      'src/transitions.ts',
+      'src/allocate.ts',
+      'src/linear-map.ts',
+      'src/retry-policy.ts',
+      'src/intake-policy.ts',
+    ],
   }),
   // Repo-specific blocks (framework plugins, extra bans) go here.
 ]

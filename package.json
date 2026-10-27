@@ -32,7 +32,8 @@
       "src/transitions.ts",
       "src/allocate.ts",
       "src/linear-map.ts",
-      "src/retry-policy.ts"
+      "src/retry-policy.ts",
+      "src/intake-policy.ts"
     ]
   },
   "devDependencies": {
