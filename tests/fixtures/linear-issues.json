@@ -1,0 +1,66 @@
+{
+  "page": {
+    "data": {
+      "issues": {
+        "nodes": [
+          {
+            "id": "lin_synthetic_0001",
+            "identifier": "TST-1",
+            "title": "Synthetic todo ticket",
+            "description": "Clicking the synthetic login button does nothing.",
+            "url": "https://example.com/tst/issues/TST-1",
+            "branchName": "tst-1-synthetic-login-button",
+            "labels": {
+              "nodes": [{ "name": "zebra" }, { "name": "alpha" }]
+            },
+            "state": { "name": "Todo" }
+          },
+          {
+            "id": "lin_synthetic_0002",
+            "identifier": "TST-2",
+            "title": "Synthetic in-progress ticket",
+            "description": "Add a synthetic retry to the fake upload job.",
+            "url": "https://example.com/tst/issues/TST-2",
+            "labels": { "nodes": [] },
+            "state": { "name": "In Progress" }
+          },
+          {
+            "id": "lin_synthetic_0003",
+            "identifier": "TST-3",
+            "title": "Synthetic backlog ticket",
+            "description": null,
+            "url": "https://example.com/tst/issues/TST-3",
+            "labels": { "nodes": [{ "name": "chore" }] },
+            "state": { "name": "Backlog" }
+          },
+          {
+            "id": "lin_synthetic_0004",
+            "identifier": "TST-4",
+            "title": "Synthetic blank-branch ticket",
+            "description": "Synthetic description for the blank branch case.",
+            "url": "https://example.com/tst/issues/TST-4",
+            "branchName": "",
+            "labels": { "nodes": [{ "name": "spike" }] },
+            "state": { "name": "Todo" }
+          }
+        ],
+        "pageInfo": { "hasNextPage": true, "endCursor": "cursor-page-1" }
+      }
+    }
+  },
+  "lastPage": {
+    "data": {
+      "issues": {
+        "nodes": [],
+        "pageInfo": { "hasNextPage": false, "endCursor": null }
+      }
+    }
+  },
+  "graphqlErrors": {
+    "errors": [{ "message": "Synthetic GraphQL failure" }],
+    "data": null
+  },
+  "missingIssues": {
+    "data": { "viewer": { "id": "lin_synthetic_9999" } }
+  }
+}
