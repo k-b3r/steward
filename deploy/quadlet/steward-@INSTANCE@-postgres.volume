@@ -1,0 +1,6 @@
+# Postgres data directory for one instance. Survives container re-creation.
+[Volume]
+VolumeName=steward-@INSTANCE@-pgdata
+
+[Install]
+WantedBy=default.target

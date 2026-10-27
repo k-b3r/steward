@@ -1,0 +1,20 @@
+# Postgres 17 for one steward instance.
+# The password is not in this file: Podman sets POSTGRES_PASSWORD from the
+# secret steward-@INSTANCE@-postgres-password (create it with `podman secret
+# create`). The port is published on 127.0.0.1 only.
+[Container]
+Image=docker.io/library/postgres:17
+ContainerName=steward-@INSTANCE@-postgres
+Network=steward-@INSTANCE@.network
+PublishPort=127.0.0.1:@PG_PORT@:5432
+Volume=steward-@INSTANCE@-postgres.volume:/var/lib/postgresql/data
+Environment=POSTGRES_DB=@PG_DB@
+Environment=POSTGRES_USER=postgres
+Secret=steward-@INSTANCE@-postgres-password,type=env,target=POSTGRES_PASSWORD
+
+[Service]
+Restart=always
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target
