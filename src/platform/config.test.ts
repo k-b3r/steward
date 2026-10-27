@@ -18,7 +18,7 @@ const BASE_ENV: Record<string, string> = {
   TEST_DATABASE_URL: 'postgres://steward:pw@localhost:5432/steward_personal_test',
   REDIS_QUEUE_URL: 'redis://localhost:6379/0',
   REDIS_SLOT_URL: 'redis://localhost:6380/0',
-  LINEAR_API_KEY: 'lin_api_0123456789',
+  LINEAR_API_KEY: 'fake-linear-key-for-tests',
   LINEAR_TEAM_KEY: 'TST',
   API_TOKEN: 'token-0123456789abcdef0123456789abcdef',
   REPO_PATH: '/home/you/Develop/scratch-repo',

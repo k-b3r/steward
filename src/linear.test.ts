@@ -5,7 +5,7 @@ import { LinearMapError } from './linear-map'
 import { createLogger } from './platform/logger'
 import type { WorkItem } from './types'
 
-const API_KEY = 'lin_api_synthetic_secret_123'
+const API_KEY = 'fake-linear-key-for-tests'
 const TEAM_KEY = 'TST'
 const CLOCK = new Date('2026-10-27T00:00:00.000Z')
 

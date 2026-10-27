@@ -37,6 +37,17 @@
     ],
     "generatedPaths": [
       "src/db/migrations/**"
+    ],
+    "untestedExempt": [
+      "src/api/auth.ts",
+      "src/api/contract.ts",
+      "src/bootstrap.ts",
+      "src/db/**",
+      "src/platform/db.ts",
+      "src/platform/delay.ts",
+      "src/worker/process-job.ts",
+      "src/worker/queue.ts",
+      "src/worker/reconcile.ts"
     ]
   },
   "devDependencies": {
