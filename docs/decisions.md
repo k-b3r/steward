@@ -224,31 +224,28 @@ The units expect `dist/api/index.js` and `dist/worker/index.js`. `tsconfig.json`
 `noEmit`, and `package.json` has no build script. This is open item 1. Do not add a build
 script as part of deploy work; decide the compiler (tsc or a bundler) with the phase 1 code.
 
+## Verified on the box (2026-10-27)
+
+Run on Ubuntu 24.04, Podman 4.9.3 rootless, systemd user units, instance `personal`, port base 15432, images `postgres:17` and `redis:7`. Dry-run was on. A throwaway git repo stood in for the target repo. The stack was removed afterwards.
+
+- Verified: the six generated services start. The three containers publish on `127.0.0.1` only (checked with `ss`).
+- Verified: Podman injects secrets with `type=env`. Postgres initializes `steward_personal` from `POSTGRES_DB` and the secret.
+- Verified: over the published port, Postgres refuses a wrong password and accepts the right one. **Inside the container, the official image trusts connections from `127.0.0.1`** (its `pg_hba.conf` has `trust` for local and loopback). That is image behaviour, not a bug here, but anyone who can run `podman exec` has database access.
+- Verified: both Redis servers answer `NOAUTH` without the password and `PONG` with it. The systemd `$$` escaping and the shell quoting work.
+- Verified: the queue Redis has `appendonly yes` and keeps a key across a service restart. The slots Redis has `appendonly no`, saves nothing, and loses the key on restart, as designed.
+- Verified: Postgres keeps data across a restart.
+- Verified: `podman kill` on the Postgres container is followed by an automatic restart (`Restart=always`, `NRestarts=1`) with the data intact.
+- Verified: the worker and API (run with `tsx`, not the systemd units) migrate the database, reconcile a `queued` job missing from Redis, run it to `done`, and serve it through the API. No password appeared in any log.
+- Correction: the Redis password is **not** visible in the container's process arguments. Redis rewrites its process title, and `/proc/1/cmdline` shows `redis-server *:6379`. The Quadlet comment that said otherwise was wrong and is fixed.
+
 ## Unverified
 
-Marked `UNVERIFIED:` because this task started no containers and created no secrets. Each
-needs a run on the box, with dry-run on.
+Each item still needs a run on the box.
 
-- `UNVERIFIED:` Pulling `docker.io/library/postgres:17` and `docker.io/library/redis:7`, and
-  starting the generated services. Only the Quadlet generator and `systemd-analyze verify`
-  were run.
-- `UNVERIFIED:` Podman injecting a secret as an environment variable at container start. The
-  man page documents `type=env`, and the generated `podman run` line carries the option, but
-  no container was created.
-- `UNVERIFIED:` The Redis command line at runtime: systemd `$$` to literal `$`, the container
-  shell quoting, and `redis-server --requirepass` accepting the value.
-- `UNVERIFIED:` That Postgres accepts `POSTGRES_PASSWORD` from the secret and initializes
-  `steward_personal` in the volume on first start.
-- `UNVERIFIED:` AOF persistence across a container restart with the queue volume.
-- `UNVERIFIED:` Restart and boot behaviour of `Restart=always` and
-  `WantedBy=default.target`, including after `loginctl enable-linger`.
-- `UNVERIFIED:` The host units starting at all: `dist/` does not exist yet, and no env file
-  was created, so the services were not started. `systemd-analyze verify` only parses them.
-- `UNVERIFIED:` Container readiness. The host units `Requires=` the container services, but
-  a container service is active as soon as `podman run -d` returns, which is before Postgres
-  accepts connections. Add a readiness check or a retry before the first real run.
-- `UNVERIFIED:` The Postgres 17 image uses `/var/lib/postgresql/data` as its data directory;
-  the volume mount assumes it.
+- `UNVERIFIED:` Boot behaviour of `WantedBy=default.target` after `loginctl enable-linger`. Not tried, because it changes the machine.
+- `UNVERIFIED:` The host units (`steward-api@`, `steward-worker@`) starting under systemd. `dist/` does not exist yet, so only the `tsx` run above was tested.
+- `UNVERIFIED:` Container readiness ordering. A container service is active as soon as `podman run -d` returns, which is before Postgres accepts connections. In the test the services were started several seconds before the app, so the race was not exercised. Add a readiness check or a retry before relying on boot order.
+- `UNVERIFIED:` The AOF persistence of the queue Redis after a hard kill (only a clean restart was tested).
 
 ## Open items
 
