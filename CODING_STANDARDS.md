@@ -7,9 +7,6 @@ Project layer on top of the global [k-b3r/agent-config standards](https://github
 - `tool` Canonical check: `pnpm check` (format, lint, depcruise, knip, typecheck, unit tests), run by the lefthook pre-push hook.
 - `tool` CI: `k-b3r/agent-config` `ci-typescript.yml` (static checks incl. `repo-checks` and gitleaks, unit, integration, e2e) + `pr-review.yml` (agent review and gate). `pnpm exec repo-checks audit` fails if any of it is unwired.
 
-- `review` agent-config is the baseline for this repo and for the author's other projects. When it causes friction (a template that fails on day one, a rule that does not fit, a missing check) or misses a bug, add an entry to `docs/agent-config-improvements.md` in the same PR. Do not edit the agent-config checkout from here.
-- `review` Delegated work (sub-agents): give each worker a list of files it owns, forbid `git` and dependency changes, and add shared dependencies first. The orchestrator re-runs the checks itself and reads the retry, restart, cancel and cleanup code. A worker's report of green checks is not proof.
-
 ## Architecture
 
 Flat shape (see `CONTEXT.md`). Pure decision code is these files in `src/`; everything else is shell:
