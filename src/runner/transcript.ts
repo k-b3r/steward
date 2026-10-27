@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 export const TRANSCRIPT_KINDS = ['system', 'assistant', 'tool', 'result', 'error', 'orchestrator'] as const
-type TranscriptKind = (typeof TRANSCRIPT_KINDS)[number]
+export type TranscriptKind = (typeof TRANSCRIPT_KINDS)[number]
 
 export type Envelope = {
   seq: number
