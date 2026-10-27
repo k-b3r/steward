@@ -49,3 +49,9 @@ export type Job = {
 export interface WorkFeed {
   poll(): AsyncIterable<WorkItem>
 }
+
+export interface AgentRunner {
+  start(job: Job): Promise<{ sessionId: string }>
+  resume(sessionId: string, feedback: string): Promise<void>
+  cancel(jobId: string): Promise<void>
+}
