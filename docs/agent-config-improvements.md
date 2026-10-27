@@ -40,6 +40,12 @@ Rule of thumb from the README: add a rule once the same correction was needed tw
 
 ## Standards and tooling
 
+### 2026-10-27: the integration job has Postgres only, and fails on a repo with no integration tests yet (seen: 1, open)
+
+- **What happened.** `ci-typescript.yml` starts a Postgres service for the integration job and nothing else. This repo's queue tests need Redis, so they cannot run in CI and are skipped there unless `TEST_REDIS_URL` is set. Separately, `vitest.integration.config.ts` has no `passWithNoTests`, so the first PR of a new repo fails the integration job: `No test files found`.
+- **Proposed.** An input for extra service containers (for example `redis-image`, empty by default, with `TEST_REDIS_URL` exported when set). Add `passWithNoTests: true` to the integration config in the template, like the unit config.
+- **Where.** `.github/workflows/ci-typescript.yml`, `templates/typescript/vitest.integration.config.ts`.
+
 ### 2026-10-27: tests that run git can corrupt the repo when run from a git hook (seen: 1, open)
 
 - **What happened.** Git exports `GIT_DIR`, `GIT_INDEX_FILE` and related variables to hooks. The pre-push hook runs `pnpm check`, and the unit tests create temp repos with `git -C <temp> ...`. With those variables set, the commands ran against the real repository instead. One push left `core.bare=true`, a test identity in the repo's local git config, a stray commit on the branch being pushed, and an extra branch. The same tests passed when run by hand, so the failure showed only at push time.
