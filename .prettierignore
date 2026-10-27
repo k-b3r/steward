@@ -1,0 +1,10 @@
+pnpm-lock.yaml
+dist/
+coverage/
+.stryker-tmp/
+reports/
+
+# Local-only files kept in .git/info/exclude (prettier does not read it)
+SESSION_RESUME.md
+TODOS.md
+TRACKER_OUTBOX.md

@@ -1,0 +1,67 @@
+{
+  "name": "steward",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.3",
+  "scripts": {
+    "prepare": "if [ -e .git ]; then lefthook install; fi",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "depcruise": "depcruise src --config .dependency-cruiser.cjs",
+    "knip": "knip --no-progress",
+    "typecheck": "tsc -p .",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:mutation": "stryker run",
+    "check": "pnpm format:check && pnpm lint && pnpm depcruise && pnpm knip && pnpm typecheck && pnpm test",
+    "dev:api": "tsx src/api/index.ts",
+    "dev:worker": "tsx src/worker/index.ts"
+  },
+  "agentConfig": {
+    "sourceDirs": [
+      "src"
+    ],
+    "entries": [
+      "src/api/index.ts",
+      "src/worker/index.ts"
+    ],
+    "appDbEnv": "DATABASE_URL",
+    "mutationPaths": [
+      "src/transitions.ts",
+      "src/allocate.ts",
+      "src/linear-map.ts",
+      "src/retry-policy.ts",
+      "src/intake-policy.ts"
+    ],
+    "generatedPaths": [
+      "src/db/migrations/**"
+    ]
+  },
+  "devDependencies": {
+    "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",
+    "@eslint/js": "^10.0.1",
+    "@k-b3r/agent-config": "github:k-b3r/agent-config",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
+    "@types/node": "^22.0.0",
+    "dependency-cruiser": "^18.5.0",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "knip": "^6.39.0",
+    "lefthook": "^2.1.16",
+    "prettier": "^3.9.9",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^2.1.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "lefthook"
+    ]
+  }
+}

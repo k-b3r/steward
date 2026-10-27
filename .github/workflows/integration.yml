@@ -1,0 +1,27 @@
+name: integration
+
+# Runs only when an input to these tests changes (last match wins, so the
+# negations drop docs and unit tests, and *.int.test.ts is re-added).
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'db/**'
+      - 'tests/integration/**'
+      - 'vitest.integration.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/integration.yml'
+      - '!**/*.md'
+      - '!**/*.test.ts'
+      - '**/*.int.test.ts'
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    uses: k-b3r/agent-config/.github/workflows/ci-typescript.yml@main
+    with:
+      jobs: integration

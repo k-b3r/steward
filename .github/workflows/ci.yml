@@ -1,0 +1,14 @@
+name: ci
+
+on:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: k-b3r/agent-config/.github/workflows/ci-typescript.yml@main
+    with:
+      jobs: static unit mutation

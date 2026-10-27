@@ -1,0 +1,11 @@
+# Local guardrail: GitHub can't require status checks on private free-plan repos.
+# Bypass only deliberately (LEFTHOOK=0); CI runs the same checks.
+pre-push:
+  jobs:
+    - name: check
+      run: pnpm check
+# Catches a bad subject at commit time instead of after the push (CI's `commits`).
+commit-msg:
+  jobs:
+    - name: commit message
+      run: pnpm exec repo-checks commit-msg {1}

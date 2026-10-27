@@ -1,0 +1,18 @@
+name: auto-merge
+
+# Merges PRs labelled `automerge` once green and current with main.
+# Needs the CI_APP_ID variable and CI_APP_PRIVATE_KEY secret (GitHub App).
+on:
+  workflow_run:
+    workflows: [ci, integration, pr-review, pr-upkeep]
+    types: [completed]
+  pull_request:
+    types: [labeled]
+
+jobs:
+  merge:
+    uses: k-b3r/agent-config/.github/workflows/auto-merge.yml@main
+    with:
+      app-id: ${{ vars.CI_APP_ID }}
+    secrets:
+      CI_APP_PRIVATE_KEY: ${{ secrets.CI_APP_PRIVATE_KEY }}

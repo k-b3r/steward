@@ -147,3 +147,16 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# agent-config
+.stryker-tmp/
+/reports/
+/test-results/
+.claude/worktrees/
+
+# steward
+config.local.json
+.env
+.env.*
+!.env*.example
+*.tsbuildinfo
