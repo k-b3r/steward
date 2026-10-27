@@ -16,8 +16,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:mutation": "stryker run",
     "check": "pnpm format:check && pnpm lint && pnpm depcruise && pnpm knip && pnpm typecheck && pnpm test",
-    "dev:api": "tsx src/api/index.ts",
-    "dev:worker": "tsx src/worker/index.ts"
+    "dev:api": "tsx --env-file=.env src/api/index.ts",
+    "dev:worker": "tsx --env-file=.env src/worker/index.ts"
   },
   "agentConfig": {
     "sourceDirs": [
@@ -41,8 +41,10 @@
     "untestedExempt": [
       "src/api/auth.ts",
       "src/api/contract.ts",
+      "src/bootstrap.ts",
       "src/db/**",
       "src/platform/db.ts",
+      "src/platform/delay.ts",
       "src/worker/process-job.ts",
       "src/worker/queue.ts",
       "src/worker/reconcile.ts"
@@ -76,6 +78,7 @@
     ]
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.5",
     "@hono/zod-validator": "^0.9.1",
     "bullmq": "^6.5.0",
     "drizzle-orm": "^0.45.4",
