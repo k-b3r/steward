@@ -9,9 +9,10 @@ const TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = {
   proposed: ['queued', 'declined'],
   declined: ['proposed'],
   queued: ['claiming', 'cancelled', 'failed'],
-  claiming: ['running', 'failed', 'cancelled'],
+  // claiming/running -> queued is the automatic infra retry (backoff); `failed` means retries are exhausted.
+  claiming: ['running', 'queued', 'failed', 'cancelled'],
   // TODO(phase-4): remove running -> done. It exists only for the phase-1 echo worker stub.
-  running: ['pr_open', 'done', 'failed', 'cancelled'],
+  running: ['pr_open', 'done', 'queued', 'failed', 'cancelled'],
   pr_open: ['in_review', 'failed', 'cancelled'],
   in_review: ['changes_requested', 'merged', 'failed', 'cancelled'],
   changes_requested: ['in_review', 'running', 'failed', 'cancelled'],

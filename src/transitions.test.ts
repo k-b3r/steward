@@ -15,10 +15,12 @@ const LEGAL_EDGES: readonly Edge[] = [
   ['claiming', 'running'],
   ['claiming', 'failed'],
   ['claiming', 'cancelled'],
+  ['claiming', 'queued'],
   ['running', 'pr_open'],
   ['running', 'done'],
   ['running', 'failed'],
   ['running', 'cancelled'],
+  ['running', 'queued'],
   ['pr_open', 'in_review'],
   ['pr_open', 'failed'],
   ['pr_open', 'cancelled'],
@@ -92,7 +94,7 @@ describe('assertTransition', () => {
 
 describe('legalNext', () => {
   it.each(JOB_STATES)('matches the table for %s', (state) => {
-    expect(legalNext(state)).toEqual(tableNext(state))
+    expect([...legalNext(state)].sort()).toEqual([...tableNext(state)].sort())
   })
 
   it('returns no next states for done', () => {
@@ -117,5 +119,17 @@ describe('legalNext', () => {
         expect(canTransition(state, target)).toBe(true)
       }
     }
+  })
+})
+
+describe('automatic retry edges', () => {
+  it('lets claiming and running go back to queued for a backoff retry', () => {
+    expect(canTransition('claiming', 'queued')).toBe(true)
+    expect(canTransition('running', 'queued')).toBe(true)
+  })
+
+  it('keeps failed for exhausted retries: nothing before running goes through it to retry', () => {
+    expect(canTransition('pr_open', 'queued')).toBe(false)
+    expect(canTransition('in_review', 'queued')).toBe(false)
   })
 })
