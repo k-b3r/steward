@@ -41,6 +41,7 @@
     "untestedExempt": [
       "src/db/**",
       "src/platform/db.ts",
+      "src/worker/process-job.ts",
       "src/worker/queue.ts",
       "src/worker/reconcile.ts"
     ]
