@@ -101,6 +101,8 @@ DRY_RUN=true
 REPO_PATH=/home/you/Develop/scratch-repo
 ```
 
+For local development, copy `.env.example` to `.env` at the repo root and run `pnpm dev:api` or `pnpm dev:worker`; both load `.env` through `tsx --env-file`.
+
 `REPO_PATH` must be absolute. `RUNS_DIR` defaults to `$HOME/runs/$INSTANCE`, which is
 `~/runs/personal` here. The env file is the only place the app reads secrets.
 
