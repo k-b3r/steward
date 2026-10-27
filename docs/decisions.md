@@ -1,0 +1,269 @@
+# Decisions
+
+A dated, numbered log. One entry per decision. `UNVERIFIED:` marks a claim this repo has not
+tested. Open items come last. Do not renumber entries.
+
+## 2026-10-27
+
+### 1. Flat repository layout
+
+Fit check in `CONTEXT.md`: one feature area, fewer than three data-owning features. Pure
+decision code sits in files beside the shell code, not in modules. Split into modules when a
+phase adds a feature with its own data (validation reports, pull request records).
+
+### 2. One instance per context
+
+`INSTANCE` names the context (`personal`, later `work`). It prefixes every external name:
+systemd units, Quadlet containers and services, Podman network and volumes, secrets, ports,
+database, env file, and the runs directory. Nothing is a global singleton. A second instance
+needs only a second env file and a second render, not a code change.
+
+### 3. Postgres is the source of truth
+
+Postgres holds jobs, job events, slots, and pending actions. BullMQ carries job ids only and
+runs delayed jobs. The worker re-reads the job from Postgres before acting. Retry policy
+lives in `src/retry-policy.ts`, not in BullMQ. A startup reconciler requeues `queued` jobs
+missing from Redis, fails `running` jobs with no live worker (kind `infra`), and frees slots
+held by final or failed jobs.
+
+### 4. Slots are held only in `claiming` and `running`
+
+The first brief held a slot until the job was final. That would let open drafts occupy every
+slot while a person reviews them. `HOLDING_STATES` in `src/allocate.ts` is `claiming` and
+`running` only. A job waiting for review holds no slot. `findLeakedSlots` reports slots held
+by jobs in any other state, and the reconciler frees them.
+
+### 5. Failure kinds are `infra`, `agent`, `setup`
+
+One kind string and a free-text reason on the job event. `infra` retries with exponential
+backoff until `maxAttempts` (default 3). `agent` goes to the phase 3 validation loop.
+`setup` is never retried. `failed` means retries are exhausted and is the dead-letter state.
+
+### 6. Baseline rule for tickets already `In Progress`
+
+Tickets already `In Progress` on the first poll for a source become `proposed`, not run. The
+same applies when a poll returns more than `MAX_ENQUEUE_PER_POLL` items, and when open
+proposals reach `MAX_OPEN_PROPOSALS`. This stops the first poll from starting a burst of
+work. A person confirms each proposal.
+
+### 7. A draft pull request is the visible claim
+
+Phase 4 claim: the orchestrator pushes an empty commit to `agent/<identifier>` and opens a
+draft PR, before the agent starts. The PR is the lock a person can see. If validation fails,
+nothing is pushed and the draft stays empty. `UNVERIFIED:` GitHub's acceptance of a
+pull request from an empty commit is not tested yet; see open items.
+
+### 8. Hono with a typed RPC contract
+
+The API uses Hono, a `/v1` prefix, chained routes, and `src/api/contract.ts` exporting
+`AppType` plus zod schemas. The future dashboard imports only those types, enforced by
+dependency-cruiser. Nothing in the dashboard imports server code.
+
+### 9. Transcript plus raw file
+
+`transcript.jsonl` holds one envelope per line, `{ seq, ts, kind, data }`, with monotonic
+`seq` for SSE resume. `raw.jsonl` holds the byte-exact runner output. Both are mode 0600 in
+a 0700 directory. Redaction applies to orchestrator lines and process logs, not to agent
+output. The API never serves `raw.jsonl`.
+
+### 10. No labels on tickets
+
+The tracker filter is team key, assignee, and status (`Todo`, `Backlog`, `In Progress`). The
+orchestrator does not require or add labels, so a ticket needs no setup beyond assignment.
+
+### 11. Personal instance first
+
+Build and test against a personal workspace and a private scratch repo. Every phase starts in
+dry-run. The work instance is a second config and env file on the same box, created only
+after the personal instance completes a full ticket-to-draft-PR cycle. The two instances do
+not share databases, Redis, network, ports, or runs directory.
+
+### 12. Deploy target: Podman 4.9.3 rootless, systemd user units
+
+Verified on this box: `podman --version` reports 4.9.3, `podman info` reports rootless mode
+with cgroups v2 and the systemd cgroup manager. `systemd-analyze --version` reports systemd 255. Postgres, the queue Redis, and the slots Redis are rootless Podman containers started
+from Quadlet files. The API and the worker run on the host as systemd user units, not in
+containers. A dedicated `steward` system user is a documented option, not the default: the
+default is the login user's own user units with linger enabled.
+
+### 13. Unit and container names
+
+The two host units are `steward-api@<instance>.service` and
+`steward-worker@<instance>.service`, so a role can restart without the other. The Quadlet
+files render to `steward-<instance>-postgres`, `-redis-queue`, `-redis-slots`, and
+`steward-<instance>.network`, with the usual `.service` names generated by Quadlet. Volumes
+are `steward-<instance>-pgdata` and `steward-<instance>-redis-queue-data`. `instanceNames()`
+returns `steward@<instance>` as the instance unit prefix; the deployed units insert the role
+before the `@`. No code uses the unit name today.
+
+### 14. Ports are published on `127.0.0.1` only
+
+One port base per instance. Postgres uses the base, queue Redis uses base+1, slots Redis uses
+base+2, all bound to `127.0.0.1`. The API port comes from `API_PORT` (default 3000); the API
+must bind `127.0.0.1` itself. Nothing listens on the LAN. The render script validates the
+base in 1024..65530, so base+2 never exceeds 65532.
+
+### 15. Database passwords come from Podman secrets
+
+Both containers get their password from a Podman secret of type `env`:
+
+- `Secret=steward-<instance>-postgres-password,type=env,target=POSTGRES_PASSWORD`
+- `Secret=steward-<instance>-redis-password,type=env,target=REDIS_PASSWORD`
+
+The secret value is not in the Quadlet file, the repo, or the systemd unit. The alternative, a
+container `EnvironmentFile=` pointing outside the repo, would also keep the value out of the
+repo, but it puts the password in a plain file that systemd reads. The Podman secret is the
+supported route on this version and keeps the value in Podman's secret store. The operator
+creates each secret once with `podman secret create`, as the README describes. The app reads
+the same passwords from its env file, because it connects over TCP. Podman 4.9 supports
+`type=env` for `--secret` and `Secret=`; the Quadlet generator emits it in the generated
+`podman run` line (verified, entry 21).
+
+### 16. Redis requires a password without a secret in the unit file
+
+`redis-server` takes `--requirepass`, and the official image has no environment variable for
+it. The unit runs `sh -c` inside the container and reads the password from the secret-backed
+`REDIS_PASSWORD` variable:
+
+```
+Exec=/bin/sh -c "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"
+```
+
+`$$` is the systemd escape for a literal `$`, so systemd passes `$REDIS_PASSWORD` to the
+container shell instead of expanding it to an empty string. The generated unit keeps `$$`
+(verified, entry 21). Limitation: the password is in the `redis-server` process argument list
+inside that container. It never appears in the repo or in the unit file.
+`UNVERIFIED:` the runtime expansion and Redis startup were not executed, because this task
+runs no containers.
+
+### 17. Quadlet keys used
+
+The files use these keys: `[Container]` with `Image`, `ContainerName`, `Network`,
+`PublishPort`, `Volume`, `Environment`, `Secret`, `Exec`; `[Service]` with `Restart=always`
+and `TimeoutStartSec`; `[Network]` with `NetworkName`; `[Volume]` with `VolumeName`; `[Unit]`
+with `Description`; and `[Install]` with `WantedBy=default.target`. All of them are listed in
+`podman-systemd.unit(5)` on this box (Podman 4.9.3), and the generator accepted every file
+(entry 21). `WantedBy=default.target` is the supported user-unit target. `TimeoutStartSec=900`
+allows the first image pull.
+
+### 18. Pin the network and volume names
+
+Quadlet would name the network `systemd-steward-<instance>` and the volumes
+`systemd-steward-<instance>-*`. That would not match `instanceNames().redisNetwork` and would
+be awkward to type. `NetworkName=steward-<instance>-net` and explicit `VolumeName=` values
+make the real Podman names predictable and match the code. Containers reference the network
+by its Quadlet file name (`Network=steward-<instance>.network`), so Quadlet adds the
+dependency.
+
+### 19. A volume for the queue Redis
+
+The brief lists a volume for Postgres only. `appendonly yes` without a volume is pointless:
+Quadlet runs the container with `--rm`, so the AOF file would disappear on every restart.
+`steward-<instance>-redis-queue-data` holds `/data`. The slots Redis has no volume, because
+its data is disposable by design.
+
+### 20. `@PG_DB@` matches `instanceNames().dbName`
+
+The Postgres database name is `steward_<instance>` with hyphens replaced by underscores, the
+same rule as `instanceNames().dbName`. The render script computes it and substitutes
+`@PG_DB@`, so an instance named `work-demo` gets `steward_work_demo` in the container and in
+`DATABASE_URL`. A hyphen in an unquoted database URL would be ambiguous, and Postgres folds
+unquoted identifiers.
+
+### 21. Verified with the Quadlet generator
+
+Method: rendered the templates with `deploy/render.sh personal 15432 <tmpdir>`, then ran
+`QUADLET_UNIT_DIRS=<tmpdir> /usr/lib/systemd/system-generators/podman-system-generator --user
+--dryrun`. Exit code 0, no warning lines, and six services were generated:
+
+- `steward-personal-postgres-volume.service` → `podman volume create --ignore steward-personal-pgdata`
+- `steward-personal-redis-queue-volume.service` → `podman volume create --ignore steward-personal-redis-queue-data`
+- `steward-personal-network.service` → `podman network create --ignore steward-personal-net`
+- `steward-personal-postgres.service` → `--publish 127.0.0.1:15432:5432 --secret ...`
+- `steward-personal-redis-queue.service` → `--publish 127.0.0.1:15433:6379`, Exec keeps `$$REDIS_PASSWORD`
+- `steward-personal-redis-slots.service` → `--publish 127.0.0.1:15434:6379`, `--appendonly no --save ''`
+
+Each container service has `Requires=`/`After=` for its network and volume services, and
+each generated `podman run` line has the expected image, volume, secret, and publish flag.
+
+### 22. The render script
+
+`deploy/render.sh <instance> <port-base> <output-dir> [--force]` validates the instance with
+the config regex and the port base as an integer in 1024..65530, computes the three ports
+and the database name, and writes only into `<output-dir>`. It checks every destination
+before writing any file, so a refused run changes nothing. It refuses to overwrite without
+`--force`. `deploy/render.test.sh` renders into a temporary directory and checks the file
+set, leftover placeholders, the three `127.0.0.1` bindings, secret names, persistence flags,
+the overwrite guard, hyphen handling, and rejected inputs. Ran with `bash
+deploy/render.test.sh`: 46 checks, 0 failures.
+
+### 23. Host unit hardening and paths
+
+Both units set `NoNewPrivileges=yes`, `ProtectSystem=strict`, `PrivateTmp=yes`, and
+`Restart=on-failure`. `WorkingDirectory=%h/steward` assumes the checkout lives there; edit the
+unit if not. `ExecStart=/usr/bin/node dist/api/index.js` and
+`ExecStart=/usr/bin/node dist/worker/index.js`. The worker alone gets
+`ReadWritePaths=%h/runs/%i`, because it writes transcripts and the brief's default `RUNS_DIR`
+is `$HOME/runs/$INSTANCE`. That directory must exist before the unit starts, so the README
+creates it; systemd fails the unit when a `ReadWritePaths=` path is missing. The API only
+reads. With `ProtectSystem=strict`, any other write path must be added explicitly; phase 3
+needs `REPO_PATH` writable for git worktrees, and the worker unit must gain that path then.
+
+### 24. Template unit dependencies use `%i`
+
+`Requires=`/`After=` name `steward-%i-postgres.service` and the two Redis services. With no
+instance, `systemd-analyze --user verify deploy/systemd/steward-api@.service` reports the
+dependency names as missing units, which is expected for a template. Verified on copies with
+`%i` replaced by `personal`, together with the generated container services:
+`systemd-analyze --user verify` exited 0 with no output. A deliberately broken unit in the
+same directory was reported as an error, so the check was live.
+
+### 25. Build output path is `dist/`
+
+The units expect `dist/api/index.js` and `dist/worker/index.js`. `tsconfig.json` sets
+`noEmit`, and `package.json` has no build script. This is open item 1. Do not add a build
+script as part of deploy work; decide the compiler (tsc or a bundler) with the phase 1 code.
+
+## Unverified
+
+Marked `UNVERIFIED:` because this task started no containers and created no secrets. Each
+needs a run on the box, with dry-run on.
+
+- `UNVERIFIED:` Pulling `docker.io/library/postgres:17` and `docker.io/library/redis:7`, and
+  starting the generated services. Only the Quadlet generator and `systemd-analyze verify`
+  were run.
+- `UNVERIFIED:` Podman injecting a secret as an environment variable at container start. The
+  man page documents `type=env`, and the generated `podman run` line carries the option, but
+  no container was created.
+- `UNVERIFIED:` The Redis command line at runtime: systemd `$$` to literal `$`, the container
+  shell quoting, and `redis-server --requirepass` accepting the value.
+- `UNVERIFIED:` That Postgres accepts `POSTGRES_PASSWORD` from the secret and initializes
+  `steward_personal` in the volume on first start.
+- `UNVERIFIED:` AOF persistence across a container restart with the queue volume.
+- `UNVERIFIED:` Restart and boot behaviour of `Restart=always` and
+  `WantedBy=default.target`, including after `loginctl enable-linger`.
+- `UNVERIFIED:` The host units starting at all: `dist/` does not exist yet, and no env file
+  was created, so the services were not started. `systemd-analyze verify` only parses them.
+- `UNVERIFIED:` Container readiness. The host units `Requires=` the container services, but
+  a container service is active as soon as `podman run -d` returns, which is before Postgres
+  accepts connections. Add a readiness check or a retry before the first real run.
+- `UNVERIFIED:` The Postgres 17 image uses `/var/lib/postgresql/data` as its data directory;
+  the volume mount assumes it.
+
+## Open items
+
+1. No build script. The units run `dist/` files that do not exist. Pick the build (tsc emit or
+   a bundler), add the script, and update this log.
+2. Empty-commit draft PR probe (phase 4). Verify in a scratch repo that GitHub accepts a pull
+   request whose branch has an empty commit, and record the result here.
+3. Tracker response shape probe. Log raw JSON from the real API before mapping fields. The
+   mapper uses synthetic fixtures today.
+4. Notification hosting (phase 4). Decide self-hosted ntfy or a hosted service, what ticket
+   text may leave the box, and how a phone action reaches a `127.0.0.1` API.
+5. Readiness ordering between the container services and the host units. A small retry in the
+   entry point, or a health-based unit dependency, is needed before phase 2.
+6. `REPO_PATH` writable for git worktrees (phase 3): add it to the worker's
+   `ReadWritePaths=`, or run the worker without `ProtectSystem=strict`.
+7. `instanceNames().unit` returns `steward@<instance>` while the deployed units are
+   `steward-api@<instance>` and `steward-worker@<instance>`. Nothing consumes the unit name
+   yet. Align it when code needs to start or query units.
