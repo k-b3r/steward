@@ -1,0 +1,96 @@
+// Pure intake decisions. No clock, randomness, I/O or environment: the caller
+// supplies the current jobs, the open proposal count and both caps.
+
+import type { WorkItem } from './types'
+
+type IntakeAction = 'queue' | 'propose'
+
+type IntakeDecision = {
+  item: WorkItem
+  action: IntakeAction
+  reason: string
+}
+
+type IntakeSkip = {
+  item: WorkItem
+  reason: string
+}
+
+export type IntakeResult = {
+  decisions: IntakeDecision[]
+  skipped: IntakeSkip[]
+}
+
+export type IntakeInput = {
+  items: WorkItem[]
+  knownExternalIds: ReadonlySet<string>
+  /** False on the first poll for a source, which turns In Progress items into the baseline. */
+  sourceHasJobs: boolean
+  openProposals: number
+  maxOpenProposals: number
+  maxEnqueuePerPoll: number
+}
+
+const ALREADY_HAS_JOB = 'already has a job'
+const BASELINE = 'baseline'
+const BURST_OVER_CAP = 'burst over cap'
+const PROPOSAL_LIMIT = 'proposal limit'
+const UNKNOWN_STATUS = 'unknown status'
+const IN_PROGRESS = 'In Progress'
+
+function isProposalStatus(status: string): boolean {
+  return status === 'Todo' || status === 'Backlog'
+}
+
+/**
+ * Decides what to do with one poll of a feed. Input order is preserved in both
+ * output lists. A proposal is skipped once `openProposals` plus proposals made
+ * earlier in this poll reach `maxOpenProposals`; queueing is never capped there.
+ */
+export function decideIntake(input: IntakeInput): IntakeResult {
+  const newInProgress = input.items.filter(
+    (item) => !input.knownExternalIds.has(item.externalId) && item.status === IN_PROGRESS,
+  ).length
+  const baseline = !input.sourceHasJobs
+  const burstOverCap = newInProgress > input.maxEnqueuePerPoll
+
+  const decisions: IntakeDecision[] = []
+  const skipped: IntakeSkip[] = []
+  let proposalsSoFar = 0
+
+  const propose = (item: WorkItem, reason: string): void => {
+    if (input.openProposals + proposalsSoFar >= input.maxOpenProposals) {
+      skipped.push({ item, reason: PROPOSAL_LIMIT })
+      return
+    }
+    decisions.push({ item, action: 'propose', reason })
+    proposalsSoFar += 1
+  }
+
+  for (const item of input.items) {
+    if (input.knownExternalIds.has(item.externalId)) {
+      skipped.push({ item, reason: ALREADY_HAS_JOB })
+      continue
+    }
+
+    if (item.status === IN_PROGRESS) {
+      if (baseline) {
+        propose(item, BASELINE)
+      } else if (burstOverCap) {
+        propose(item, BURST_OVER_CAP)
+      } else {
+        decisions.push({ item, action: 'queue', reason: IN_PROGRESS })
+      }
+      continue
+    }
+
+    if (isProposalStatus(item.status)) {
+      propose(item, item.status)
+      continue
+    }
+
+    skipped.push({ item, reason: UNKNOWN_STATUS })
+  }
+
+  return { decisions, skipped }
+}
