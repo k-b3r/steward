@@ -43,10 +43,6 @@ interface WorkFeed {
   poll(): AsyncIterable<WorkItem>
 }
 
-interface StatusReporter {
-  reportState(job: Job, state: JobState): Promise<void>
-}
-
 interface AgentRunner {
   start(job: Job): Promise<{ sessionId: string }>
   resume(sessionId: string, feedback: string): Promise<void>
@@ -55,7 +51,7 @@ interface AgentRunner {
 ```
 
 - `WorkFeed` is the only way work enters the system. The tracker adapter implements it.
-- `StatusReporter` has no implementation in phase 1. Its real writes are phase 4.
+- A status reporter (tracker and chat writes) is added in phase 4, when something implements it.
 - `AgentRunner` starts, resumes and cancels one agent run. The echo stub is phase 1 work and
   is not built yet. The container runner is phase 2.
 

@@ -50,10 +50,6 @@ export interface WorkFeed {
   poll(): AsyncIterable<WorkItem>
 }
 
-export interface StatusReporter {
-  reportState(job: Job, state: JobState): Promise<void>
-}
-
 export interface AgentRunner {
   start(job: Job): Promise<{ sessionId: string }>
   resume(sessionId: string, feedback: string): Promise<void>
