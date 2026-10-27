@@ -42,7 +42,9 @@
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^22.0.0",
+    "@types/pg": "^8.23.1",
     "dependency-cruiser": "^18.5.0",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
@@ -61,6 +63,8 @@
     ]
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1",
     "zod": "^4.6.7"
   }
 }
