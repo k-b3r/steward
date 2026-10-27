@@ -24,4 +24,5 @@ Flat shape (see `CONTEXT.md`). Pure decision code is these files in `src/`; ever
 
 ## Testing
 
+- `review` Modules with no sibling `*.test.ts` are listed in `agentConfig.untestedExempt` and each has a reason: the database and queue modules (`src/db/**`, `src/platform/db.ts`, `src/worker/{queue,reconcile,process-job}.ts`) are covered by integration tests under `tests/integration/`; `src/api/auth.ts` and `contract.ts` are covered through `src/api/app.test.ts`; `bootstrap.ts` and `delay.ts` are wiring with no logic. A new untested module is not added to the list without a reason here.
 - `tool` Integration tests read only `TEST_DATABASE_URL` (`repo-checks test-db-env`).
