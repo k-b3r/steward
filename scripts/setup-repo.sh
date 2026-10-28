@@ -34,7 +34,10 @@ if [[ -e "$dest" ]]; then
   echo "already exists: $dest"
 else
   mkdir -p "$(dirname "$dest")"
-  GH_TOKEN="$(gh auth token --user "$GH_ACCOUNT")" git clone "https://github.com/$repo.git" "$dest"
+  # git ignores GH_TOKEN on its own: it has to ask gh for the token, so the configured account
+  # is the one used even when another account is active.
+  GH_TOKEN="$(gh auth token --user "$GH_ACCOUNT")" \
+    git -c credential.helper='!gh auth git-credential' clone "https://github.com/$repo.git" "$dest"
 fi
 
 # The marker: local git config (never committed) and a file inside .git, so a moved clone still
