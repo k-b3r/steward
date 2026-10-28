@@ -7,6 +7,7 @@ import { sleep } from '../platform/delay'
 import { closePool } from '../platform/db'
 import { readTranscript } from '../runner/transcript'
 import * as store from '../db/store'
+import { getJob, listActions, listJobs } from '../jobs-queries'
 import { cancelJob, confirmJob, decideAction, declineJob, reconsiderJob, retryJob } from '../jobs-commands'
 import { createApp } from '../api/app'
 
@@ -32,11 +33,17 @@ export function composeApi(config: Config, write: (line: string) => void) {
     cancelRun: (jobId: string) => runner.cancel(jobId),
   }
 
+  const queryStore = {
+    getJob: (id: string) => store.getJob(db, id),
+    listJobs: (filter?: Parameters<typeof store.listJobs>[1]) => store.listJobs(db, filter),
+    listActions: (filter?: Parameters<typeof store.listActions>[1]) => store.listActions(db, filter),
+  }
+
   const app = createApp({
-    queries: {
-      getJob: (id) => store.getJob(db, id),
-      listJobs: (filter) => store.listJobs(db, filter),
-      listActions: (filter) => store.listActions(db, filter),
+    reads: {
+      getJob: (id) => getJob({ store: queryStore }, id),
+      listJobs: (filter) => listJobs({ store: queryStore }, filter),
+      listActions: (filter) => listActions({ store: queryStore }, filter),
     },
     commands: {
       confirm: (id) => confirmJob(commandDeps, id),

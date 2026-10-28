@@ -61,9 +61,6 @@ export const FILTERS: { name: string; states: JobState[] }[] = [
   { name: 'Done', states: ['merged', 'done'] },
 ]
 
-export const RETRYABLE: JobState[] = ['failed', 'cancelled']
-export const CANCELLABLE: JobState[] = ['queued', 'claiming', 'running', 'pr_open', 'in_review', 'changes_requested']
-
 export function relativeTime(iso: string | null, now: number): string {
   if (iso === null) return '—'
   const seconds = Math.round((new Date(iso).getTime() - now) / 1000)

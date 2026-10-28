@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { api } from './api'
 import type { JobResponse } from './api'
 import { useStore } from './data'
-import { CANCELLABLE, RETRYABLE } from './model'
 import { Icon } from './ui'
 
 type Pending = { kind: 'decline' | 'cancel' }
@@ -28,7 +27,7 @@ export function JobActions({ job, size = 'sm' }: { job: JobResponse; size?: 'sm'
 
   return (
     <>
-      {job.state === 'proposed' ? (
+      {job.allowedActions.includes('confirm') ? (
         <>
           <button
             className={`${cls} primary`}
@@ -43,12 +42,12 @@ export function JobActions({ job, size = 'sm' }: { job: JobResponse; size?: 'sm'
           </button>
         </>
       ) : null}
-      {job.state === 'declined' ? (
+      {job.allowedActions.includes('reconsider') ? (
         <button className={cls} disabled={busy} onClick={() => void exec('reconsidered', () => api.reconsider(job.id))}>
           Reconsider
         </button>
       ) : null}
-      {RETRYABLE.includes(job.state) ? (
+      {job.allowedActions.includes('retry') ? (
         <button
           className={`${cls} primary`}
           disabled={busy}
@@ -58,7 +57,7 @@ export function JobActions({ job, size = 'sm' }: { job: JobResponse; size?: 'sm'
           Retry
         </button>
       ) : null}
-      {CANCELLABLE.includes(job.state) ? (
+      {job.allowedActions.includes('cancel') ? (
         <button className={`${cls} danger`} disabled={busy} onClick={() => setPending({ kind: 'cancel' })}>
           Cancel
         </button>

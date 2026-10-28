@@ -122,9 +122,6 @@ export function JobDetail({ id }: { id: string }) {
               <StateChip state={job.state} />
               <span className="it">Source {job.source}</span>
               <span className="it">
-                External id <span className="mono">{job.externalId}</span>
-              </span>
-              <span className="it">
                 Attempt <Attempts job={job} />
               </span>
               {job.slot === null ? null : <span className="it">Slot {job.slot}</span>}

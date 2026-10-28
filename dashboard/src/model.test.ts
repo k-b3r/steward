@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { jobStateSchema } from '../../src/api/contract'
-import { CANCELLABLE, FILTERS, LANES, RETRYABLE, isSpinning, relativeTime, stateClass } from './model'
+import { FILTERS, LANES, isSpinning, relativeTime, stateClass } from './model'
 
 const ALL_STATES = jobStateSchema.options
 const NOW = Date.parse('2026-01-01T12:00:00.000Z')
@@ -55,17 +55,5 @@ describe('board lanes and filters', () => {
       for (const state of filter.states) expect(ALL_STATES).toContain(state)
     }
     expect(FILTERS.find((filter) => filter.name === 'All')?.states).toEqual([])
-  })
-})
-
-describe('which buttons a state gets', () => {
-  it('retries only a job that stopped, as the API allows', () => {
-    expect(RETRYABLE).toEqual(['failed', 'cancelled'])
-  })
-
-  it('never offers cancel on a job that already ended or was never started', () => {
-    for (const ended of ['merged', 'done', 'failed', 'cancelled', 'declined', 'proposed'] as const) {
-      expect(CANCELLABLE).not.toContain(ended)
-    }
   })
 })

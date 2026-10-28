@@ -2,6 +2,7 @@
 // else from `src/`, so it must stay free of server code: zod plus type-only imports.
 import { z } from 'zod'
 
+import type { ActionSummary, JobSummary } from '../jobs-queries'
 import type { ActionStatus } from '../types'
 import type { Envelope, TranscriptKind } from '../runner/transcript'
 import type { FailureKind, JobState } from '../types'
@@ -61,11 +62,15 @@ export const actionStatusSchema = z.enum(ACTION_STATUS_VALUES)
 /** @public */
 export const transcriptKindSchema = z.enum(TRANSCRIPT_KIND_VALUES)
 
-/** @public */
+/**
+ * The wire shape of a job, asserted against the read layer's JobSummary at compile time, so the
+ * schema and the projection cannot drift.
+ */
+const jobActionSchema = z.enum(['confirm', 'decline', 'reconsider', 'retry', 'cancel'])
+
 export const jobResponseSchema = z.object({
   id: z.uuid(),
   source: z.string(),
-  externalId: z.string(),
   identifier: z.string(),
   state: jobStateSchema,
   attempt: z.number().int().nonnegative(),
@@ -73,6 +78,7 @@ export const jobResponseSchema = z.object({
   slot: z.number().int().nonnegative().nullable(),
   nextRunAt: z.iso.datetime().nullable(),
   failureKind: failureKindSchema.nullable(),
+  allowedActions: z.array(jobActionSchema),
 })
 
 /** @public */
@@ -109,6 +115,12 @@ export const rejectBodySchema = z.object({
 })
 
 export type JobResponse = z.infer<typeof jobResponseSchema>
+
+// A mismatch here is a type error: change both together.
+const _jobResponseMatchesReadLayer: z.ZodType<JobSummary> = jobResponseSchema
+const _actionResponseMatchesReadLayer: z.ZodType<ActionSummary> = actionResponseSchema
+void _jobResponseMatchesReadLayer
+void _actionResponseMatchesReadLayer
 export type ActionResponse = z.infer<typeof actionResponseSchema>
 
 // `Envelope` is structurally the same as `TranscriptEnvelope`.

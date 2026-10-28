@@ -6,7 +6,6 @@ import type { Envelope } from './api'
 const JOB = {
   id: '11111111-1111-4111-8111-111111111111',
   source: 'linear',
-  externalId: 'e1',
   identifier: 'TST-1',
   state: 'queued',
   attempt: 0,
@@ -14,6 +13,7 @@ const JOB = {
   slot: null,
   nextRunAt: null,
   failureKind: null,
+  allowedActions: ['confirm', 'decline'],
 }
 
 function memoryStorage(): Storage {

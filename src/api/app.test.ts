@@ -13,7 +13,8 @@ import {
   retryJob,
   type CommandStore,
 } from '../jobs-commands'
-import { createApp, type ApiCommands, type ApiQueries, type AppDeps } from './app'
+import { getJob, listActions, listJobs, type QueryStore } from '../jobs-queries'
+import { createApp, type ApiCommands, type ApiReads, type AppDeps } from './app'
 
 const TOKEN = 'test-token-0123456789abcdef0123456789'
 const PORT = 3000
@@ -56,7 +57,7 @@ function makeAction(overrides: Partial<PendingAction> = {}): PendingAction {
   }
 }
 
-type FakeStore = ApiQueries &
+type FakeStore = QueryStore &
   CommandStore & {
     jobs: Map<string, Job>
     actions: Map<string, PendingAction>
@@ -129,7 +130,12 @@ function setup(
   const cancelled: string[] = []
   const readLogCalls: { jobId: string; afterSeq: number }[] = []
 
-  // The routes call the real commands, so the rules they enforce are tested here too.
+  // The routes call the real reads and commands, so their rules are tested here too.
+  const reads: ApiReads = {
+    getJob: (id) => getJob({ store }, id),
+    listJobs: (filter) => listJobs({ store }, filter),
+    listActions: (filter) => listActions({ store }, filter),
+  }
   const commandDeps = {
     store: store as unknown as CommandStore,
     clock: () => CLOCK,
@@ -150,7 +156,7 @@ function setup(
   }
 
   const app = createApp({
-    queries: store,
+    reads,
     commands,
     readLog: async (jobId, afterSeq) => {
       readLogCalls.push({ jobId, afterSeq })

@@ -67,11 +67,27 @@ function requireFrom(job: Job, to: JobState, allowed: readonly JobState[]): void
   }
 }
 
+/** Every intent a person can ask for, named for the API. */
+export type JobAction = 'confirm' | 'decline' | 'reconsider' | 'retry' | 'cancel'
+
 const CONFIRMABLE: readonly JobState[] = ['proposed']
 const DECLINABLE: readonly JobState[] = ['proposed']
 const RECONSIDERABLE: readonly JobState[] = ['declined']
 const RETRYABLE: readonly JobState[] = ['failed', 'cancelled']
 const CANCELLABLE: readonly JobState[] = ['queued', 'claiming', 'running', 'pr_open', 'in_review', 'changes_requested']
+
+/**
+ * The intents available in a given state. Read models expose this so a client never offers a
+ * button the command would reject, and the rules live in one place.
+ */
+export function allowedActionsFor(state: JobState): JobAction[] {
+  const actions: JobAction[] = []
+  if (CONFIRMABLE.includes(state)) actions.push('confirm', 'decline')
+  if (RECONSIDERABLE.includes(state)) actions.push('reconsider')
+  if (RETRYABLE.includes(state)) actions.push('retry')
+  if (CANCELLABLE.includes(state)) actions.push('cancel')
+  return actions
+}
 
 /** A confirmed proposal becomes a queued job and is delivered to the queue. */
 export async function confirmJob(deps: CommandDeps, id: string): Promise<Job> {
