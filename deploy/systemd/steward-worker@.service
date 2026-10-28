@@ -1,9 +1,9 @@
 # steward worker for one instance: `systemctl --user enable --now steward-worker@personal`
 # The worker writes transcripts under %h/steward/runs/%i (the default RUNS_DIR from
-# src/platform/config.ts). Create that directory before the first start: the
-# unit fails to start when the ReadWritePaths= path does not exist. If RUNS_DIR
-# points elsewhere, change both RUNS_DIR and ReadWritePaths, or the worker
-# cannot write: ProtectSystem=strict makes the rest read-only.
+# src/platform/config.ts). Create that directory before the first start. If RUNS_DIR points
+# elsewhere, change both RUNS_DIR and ReadWritePaths. As a USER unit on Ubuntu 24.04 the
+# filesystem rules below are not enforced (see docs/decisions.md); they take effect for a
+# system unit.
 # The worker also runs `git fetch` and `git worktree add` inside the clone under
 # %h/steward/repos/%i, which writes to that clone's .git, so that tree is writable too
 # (the leading '-' means a missing directory is not an error).

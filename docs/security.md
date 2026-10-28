@@ -125,3 +125,7 @@ only identifiers and states, never ticket bodies.
 
 - [architecture.md](architecture.md): runtime shape, transcripts, per-instance names.
 - [decisions.md](decisions.md): verified facts, unverified items, open questions.
+
+## What the systemd units do and do not protect
+
+The API and worker run as systemd **user** units. On Ubuntu 24.04 a user unit applies `NoNewPrivileges=yes` but silently ignores `ProtectSystem=strict`, `ProtectHome` and `PrivateTmp`, because unprivileged user namespaces are blocked. This was checked with a probe; the table and the cause are in `docs/decisions.md`. So the orchestrator is not filesystem-sandboxed. It is the trusted side: it holds the tokens and does the pushing. The isolation that matters is the agent's container (phase 2), which has no credentials and sees only its worktree. Running the orchestrator as a system unit under a dedicated user would enforce the directives and is an open item.
