@@ -104,7 +104,7 @@ DRY_RUN=true
 REPO_PATH=/home/you/Develop/scratch-repo
 ```
 
-For local development, copy `.env.example` to `.env` at the repo root and run `pnpm dev:api` or `pnpm dev:worker`; both load `.env` through `tsx --env-file`.
+There is one env file per instance, at `~/.config/steward/<instance>.env` (mode 0600, outside the repo). `pnpm dev:api` and `pnpm dev:worker` read the personal one; set `STEWARD_ENV_FILE` to point them at another. The systemd units read the same file. `.env.example` is the template.
 
 ### Point an instance at a repo
 
