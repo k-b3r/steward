@@ -1,0 +1,23 @@
+name: pr-upkeep
+
+# Regenerates generated files on PRs and merges main into open PRs that fall
+# behind. Needs the CI_APP_ID variable and CI_APP_PRIVATE_KEY secret (GitHub App).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: pr-upkeep-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upkeep:
+    uses: k-b3r/agent-config/.github/workflows/pr-upkeep.yml@main
+    with:
+      app-id: ${{ vars.CI_APP_ID }}
+      # Set when the repo has generated files, e.g. pnpm gen-docs / docs-site
+      regenerate: ''
+      regenerate-paths: ''
+    secrets:
+      CI_APP_PRIVATE_KEY: ${{ secrets.CI_APP_PRIVATE_KEY }}
