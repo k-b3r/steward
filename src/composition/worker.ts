@@ -9,7 +9,7 @@ import { nextPollDelayMs, runIntakePoll } from '../intake'
 import type { Config } from '../platform/config'
 import { closePool } from '../platform/db'
 import { sleep } from '../platform/delay'
-import { createWorktree, removeWorktree } from '../platform/git'
+import { branchExists, createWorktree, fetchBase, removeWorktree } from '../platform/git'
 import type { Logger } from '../platform/logger'
 import { processJob } from '../worker/process-job'
 import { reconcile } from '../worker/reconcile'
@@ -50,7 +50,7 @@ export function composeWorker(config: Config, write: (line: string) => void) {
             backoff: BACKOFF,
           },
           queue,
-          git: { createWorktree, removeWorktree },
+          git: { branchExists, createWorktree, fetchBase, removeWorktree },
           log: (msg) => logger.info(msg),
         },
         jobId,

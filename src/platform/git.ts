@@ -60,7 +60,7 @@ export async function createWorktree(opts: {
 }
 
 /** Whether a local branch exists, so a run can continue it instead of creating one. */
-async function branchExists(repoPath: string, branch: string): Promise<boolean> {
+export async function branchExists(repoPath: string, branch: string): Promise<boolean> {
   try {
     await runGit(['-C', repoPath, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
     return true

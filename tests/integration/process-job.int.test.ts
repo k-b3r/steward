@@ -9,7 +9,7 @@ import { migrateDb } from '../../src/db/migrate'
 import { jobEvents } from '../../src/db/schema'
 import { acquireSlot, getJob, heldSlots, insertJob, transitionJob } from '../../src/db/store'
 import { closePool, createDb, createPool } from '../../src/platform/db'
-import { createWorktree, removeWorktree } from '../../src/platform/git'
+import { branchExists, createWorktree, fetchBase, removeWorktree } from '../../src/platform/git'
 import { createTranscriptWriter } from '../../src/runner/transcript'
 import type { AgentRunner, Job, WorkItem } from '../../src/types'
 import { processJob, type ProcessJobDeps } from '../../src/worker/process-job'
@@ -55,6 +55,11 @@ function createRepo(root: string): string {
   writeFileSync(join(repoPath, 'README.md'), '# repo\n')
   git(repoPath, ['add', 'README.md'])
   git(repoPath, ['commit', '-m', 'initial commit'])
+  // Every run fetches the base branch, so the test repo has a real origin.
+  const bare = join(root, 'origin.git')
+  git(root, ['init', '-q', '--bare', '-b', 'main', bare])
+  git(repoPath, ['remote', 'add', 'origin', bare])
+  git(repoPath, ['push', '-q', 'origin', 'main'])
   return repoPath
 }
 
@@ -130,7 +135,7 @@ function makeDeps(overrides: Partial<ProcessJobDeps> = {}): ProcessJobDeps {
     rand: () => 0.5,
     config: { slotCount: 2, repoPath, runsDir, backoff: BACKOFF },
     queue: makeQueue().queue,
-    git: { createWorktree, removeWorktree },
+    git: { branchExists, createWorktree, fetchBase, removeWorktree },
     ...overrides,
   }
 }
@@ -280,6 +285,45 @@ describe('processJob', () => {
     expect(await heldSlots(db)).toEqual([])
   })
 
+  describe('base and branch', () => {
+    // The job for externalId 'ext-1' gets the identifier TST-ext-1 and so the branch agent/tst-ext-1.
+    const BRANCH = 'agent/tst-ext-1'
+
+    function pushToOrigin(file: string, body: string): string {
+      const other = join(root, `other-${file}`)
+      git(root, ['clone', '-q', join(root, 'origin.git'), other])
+      git(other, ['config', 'user.name', 'Other'])
+      git(other, ['config', 'user.email', 'other@example.test'])
+      writeFileSync(join(other, file), body)
+      git(other, ['add', file])
+      git(other, ['commit', '-qm', `add ${file}`])
+      git(other, ['push', '-q', 'origin', 'main'])
+      return git(other, ['rev-parse', 'HEAD']).trim()
+    }
+
+    it('starts a new branch from what is on origin now, not from a stale local HEAD', async () => {
+      const originTip = pushToOrigin('remote.txt', 'newer\n')
+      const job = await createJob()
+
+      await processJob(makeDeps(), job.id)
+
+      expect(git(repoPath, ['rev-parse', BRANCH]).trim()).toBe(originTip)
+      expect(git(repoPath, ['rev-parse', 'HEAD']).trim()).not.toBe(originTip)
+    })
+
+    it('treats an unreachable origin as an infra failure and retries, with the slot freed', async () => {
+      git(repoPath, ['remote', 'set-url', 'origin', join(root, 'does-not-exist.git')])
+      const enqueued = makeQueue()
+      const job = await createJob()
+
+      await processJob(makeDeps({ queue: enqueued.queue }), job.id)
+
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'queued', failureKind: 'infra', slot: null })
+      expect(enqueued.calls).toHaveLength(1)
+      expect(await heldSlots(db)).toEqual([])
+    })
+  })
+
   it('fails a job after maxAttempts with the error message only', async () => {
     const job = await createJob({ maxAttempts: 1 })
     const runner = makeRunner({ failStart: new Error('runner exploded') })
@@ -317,6 +361,7 @@ describe('processJob', () => {
         queue: enqueued.queue,
         config: { slotCount: 2, repoPath: missingRepo, runsDir, backoff: BACKOFF },
         git: {
+          ...makeDeps().git,
           async createWorktree(): Promise<void> {
             createCalls += 1
           },
@@ -373,6 +418,7 @@ describe('processJob', () => {
           runner,
           queue: enqueued.queue,
           git: {
+            ...makeDeps().git,
             async createWorktree(): Promise<void> {},
             async removeWorktree(): Promise<void> {
               throw new Error('cleanup failure')

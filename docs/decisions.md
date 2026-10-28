@@ -249,6 +249,20 @@ Run against the real API with a personal key, one team (`BUY`, one user), dry-ru
 - Not verified: `Todo` and `Backlog` states (no such tickets then), `hasNextPage: true`, a null `description` or `branchName` from the real API, and that `isMe` excludes other people's tickets.
 - Consequence: with dry-run off, all 4 tickets would be proposals on the first poll (baseline rule, and 4 is over the cap of 2). Nothing would run without a confirm.
 
+## Worktree and branch rule (2026-10-28)
+
+How a job gets the code it works on. Decided for phase 2; the git primitives land now.
+
+- The orchestrator never clones per job. `REPO_PATH` is one clone on the host, per instance, and each job gets a **git worktree** cut from it (`<runsDir>/<jobId>/worktree`). A worktree shares the clone's objects, so six slots cost kilobytes, not six copies of history, and the container needs no git credentials at all.
+- Before cutting, every run runs `git fetch --prune origin <base>` and starts from `origin/<base>`, never from the clone's `HEAD`. `HEAD` may be stale or checked out on some other branch, which was a real bug until this change.
+- **No pull request yet:** create `agent/<identifier-slug>` from `origin/<base>`.
+- **A pull request already exists:** attach the **existing PR head branch** into the worktree and **merge `origin/<base>` into it**, so the agent continues the same PR instead of opening a second one. Merge, never rebase: a rebase would rewrite the PR branch and need a force-push.
+- **A conflict is left in the worktree**, with markers, and is handed to the agent to resolve (`mergeIntoWorktree` returns `'conflict'`). Resolving a merge is coding work. Guard: a second conflict on the same job, or a large `origin/<base>..branch` diff, fails the job as `agent` and notifies instead of looping. `abortMerge` exists for that path.
+- `jobs.branch` will store the branch actually used, set at claim time (phase 4). It is never recomputed from the identifier afterwards, because a PR's head branch can differ (Linear suggests `branchName`, which is a suggestion, not the PR branch). Phase 1/2 use the rule "attach if the branch exists, else create from the base".
+- The agent commits locally in the worktree. The orchestrator pushes, opens the PR and updates the tracker, from the host, with the instance's git identity checked first.
+- A failed fetch (origin unreachable, wrong remote, missing base branch) is an `infra` failure like any other thrown error: it is retried with backoff up to `MAX_ATTEMPTS`, then lands in `failed`, the dead-letter, where you retry or cancel it. A wrong remote URL therefore costs a few attempts before it surfaces. Telling a permanent cause (a missing base branch) from a transient one (a network blip) and failing the first as `setup` is not built; it needs the fetch error classified, and is a phase 2 item.
+- Cleanup: the worktree is removed after the run; the branch stays (retries reuse it). Phase 5 deletes `agent/*` branches once merged and prunes dead worktrees.
+
 ## Unverified
 
 Each item still needs a run on the box.

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { holdsSlot } from '../allocate'
 import { acquireSlot, getJob, releaseSlot, transitionJob } from '../db/store'
 import type { Db } from '../platform/db'
-import type { createWorktree, removeWorktree } from '../platform/git'
+import type { branchExists, createWorktree, fetchBase, removeWorktree } from '../platform/git'
 import { decideAfterFailure, type BackoffOptions } from '../retry-policy'
 import type { AgentRunner, FailureKind, Job } from '../types'
 
@@ -24,8 +24,12 @@ export type ProcessJobDeps = {
   queue: { enqueue(jobId: string, delayMs?: number): Promise<void> }
   git: {
     createWorktree: typeof createWorktree
+    branchExists: typeof branchExists
+    fetchBase: typeof fetchBase
     removeWorktree: typeof removeWorktree
   }
+  /** Base branch a new `agent/*` branch starts from. Defaults to main. */
+  baseBranch?: string
   log?: (msg: string) => void
 }
 
@@ -136,10 +140,14 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
       throw new SetupError(`Repository path does not exist: ${deps.config.repoPath}`)
     }
 
+    // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
+    const baseBranch = deps.baseBranch ?? 'main'
+    await deps.git.fetchBase(deps.config.repoPath, 'origin', baseBranch)
     await deps.git.createWorktree({
       repoPath: deps.config.repoPath,
       worktreePath,
       branch: branchName(current.identifier),
+      baseRef: `origin/${baseBranch}`,
     })
     current = await transitionJob(deps.db, jobId, 'running', { now: deps.clock() })
     await deps.runner.start(current)
