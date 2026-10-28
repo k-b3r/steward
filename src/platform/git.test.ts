@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { createWorktree, removeWorktree } from './git'
+import { abortMerge, attachWorktree, createWorktree, fetchBase, mergeIntoWorktree, removeWorktree } from './git'
 
 function git(cwd: string, args: readonly string[]): string {
   return execFileSync('git', [...args], { cwd, encoding: 'utf8' })
@@ -120,5 +120,129 @@ describe('git worktrees', () => {
 
     await expect(createWorktree({ repoPath, worktreePath, branch })).rejects.toThrow(/branch name/i)
     expect(existsSync(worktreePath)).toBe(false)
+  })
+})
+
+describe('base ref and merge', () => {
+  let root: string
+  let bare: string
+  let clone: string
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'steward-merge-'))
+    bare = join(root, 'origin.git')
+    git(root, ['init', '-q', '--bare', '-b', 'main', bare])
+    clone = join(root, 'clone')
+    git(root, ['clone', '-q', bare, clone])
+    git(clone, ['config', 'user.name', 'Steward Test'])
+    git(clone, ['config', 'user.email', 'steward-test@example.test'])
+    writeFileSync(join(clone, 'README.md'), '# repo\n')
+    git(clone, ['add', 'README.md'])
+    git(clone, ['commit', '-qm', 'initial'])
+    git(clone, ['push', '-q', 'origin', 'main'])
+  })
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  function commitOnOrigin(file: string, body: string): void {
+    const other = join(root, `other-${file}`)
+    git(root, ['clone', '-q', bare, other])
+    git(other, ['config', 'user.name', 'Other'])
+    git(other, ['config', 'user.email', 'other@example.test'])
+    writeFileSync(join(other, file), body)
+    git(other, ['add', file])
+    git(other, ['commit', '-qm', `add ${file}`])
+    git(other, ['push', '-q', 'origin', 'main'])
+  }
+
+  it('fetches the base branch so a new worktree starts from origin, not a stale HEAD', async () => {
+    await fetchBase(clone, 'origin', 'main')
+    commitOnOrigin('remote.txt', 'from origin\n')
+    await fetchBase(clone, 'origin', 'main')
+
+    const worktreePath = join(root, 'wt')
+    await createWorktree({ repoPath: clone, worktreePath, branch: 'agent/tst-1', baseRef: 'origin/main' })
+
+    expect(existsSync(join(worktreePath, 'remote.txt'))).toBe(true)
+  })
+
+  it('attaches an existing branch, keeping its commits', async () => {
+    git(clone, ['checkout', '-q', '-b', 'agent/tst-1'])
+    writeFileSync(join(clone, 'work.txt'), 'earlier\n')
+    git(clone, ['add', 'work.txt'])
+    git(clone, ['commit', '-qm', 'earlier work'])
+    git(clone, ['push', '-q', 'origin', 'agent/tst-1'])
+    git(clone, ['checkout', '-q', 'main'])
+
+    const worktreePath = join(root, 'wt')
+    await attachWorktree({ repoPath: clone, worktreePath, branch: 'agent/tst-1' })
+
+    expect(existsSync(join(worktreePath, 'work.txt'))).toBe(true)
+  })
+
+  it('refuses to attach a branch that does not exist', async () => {
+    await expect(
+      attachWorktree({ repoPath: clone, worktreePath: join(root, 'wt'), branch: 'agent/missing' }),
+    ).rejects.toThrow(/agent\/missing/)
+  })
+
+  it('merges the base into an attached branch', async () => {
+    git(clone, ['checkout', '-q', '-b', 'agent/tst-1'])
+    writeFileSync(join(clone, 'work.txt'), 'earlier\n')
+    git(clone, ['add', 'work.txt'])
+    git(clone, ['commit', '-qm', 'earlier work'])
+    git(clone, ['checkout', '-q', 'main'])
+    commitOnOrigin('remote.txt', 'from origin\n')
+    await fetchBase(clone, 'origin', 'main')
+
+    const worktreePath = join(root, 'wt')
+    await attachWorktree({ repoPath: clone, worktreePath, branch: 'agent/tst-1' })
+    const outcome = await mergeIntoWorktree(worktreePath, 'origin/main')
+
+    expect(outcome).toBe('merged')
+    expect(existsSync(join(worktreePath, 'remote.txt'))).toBe(true)
+  })
+
+  it('reports a conflict and leaves the merge for the agent to resolve', async () => {
+    git(clone, ['checkout', '-q', '-b', 'agent/tst-1'])
+    writeFileSync(join(clone, 'README.md'), 'branch version\n')
+    git(clone, ['add', 'README.md'])
+    git(clone, ['commit', '-qm', 'branch change'])
+    git(clone, ['checkout', '-q', 'main'])
+    commitOnOrigin('README.md', 'main version\n')
+    await fetchBase(clone, 'origin', 'main')
+
+    const worktreePath = join(root, 'wt')
+    await attachWorktree({ repoPath: clone, worktreePath, branch: 'agent/tst-1' })
+    const outcome = await mergeIntoWorktree(worktreePath, 'origin/main')
+
+    expect(outcome).toBe('conflict')
+    expect(readFileSync(join(worktreePath, 'README.md'), 'utf8')).toContain('<<<<<<<')
+  })
+
+  it('can abort a conflicted merge', async () => {
+    git(clone, ['checkout', '-q', '-b', 'agent/tst-1'])
+    writeFileSync(join(clone, 'README.md'), 'branch version\n')
+    git(clone, ['add', 'README.md'])
+    git(clone, ['commit', '-qm', 'branch change'])
+    git(clone, ['checkout', '-q', 'main'])
+    commitOnOrigin('README.md', 'main version\n')
+    await fetchBase(clone, 'origin', 'main')
+    const worktreePath = join(root, 'wt')
+    await attachWorktree({ repoPath: clone, worktreePath, branch: 'agent/tst-1' })
+    await mergeIntoWorktree(worktreePath, 'origin/main')
+
+    await abortMerge(worktreePath)
+
+    expect(readFileSync(join(worktreePath, 'README.md'), 'utf8')).toBe('branch version\n')
+  })
+
+  it('reports up to date when the base is already merged in', async () => {
+    const worktreePath = join(root, 'wt')
+    await createWorktree({ repoPath: clone, worktreePath, branch: 'agent/tst-up', baseRef: 'origin/main' })
+
+    expect(await mergeIntoWorktree(worktreePath, 'origin/main')).toBe('up-to-date')
   })
 })

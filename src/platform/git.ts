@@ -19,6 +19,13 @@ function assertSafeBranch(branch: string): void {
   }
 }
 
+/** Refs and remotes come from config; refuse anything that could be read as an option. */
+function assertSafeRef(value: string): void {
+  if (!/^[A-Za-z0-9._/-]+$/.test(value) || value.startsWith('-') || value.includes('..')) {
+    throw new Error(`Unsafe git ref: ${value}`)
+  }
+}
+
 function runGit(args: readonly string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile('git', [...args], { encoding: 'utf8' }, (error, stdout, stderr) => {
@@ -52,7 +59,8 @@ export async function createWorktree(opts: {
   await runGit(['-C', opts.repoPath, 'worktree', 'add', '-b', opts.branch, opts.worktreePath, opts.baseRef ?? 'HEAD'])
 }
 
-async function branchExists(repoPath: string, branch: string): Promise<boolean> {
+/** Whether a local branch exists, so a run can continue it instead of creating one. */
+export async function branchExists(repoPath: string, branch: string): Promise<boolean> {
   try {
     await runGit(['-C', repoPath, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
     return true
@@ -73,4 +81,46 @@ export async function removeWorktree(repoPath: string, worktreePath: string): Pr
     return
   }
   await runGit(['-C', repoPath, 'worktree', 'remove', '--force', worktreePath])
+}
+
+/** Fetches one branch from a remote so a worktree can start from what is really on origin. */
+export async function fetchBase(repoPath: string, remote: string, branch: string): Promise<void> {
+  assertSafeRef(remote)
+  assertSafeRef(branch)
+  await runGit(['-C', repoPath, 'fetch', '--prune', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`])
+}
+
+/** Checks out an existing branch (an earlier attempt or an open pull request) into a new worktree. */
+export async function attachWorktree(opts: { repoPath: string; worktreePath: string; branch: string }): Promise<void> {
+  assertSafeBranch(opts.branch)
+  if (!(await branchExists(opts.repoPath, opts.branch))) {
+    throw new Error(`Branch ${opts.branch} does not exist in ${opts.repoPath}; it cannot be attached`)
+  }
+  await runGit(['-C', opts.repoPath, 'worktree', 'add', opts.worktreePath, opts.branch])
+}
+
+export type MergeOutcome = 'merged' | 'up-to-date' | 'conflict'
+
+/**
+ * Merges `ref` into the worktree's branch. A conflict is left in place, with markers, for the
+ * agent to resolve; it is the one case where the work needs judgement. Nothing is pushed here.
+ */
+export async function mergeIntoWorktree(worktreePath: string, ref: string): Promise<MergeOutcome> {
+  assertSafeRef(ref)
+  const before = (await runGit(['-C', worktreePath, 'rev-parse', 'HEAD'])).trim()
+  try {
+    await runGit(['-C', worktreePath, 'merge', '--no-ff', '--no-edit', ref])
+    // `git merge` exits 0 when there is nothing to merge, so compare the commit instead of the exit code.
+    const after = (await runGit(['-C', worktreePath, 'rev-parse', 'HEAD'])).trim()
+    return before === after ? 'up-to-date' : 'merged'
+  } catch (error) {
+    const unmerged = await runGit(['-C', worktreePath, 'diff', '--name-only', '--diff-filter=U']).catch(() => '')
+    if (unmerged.trim() !== '') return 'conflict'
+    throw error
+  }
+}
+
+/** Throws a conflicting merge away, leaving the branch as it was. */
+export async function abortMerge(worktreePath: string): Promise<void> {
+  await runGit(['-C', worktreePath, 'merge', '--abort'])
 }

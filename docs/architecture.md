@@ -131,7 +131,7 @@ The startup reconciler runs before the worker takes new work:
 
 ## Transcripts
 
-Each job has a run directory: `~/runs/<instance>/<job-id>/`. The directory is mode 0700.
+Each job has a run directory: `~/steward/runs/<instance>/<job-id>/`. The directory is mode 0700.
 
 - `transcript.jsonl`: one envelope per line, `{ seq, ts, kind, data }`. `kind` is one of
   `system`, `assistant`, `tool`, `result`, `error`, `orchestrator`. `seq` increases
@@ -160,7 +160,7 @@ Each job has a run directory: `~/runs/<instance>/<job-id>/`. The directory is mo
 | Queue Redis volume | `steward-<instance>-redis-queue-data`                                       |
 | Database           | `steward_<instance>` with hyphens replaced by underscores                   |
 | Podman secrets     | `steward-<instance>-postgres-password`, `steward-<instance>-redis-password` |
-| Runs dir           | `~/runs/<instance>/`                                                        |
+| Runs dir           | `~/steward/runs/<instance>/`                                                |
 | Ports (127.0.0.1)  | base for Postgres, base+1 for queue Redis, base+2 for slots Redis           |
 
 `instanceNames().unit` returns `steward@<instance>`. That is the instance prefix; the

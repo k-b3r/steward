@@ -6,7 +6,14 @@ import { join } from 'node:path'
 import { holdsSlot } from '../allocate'
 import { acquireSlot, getJob, releaseSlot, transitionJob } from '../db/store'
 import type { Db } from '../platform/db'
-import type { createWorktree, removeWorktree } from '../platform/git'
+import type {
+  attachWorktree,
+  branchExists,
+  createWorktree,
+  fetchBase,
+  mergeIntoWorktree,
+  removeWorktree,
+} from '../platform/git'
 import { decideAfterFailure, type BackoffOptions } from '../retry-policy'
 import type { AgentRunner, FailureKind, Job } from '../types'
 
@@ -24,8 +31,14 @@ export type ProcessJobDeps = {
   queue: { enqueue(jobId: string, delayMs?: number): Promise<void> }
   git: {
     createWorktree: typeof createWorktree
+    attachWorktree: typeof attachWorktree
+    branchExists: typeof branchExists
+    fetchBase: typeof fetchBase
+    mergeIntoWorktree: typeof mergeIntoWorktree
     removeWorktree: typeof removeWorktree
   }
+  /** Base branch a new `agent/*` branch starts from. Defaults to main. */
+  baseBranch?: string
   log?: (msg: string) => void
 }
 
@@ -34,6 +47,14 @@ class SetupError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'SetupError'
+  }
+}
+
+/** Work only an agent can do. It is not retried by backoff: the same input would fail the same way. */
+class AgentError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AgentError'
   }
 }
 
@@ -58,7 +79,7 @@ function logCleanupError(deps: ProcessJobDeps, jobId: string, action: string, er
  * Postgres. If recording the failure fails, that error is logged too.
  */
 async function recordFailure(deps: ProcessJobDeps, jobId: string, lastKnown: Job, error: unknown): Promise<void> {
-  const kind: FailureKind = error instanceof SetupError ? 'setup' : 'infra'
+  const kind: FailureKind = error instanceof SetupError ? 'setup' : error instanceof AgentError ? 'agent' : 'infra'
   const now = deps.clock()
   const reason = errorMessage(error)
   let job = lastKnown
@@ -136,11 +157,28 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
       throw new SetupError(`Repository path does not exist: ${deps.config.repoPath}`)
     }
 
-    await deps.git.createWorktree({
-      repoPath: deps.config.repoPath,
-      worktreePath,
-      branch: branchName(current.identifier),
-    })
+    // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
+    const baseBranch = deps.baseBranch ?? 'main'
+    await deps.git.fetchBase(deps.config.repoPath, 'origin', baseBranch)
+    const branch = branchName(current.identifier)
+    if (await deps.git.branchExists(deps.config.repoPath, branch)) {
+      // An earlier attempt or an open pull request already owns this branch: continue on it,
+      // then bring it up to date. A conflict is left in place for the agent, not thrown away.
+      await deps.git.attachWorktree({ repoPath: deps.config.repoPath, worktreePath, branch })
+      const outcome = await deps.git.mergeIntoWorktree(worktreePath, `origin/${baseBranch}`)
+      if (outcome === 'conflict') {
+        // TODO(phase-2): hand the conflicted tree to the runner to resolve. The echo stub cannot, and
+        // finishing as `done` would report success and then throw the tree away.
+        throw new AgentError(`merge conflict with origin/${baseBranch}; the echo runner cannot resolve it`)
+      }
+    } else {
+      await deps.git.createWorktree({
+        repoPath: deps.config.repoPath,
+        worktreePath,
+        branch,
+        baseRef: `origin/${baseBranch}`,
+      })
+    }
     current = await transitionJob(deps.db, jobId, 'running', { now: deps.clock() })
     await deps.runner.start(current)
     // TODO(phase-4): go to pr_open after validation and the draft pull request.

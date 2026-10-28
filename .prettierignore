@@ -8,3 +8,7 @@ reports/
 SESSION_RESUME.md
 TODOS.md
 TRACKER_OUTBOX.md
+
+# dashboard: generated from the Steward.html design
+dashboard/src/design.css
+dashboard/src/sprite.ts

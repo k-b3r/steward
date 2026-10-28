@@ -6,6 +6,7 @@ import { jobEvents, jobs, slots } from '../../src/db/schema'
 import {
   acquireSlot,
   createAction,
+  getAction,
   decideAction,
   getJob,
   heldSlots,
@@ -346,6 +347,14 @@ describe('slots', () => {
 })
 
 describe('pending actions', () => {
+  it('reads one action by id, and null when it does not exist', async () => {
+    const job = await createJob()
+    const action = await createAction(db, { jobId: job.id, kind: 'comment', payload: { body: 'hi' }, now: T0 })
+
+    expect(await getAction(db, action.id)).toMatchObject({ id: action.id, status: 'pending' })
+    expect(await getAction(db, '123e4567-e89b-42d3-a456-426614174000')).toBeNull()
+  })
+
   it('creates a pending action and approves it once', async () => {
     const job = await createJob()
     const action = await createAction(db, { jobId: job.id, kind: 'comment', payload: { body: 'hi' }, now: T0 })

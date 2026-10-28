@@ -9,23 +9,23 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "depcruise": "depcruise src --config .dependency-cruiser.cjs",
+    "depcruise": "depcruise src dashboard/src --config .dependency-cruiser.cjs",
     "knip": "knip --no-progress",
-    "typecheck": "tsc -p .",
+    "typecheck": "tsc -p . && pnpm --filter steward-dashboard typecheck",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:mutation": "stryker run",
     "check": "pnpm format:check && pnpm lint && pnpm depcruise && pnpm knip && pnpm typecheck && pnpm test",
-    "dev:api": "tsx --env-file=.env src/api/index.ts",
-    "dev:worker": "tsx --env-file=.env src/worker/index.ts"
+    "dev:api": "tsx --env-file=.env src/entries/api.ts",
+    "dev:worker": "tsx --env-file=.env src/entries/worker.ts",
+    "repo:setup": "scripts/setup-repo.sh"
   },
   "agentConfig": {
     "sourceDirs": [
       "src"
     ],
     "entries": [
-      "src/api/index.ts",
-      "src/worker/index.ts"
+      "src/entries/*.ts"
     ],
     "appDbEnv": "DATABASE_URL",
     "mutationPaths": [
@@ -36,7 +36,8 @@
       "src/intake-policy.ts"
     ],
     "generatedPaths": [
-      "src/db/migrations/**"
+      "src/db/migrations/**",
+      "dashboard/**"
     ],
     "untestedExempt": [
       "src/api/auth.ts",
@@ -47,7 +48,11 @@
       "src/platform/delay.ts",
       "src/worker/process-job.ts",
       "src/worker/queue.ts",
-      "src/worker/reconcile.ts"
+      "src/worker/reconcile.ts",
+      "src/composition/api.ts",
+      "src/composition/worker.ts",
+      "src/entries/api.ts",
+      "src/entries/worker.ts"
     ]
   },
   "devDependencies": {

@@ -26,7 +26,7 @@ These steps assume the checkout is at `~/steward`, the user units run as your lo
 the instance is named `personal` with port base `15432`. Use another name and base if you
 like; the three ports must stay free.
 
-The units will not start until `dist/api/index.js` and `dist/worker/index.js` exist. There is
+The units will not start until `dist/entries/api.js` and `dist/entries/worker.js` exist. There is
 no build script yet. See open item 1 in [docs/decisions.md](docs/decisions.md).
 
 ### 1. Install dependencies
@@ -89,6 +89,9 @@ Fill it in. The database and Redis URLs must carry the same passwords you create
 
 ```dotenv
 INSTANCE=personal
+GH_ACCOUNT=your-github-login
+GIT_USER_NAME=Your Name
+GIT_USER_EMAIL=you@example.com
 DATABASE_URL=postgres://postgres:REPLACE_WITH_PG_PASSWORD@127.0.0.1:15432/steward_personal
 REDIS_QUEUE_URL=redis://:REPLACE_WITH_REDIS_PASSWORD@127.0.0.1:15433/0
 REDIS_SLOT_URL=redis://:REPLACE_WITH_REDIS_PASSWORD@127.0.0.1:15434/0
@@ -103,16 +106,28 @@ REPO_PATH=/home/you/Develop/scratch-repo
 
 For local development, copy `.env.example` to `.env` at the repo root and run `pnpm dev:api` or `pnpm dev:worker`; both load `.env` through `tsx --env-file`.
 
-`REPO_PATH` must be absolute. `RUNS_DIR` defaults to `$HOME/runs/$INSTANCE`, which is
-`~/runs/personal` here. The env file is the only place the app reads secrets.
+### Point an instance at a repo
+
+```bash
+pnpm repo:setup personal k-b3r/scratch-repo     # -> ~/steward/repos/personal/scratch-repo
+```
+
+An optional fourth argument sets the destination instead of `~/steward/repos/<instance>/<repo>`: `pnpm repo:setup personal k-b3r/scratch-repo scratch-repo /path/to/clone`. The identity (`GH_ACCOUNT`, `GIT_USER_NAME`, `GIT_USER_EMAIL`) comes from the environment, or else from `~/.config/steward/<instance>.env`, which is parsed and never run as shell code.
+
+It clones once, then marks the clone as steward's: `steward.instance`, `steward.role` and `steward.repo` in the clone's local git config, and the same in `.git/steward.json`. Both are local, so they survive moving the clone and never appear in `git status`. It also prints the `REPO_PATH` line to put in the instance env file.
+
+Layout: `~/steward/repos/<instance>/<repo>` holds the clones, and `~/steward/runs/<instance>/<jobId>/` holds one worktree and its transcripts per job. Each job gets a worktree from that clone; the clone itself is never touched by an agent.
+
+`REPO_PATH` must be absolute. `RUNS_DIR` defaults to `$HOME/steward/runs/$INSTANCE`, which is
+`~/steward/runs/personal` here. The env file is the only place the app reads secrets.
 
 ### 6. Create the runs directory
 
-The worker writes transcripts under `~/runs/personal`, and its `ReadWritePaths=` needs that
+The worker writes transcripts under `~/steward/runs/personal`, and its `ReadWritePaths=` needs that
 directory to exist before the unit starts.
 
 ```bash
-mkdir -p ~/runs/personal
+mkdir -p ~/steward/runs/personal
 ```
 
 ### 7. Let user units run without a login
@@ -201,3 +216,19 @@ database, a Redis, or a runs directory between them.
 - [docs/decisions.md](docs/decisions.md): dated decision log, verified facts, unverified
   items, open questions.
 - [docs/project-brief.md](docs/project-brief.md): the design.
+
+## Dashboard
+
+`dashboard/` is a Vite + React app built from a design export (the export itself is not in the repo; `design.css` and `sprite.ts` come from it). It shows the overview, jobs, a live job transcript, slots and approvals, and talks to the API only through `src/api/contract.ts`.
+
+```sh
+pnpm install
+pnpm dev:api                          # the API on 127.0.0.1:3000
+pnpm --filter steward-dashboard dev   # http://127.0.0.1:5173, proxies /v1 to the API
+```
+
+Add `http://127.0.0.1:5173` (or `http://localhost:5173`) to `ALLOWED_ORIGINS`, then sign in with `API_TOKEN`. The token stays in `sessionStorage`. Set `STEWARD_API` to proxy to another API address.
+
+The production build (`pnpm --filter steward-dashboard build`) adds a Content-Security-Policy `<meta>` tag: scripts from the same origin only, no inline script, no eval, network calls to the same origin. Serve `dashboard/dist` from the same origin as the API, or change `connect-src` in `dashboard/csp.ts`. A `<meta>` tag cannot set `frame-ancestors`; add that header where the files are served. Nothing serves `dist` yet.
+
+The API has no job titles, projects, costs or health data yet, so those parts of the design are not built. `pnpm --filter steward-dashboard build` writes `dashboard/dist`.

@@ -1,0 +1,18 @@
+body {
+  margin: 0;
+}
+/* App-level fixes on top of the design system. */
+/* `.attn` is both the "needs attention" row and the badge modifier on `.count`; keep the badge a badge. */
+.count.attn {
+  display: inline-flex;
+  padding: 0 6px;
+  gap: 0;
+  grid-template-columns: none;
+  border-top: 1px solid color-mix(in srgb, var(--st-changes) 45%, transparent);
+}
+.nav-i .count.attn {
+  margin-left: auto;
+}
+.app {
+  min-height: 100vh;
+}

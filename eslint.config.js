@@ -4,9 +4,9 @@ export default [
   ...baseConfig({
     tsconfigRootDir: import.meta.dirname,
     // Composition roots: the only files that read process.env.
-    entryPoints: ['src/api/index.ts', 'src/worker/index.ts'],
+    entryPoints: ['src/entries/api.ts', 'src/entries/worker.ts'],
     // The injectable delay; the only place allowed to sleep.
-    delayModules: ['src/platform/delay.ts'],
+    delayModules: ['src/platform/delay.ts', 'dashboard/src/delay.ts'],
     // Pure decision code (no clock, randomness, fetch, process). Uncomment once the
     // architecture fit check has modules; pure code defaults to a module's domain/ (list files instead if the repo lays it out differently, and record that in CODING_STANDARDS.md).
     pureCorePaths: [

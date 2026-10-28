@@ -2,9 +2,19 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { assertTransition } from '../transitions'
 import type { Job, JobState } from '../types'
-import type { PendingAction } from '../db/store'
+import type { PendingAction } from '../types'
 import type { Envelope } from '../runner/transcript'
-import { createApp, type ApiStore, type AppDeps } from './app'
+import {
+  cancelJob,
+  confirmJob,
+  decideAction as decideActionCommand,
+  declineJob,
+  reconsiderJob,
+  retryJob,
+  type CommandStore,
+} from '../jobs-commands'
+import { getJob, listActions, listJobs, type QueryStore } from '../jobs-queries'
+import { createApp, type ApiCommands, type ApiReads, type AppDeps } from './app'
 
 const TOKEN = 'test-token-0123456789abcdef0123456789'
 const PORT = 3000
@@ -47,12 +57,15 @@ function makeAction(overrides: Partial<PendingAction> = {}): PendingAction {
   }
 }
 
-function createFakeStore(options: { jobs?: Job[]; actions?: PendingAction[] } = {}): ApiStore & {
-  jobs: Map<string, Job>
-  actions: Map<string, PendingAction>
-  transitions: { id: string; to: JobState; reason?: string; at: Date }[]
-  decisions: { id: string; decision: 'approved' | 'rejected'; reason?: string }[]
-} {
+type FakeStore = QueryStore &
+  CommandStore & {
+    jobs: Map<string, Job>
+    actions: Map<string, PendingAction>
+    transitions: { id: string; to: JobState; reason?: string; at: Date }[]
+    decisions: { id: string; decision: 'approved' | 'rejected'; reason?: string }[]
+  }
+
+function createFakeStore(options: { jobs?: Job[]; actions?: PendingAction[] } = {}): FakeStore {
   const jobs = new Map((options.jobs ?? []).map((job) => [job.id, job]))
   const actions = new Map((options.actions ?? []).map((action) => [action.id, action]))
   const transitions: { id: string; to: JobState; reason?: string; at: Date }[] = []
@@ -80,6 +93,9 @@ function createFakeStore(options: { jobs?: Job[]; actions?: PendingAction[] } = 
     },
     async listActions(filter = {}) {
       return [...actions.values()].filter((action) => filter.status === undefined || action.status === filter.status)
+    },
+    async getAction(id) {
+      return actions.get(id) ?? null
     },
     async decideAction(id, decision, opts) {
       const action = actions.get(id)
@@ -114,19 +130,38 @@ function setup(
   const cancelled: string[] = []
   const readLogCalls: { jobId: string; afterSeq: number }[] = []
 
-  const app = createApp({
-    store,
-    enqueue: async (jobId) => {
+  // The routes call the real reads and commands, so their rules are tested here too.
+  const reads: ApiReads = {
+    getJob: (id) => getJob({ store }, id),
+    listJobs: (filter) => listJobs({ store }, filter),
+    listActions: (filter) => listActions({ store }, filter),
+  }
+  const commandDeps = {
+    store: store as unknown as CommandStore,
+    clock: () => CLOCK,
+    enqueue: async (jobId: string) => {
       enqueued.push(jobId)
     },
-    cancelRun: async (jobId) => {
+    cancelRun: async (jobId: string) => {
       cancelled.push(jobId)
     },
+  }
+  const commands: ApiCommands = {
+    confirm: (id) => confirmJob(commandDeps, id),
+    decline: (id, reason) => declineJob(commandDeps, id, reason),
+    reconsider: (id) => reconsiderJob(commandDeps, id),
+    retry: (id) => retryJob(commandDeps, id),
+    cancel: (id) => cancelJob(commandDeps, id),
+    decideAction: (id, decision, reason) => decideActionCommand(commandDeps, id, decision, reason),
+  }
+
+  const app = createApp({
+    reads,
+    commands,
     readLog: async (jobId, afterSeq) => {
       readLogCalls.push({ jobId, afterSeq })
       return options.readLog === undefined ? [] : options.readLog(jobId, afterSeq)
     },
-    clock: () => CLOCK,
     config: { apiToken: TOKEN, port: PORT, allowedOrigins: [ORIGIN] },
     sleep: options.sleep ?? (async () => {}),
   })
@@ -341,7 +376,7 @@ describe('POST /v1/jobs/:id/retry', () => {
     expect(response.status).toBe(200)
     expect((await json<{ state: string }>(response)).state).toBe('queued')
     expect(enqueued).toEqual([JOB_ID])
-    expect(store.transitions).toEqual([{ id: JOB_ID, to: 'queued', reason: undefined, at: CLOCK }])
+    expect(store.transitions).toEqual([{ id: JOB_ID, to: 'queued', reason: 'retried by hand', at: CLOCK }])
   })
 
   it('retries a cancelled job', async () => {

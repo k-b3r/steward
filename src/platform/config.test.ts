@@ -20,6 +20,9 @@ const BASE_ENV: Record<string, string> = {
   REDIS_SLOT_URL: 'redis://localhost:6380/0',
   LINEAR_API_KEY: 'fake-linear-key-for-tests',
   LINEAR_TEAM_KEY: 'TST',
+  GH_ACCOUNT: 'test-account',
+  GIT_USER_NAME: 'Test User',
+  GIT_USER_EMAIL: 'test@example.test',
   API_TOKEN: 'token-0123456789abcdef0123456789abcdef',
   REPO_PATH: '/home/you/Develop/scratch-repo',
   HOME: '/home/you',
@@ -51,7 +54,7 @@ describe('loadConfig', () => {
     expect(config.RUN_RETENTION_DAYS).toBe(30)
     expect(config.MAX_ATTEMPTS).toBe(3)
     expect(config.DRY_RUN).toBe(true)
-    expect(config.RUNS_DIR).toBe('/home/you/runs/personal')
+    expect(config.RUNS_DIR).toBe('/home/you/steward/runs/personal')
   })
 
   it('coerces numeric strings and trims origins', () => {
@@ -107,6 +110,10 @@ describe('loadConfig', () => {
     ['REDIS_SLOT_URL missing', { REDIS_SLOT_URL: undefined }, 'REDIS_SLOT_URL'],
     ['LINEAR_API_KEY missing', { LINEAR_API_KEY: undefined }, 'LINEAR_API_KEY'],
     ['LINEAR_TEAM_KEY empty', { LINEAR_TEAM_KEY: '' }, 'LINEAR_TEAM_KEY'],
+    ['GH_ACCOUNT empty', { GH_ACCOUNT: '' }, 'GH_ACCOUNT'],
+    ['GH_ACCOUNT with a space', { GH_ACCOUNT: 'k b3r' }, 'GH_ACCOUNT'],
+    ['GIT_USER_NAME empty', { GIT_USER_NAME: '' }, 'GIT_USER_NAME'],
+    ['GIT_USER_EMAIL not an email', { GIT_USER_EMAIL: 'nope' }, 'GIT_USER_EMAIL'],
     ['API_TOKEN missing', { API_TOKEN: undefined }, 'API_TOKEN'],
     ['API_TOKEN too short', { API_TOKEN: 'token-too-short'.padEnd(31, 'x') }, 'API_TOKEN'],
     ['API_PORT not numeric', { API_PORT: '3000abc' }, 'API_PORT'],
@@ -156,6 +163,9 @@ describe('loadConfig', () => {
       {
         INSTANCE: 'from-file',
         LINEAR_TEAM_KEY: 'FIL',
+        GH_ACCOUNT: 'from-file-gh',
+        GIT_USER_NAME: 'From File',
+        GIT_USER_EMAIL: 'file@example.test',
         REPO_PATH: '/tmp/from-file',
         SLOT_COUNT: 4,
         ALLOWED_ORIGINS: ['https://file.example.com'],
@@ -167,7 +177,7 @@ describe('loadConfig', () => {
     expect(config.REPO_PATH).toBe('/tmp/from-file')
     expect(config.SLOT_COUNT).toBe(4)
     expect(config.ALLOWED_ORIGINS).toEqual(['https://file.example.com'])
-    expect(config.RUNS_DIR).toBe('/home/file-user/runs/from-file')
+    expect(config.RUNS_DIR).toBe('/home/file-user/steward/runs/from-file')
   })
 
   it('lets env values win over config file values', () => {
@@ -239,7 +249,7 @@ describe('loadConfig', () => {
     expect(redacted.INSTANCE).toBe('personal')
     expect(redacted.API_PORT).toBe(3000)
     expect(redacted.DRY_RUN).toBe(true)
-    expect(redacted.RUNS_DIR).toBe('/home/you/runs/personal')
+    expect(redacted.RUNS_DIR).toBe('/home/you/steward/runs/personal')
     expect(redacted.TEST_DATABASE_URL).toBe('[REDACTED]')
 
     const serialized = JSON.stringify(redacted)

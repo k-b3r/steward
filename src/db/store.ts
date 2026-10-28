@@ -4,20 +4,11 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 
 import { allocateSlot, findLeakedSlots, holdsSlot } from '../allocate'
 import { assertTransition } from '../transitions'
-import type { FailureKind, Job, JobState, WorkItem } from '../types'
+import type { FailureKind, Job, JobState, PendingAction, WorkItem } from '../types'
 import type { Db } from '../platform/db'
-import { ACTION_STATUSES, jobEvents, jobs, pendingActions, slots, type ActionStatus } from './schema'
-
-export type PendingAction = {
-  id: string
-  jobId: string
-  kind: string
-  payload: unknown
-  status: ActionStatus
-  reason: string | null
-  createdAt: Date
-  decidedAt: Date | null
-}
+import { ACTION_STATUSES } from '../types'
+import type { ActionStatus } from '../types'
+import { jobEvents, jobs, pendingActions, slots } from './schema'
 
 type JobRow = typeof jobs.$inferSelect
 type PendingActionRow = typeof pendingActions.$inferSelect
@@ -283,6 +274,11 @@ export async function createAction(
     throw new Error(`Could not create pending action for job ${input.jobId}`)
   }
   return toPendingAction(row)
+}
+
+export async function getAction(db: Db, id: string): Promise<PendingAction | null> {
+  const [row] = await db.select().from(pendingActions).where(eq(pendingActions.id, id)).limit(1)
+  return row === undefined ? null : toPendingAction(row)
 }
 
 export async function decideAction(

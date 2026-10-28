@@ -17,12 +17,12 @@ Flat shape (see `CONTEXT.md`). Pure decision code is these files in `src/`; ever
 - `src/transitions.ts` job state machine, `src/allocate.ts` slot allocation, `src/linear-map.ts` Linear JSON to `WorkItem`, `src/retry-policy.ts` backoff and failure kinds. These are the `pureCorePaths`: no clock, randomness, fetch or `process`; time and ids come in as arguments.
 - `src/platform/` config (zod), redacting logger, clock, delay, http, git helpers. No domain types.
 - `src/db/` Drizzle schema and migrations. `src/linear.ts` the `WorkFeed` implementation. `src/runner/` `AgentRunner`, echo stub, transcript writer.
-- `src/api/index.ts` and `src/worker/index.ts` are entry points: the only files that read `process.env`.
+- `src/entries/*.ts` are the process entry points: the only files that read `process.env`. The wiring lives in `src/composition/`, so `src/api/` is HTTP only and `src/worker/` is queue and run adapters.
 - Instances: nothing is a global singleton; the `INSTANCE` value prefixes every external name.
 
 - `tool` Module boundaries: `.dependency-cruiser.cjs` (shared `baseRules`) + ESLint.
 
 ## Testing
 
-- `review` Modules with no sibling `*.test.ts` are listed in `agentConfig.untestedExempt` and each has a reason: the database and queue modules (`src/db/**`, `src/platform/db.ts`, `src/worker/{queue,reconcile,process-job}.ts`) are covered by integration tests under `tests/integration/`; `src/api/auth.ts` and `contract.ts` are covered through `src/api/app.test.ts`; `bootstrap.ts` and `delay.ts` are wiring with no logic. A new untested module is not added to the list without a reason here.
+- `review` Modules with no sibling `*.test.ts` are listed in `agentConfig.untestedExempt` and each has a reason: the database and queue modules (`src/db/**`, `src/platform/db.ts`, `src/worker/{queue,reconcile,process-job}.ts`) are covered by integration tests under `tests/integration/`; `src/api/auth.ts` and `contract.ts` are covered through `src/api/app.test.ts`; `bootstrap.ts`, `delay.ts` and `src/composition/*` and `src/entries/*` are wiring with no logic. A new untested module is not added to the list without a reason here.
 - `tool` Integration tests read only `TEST_DATABASE_URL` (`repo-checks test-db-env`).
