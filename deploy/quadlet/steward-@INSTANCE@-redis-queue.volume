@@ -1,0 +1,7 @@
+# AOF directory for the BullMQ Redis. Without a volume the appendonly file
+# would be deleted with the container on every restart.
+[Volume]
+VolumeName=steward-@INSTANCE@-redis-queue-data
+
+[Install]
+WantedBy=default.target

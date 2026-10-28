@@ -5,6 +5,7 @@ export default defineConfig({
     globals: true,
     passWithNoTests: true,
     environment: 'node',
+    setupFiles: ['tests/setup.ts'],
     exclude: ['**/node_modules/**', '.claude/**', '.stryker-tmp/**', '**/*.int.test.ts', 'tests/e2e/**'],
   },
 })

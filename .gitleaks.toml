@@ -1,0 +1,12 @@
+# Narrow allowlist for placeholder credentials in tests and docs. Each entry is a regex that matches
+# only the fake value, so a real key in the same file is still caught.
+title = "steward"
+
+[allowlist]
+description = "Synthetic keys in fixtures, docs and the example env"
+regexes = [
+  '''lin_api_[0-9a-z_]*''',
+  '''fake-linear-key-for-tests''',
+  '''REPLACE_WITH_[A-Z_]+''',
+]
+paths = ['''.env.example''']

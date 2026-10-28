@@ -1,0 +1,18 @@
+# Per-slot test Redis for one instance. No persistence: every slot database is
+# disposable and is rebuilt from a template database.
+# The password is set from the secret steward-@INSTANCE@-redis-password, the
+# same secret the queue Redis uses (separate Redis processes, separate data).
+[Container]
+Image=docker.io/library/redis:7
+ContainerName=steward-@INSTANCE@-redis-slots
+Network=steward-@INSTANCE@.network
+PublishPort=127.0.0.1:@REDIS_SLOTS_PORT@:6379
+Secret=steward-@INSTANCE@-redis-password,type=env,target=REDIS_PASSWORD
+Exec=/bin/sh -c "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly no --save ''"
+
+[Service]
+Restart=always
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target
