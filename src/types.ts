@@ -45,3 +45,7 @@ export type Job = {
   nextRunAt: Date | null
   failureKind: FailureKind | null
 }
+
+export interface WorkFeed {
+  poll(): AsyncIterable<WorkItem>
+}
