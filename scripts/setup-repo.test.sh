@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Tests for scripts/lib/read-env.sh. Run: bash scripts/setup-repo.test.sh
+set -u
+here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/read-env.sh
+source "$here/lib/read-env.sh"
+
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+fail=0; n=0
+check() { n=$((n + 1)); if [[ "$2" == "$3" ]]; then echo "ok $n - $1"; else echo "not ok $n - $1 (got '$2', want '$3')"; fail=1; fi; }
+
+cat >"$tmp/a.env" <<EOT
+# a comment
+GH_ACCOUNT=octo
+GIT_USER_NAME="Octo Cat"
+GIT_USER_EMAIL='octo@example.test'
+EMPTY=
+SPACED =nope
+GH_ACCOUNT=later-wins
+EOT
+
+check "plain value" "$(read_env_value "$tmp/a.env" GIT_USER_NAME)" "Octo Cat"
+check "single quotes are stripped" "$(read_env_value "$tmp/a.env" GIT_USER_EMAIL)" "octo@example.test"
+check "the last assignment wins, like sourcing would" "$(read_env_value "$tmp/a.env" GH_ACCOUNT)" "later-wins"
+check "an empty value is found and empty" "$(read_env_value "$tmp/a.env" EMPTY; echo "[$?]")" "[0]"
+read_env_value "$tmp/a.env" MISSING >/dev/null; check "a missing key returns failure" "$?" "1"
+read_env_value "$tmp/none.env" GH_ACCOUNT >/dev/null; check "a missing file returns failure" "$?" "1"
+check "a key must start the line" "$(read_env_value "$tmp/a.env" NAME; echo "[$?]")" "[1]"
+
+# The point of the library: nothing in the file is ever executed.
+marker="$tmp/pwned"
+cat >"$tmp/evil.env" <<EOT
+GIT_USER_NAME=\$(touch $marker)
+GIT_USER_EMAIL=\`touch $marker\`
+GH_ACCOUNT=ok; touch $marker
+EOT
+name="$(read_env_value "$tmp/evil.env" GIT_USER_NAME)"
+check "command substitution is kept as text" "$name" "\$(touch $marker)"
+read_env_value "$tmp/evil.env" GIT_USER_EMAIL >/dev/null
+read_env_value "$tmp/evil.env" GH_ACCOUNT >/dev/null
+check "nothing in the file ran" "$([[ -e "$marker" ]] && echo ran || echo clean)" "clean"
+
+echo "$n checks, $([[ $fail -eq 0 ]] && echo 0 || echo some) failures"
+exit $fail

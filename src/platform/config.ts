@@ -22,6 +22,11 @@ export type Config = {
   REDIS_SLOT_URL: string
   LINEAR_API_KEY: string
   LINEAR_TEAM_KEY: string
+  /** The GitHub account this instance pushes as. Never a token; the token is read at push time. */
+  GH_ACCOUNT: string
+  /** The author identity the agent commits with inside the container. */
+  GIT_USER_NAME: string
+  GIT_USER_EMAIL: string
   API_TOKEN: string
   API_PORT: number
   ALLOWED_ORIGINS: string[]
@@ -105,6 +110,9 @@ const configSchema = z.object({
   REDIS_SLOT_URL: z.string().min(1, 'must not be empty'),
   LINEAR_API_KEY: z.string().min(1, 'must not be empty'),
   LINEAR_TEAM_KEY: z.string().min(1, 'must not be empty'),
+  GH_ACCOUNT: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/, 'must be a GitHub account name'),
+  GIT_USER_NAME: z.string().min(1, 'must not be empty'),
+  GIT_USER_EMAIL: z.email('must be an email address'),
   API_TOKEN: z.string().min(32, 'must be at least 32 characters'),
   API_PORT: integerField({ min: 1024, max: 65535, fallback: 3000 }),
   ALLOWED_ORIGINS: z.preprocess(
@@ -152,6 +160,9 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     REDIS_SLOT_URL: pick('REDIS_SLOT_URL', env, file),
     LINEAR_API_KEY: pick('LINEAR_API_KEY', env, file),
     LINEAR_TEAM_KEY: pick('LINEAR_TEAM_KEY', env, file),
+    GH_ACCOUNT: pick('GH_ACCOUNT', env, file),
+    GIT_USER_NAME: pick('GIT_USER_NAME', env, file),
+    GIT_USER_EMAIL: pick('GIT_USER_EMAIL', env, file),
     API_TOKEN: pick('API_TOKEN', env, file),
     API_PORT: pick('API_PORT', env, file),
     ALLOWED_ORIGINS: pick('ALLOWED_ORIGINS', env, file),

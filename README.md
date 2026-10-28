@@ -89,6 +89,9 @@ Fill it in. The database and Redis URLs must carry the same passwords you create
 
 ```dotenv
 INSTANCE=personal
+GH_ACCOUNT=your-github-login
+GIT_USER_NAME=Your Name
+GIT_USER_EMAIL=you@example.com
 DATABASE_URL=postgres://postgres:REPLACE_WITH_PG_PASSWORD@127.0.0.1:15432/steward_personal
 REDIS_QUEUE_URL=redis://:REPLACE_WITH_REDIS_PASSWORD@127.0.0.1:15433/0
 REDIS_SLOT_URL=redis://:REPLACE_WITH_REDIS_PASSWORD@127.0.0.1:15434/0
@@ -109,7 +112,7 @@ For local development, copy `.env.example` to `.env` at the repo root and run `p
 pnpm repo:setup personal k-b3r/scratch-repo     # -> ~/steward/repos/personal/scratch-repo
 ```
 
-An optional fourth argument sets the destination instead of `~/steward/repos/<instance>/<repo>`: `pnpm repo:setup personal k-b3r/scratch-repo scratch-repo /path/to/clone`.
+An optional fourth argument sets the destination instead of `~/steward/repos/<instance>/<repo>`: `pnpm repo:setup personal k-b3r/scratch-repo scratch-repo /path/to/clone`. The identity (`GH_ACCOUNT`, `GIT_USER_NAME`, `GIT_USER_EMAIL`) comes from the environment, or else from `~/.config/steward/<instance>.env`, which is parsed and never run as shell code.
 
 It clones once, then marks the clone as steward's: `steward.instance`, `steward.role` and `steward.repo` in the clone's local git config, and the same in `.git/steward.json`. Both are local, so they survive moving the clone and never appear in `git status`. It also prints the `REPO_PATH` line to put in the instance env file.
 

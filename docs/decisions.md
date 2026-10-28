@@ -257,8 +257,6 @@ Run against the real API with a personal key, one team (`BUY`, one user), dry-ru
 - Each clone is marked as steward's, in local git config (`steward.instance`, `steward.role`, `steward.repo`) and in `.git/steward.json`. Neither is committed, both survive a move, and `git status` stays clean.
 - `scripts/setup-repo.sh` (alias `pnpm repo:setup`) clones and marks; it is idempotent and prints the `REPO_PATH` line for the env file.
 
-<<<<<<< HEAD
-
 ## Which account an instance acts as (2026-10-28)
 
 - Per instance, in the env file (`~/.config/steward/<instance>.env`), non-secret: `GH_ACCOUNT`, `GIT_USER_NAME`, `GIT_USER_EMAIL`. Validated by `config.ts`; they are not redacted, because a mismatch is exactly what you want to see in a log.
@@ -287,10 +285,6 @@ Consequences:
 - The directives stay in the units, because they are correct and take effect if the services run as system units under a dedicated user.
 - The real isolation boundary is the one planned for phase 2: the Podman container the agent runs in, which has its own mount, user and network namespaces, no credentials, and only the worktree mounted. The orchestrator is the trusted side, and it holds the tokens.
 - Open item: decide whether the orchestrator should run as a system unit under a dedicated `steward` user (sandbox enforced), or stay a user unit and accept the above.
-
-=======
-
-> > > > > > > 5b1a9fc (add a repo setup script that marks clones as steward's)
 
 ## Worktree and branch rule (2026-10-28)
 
