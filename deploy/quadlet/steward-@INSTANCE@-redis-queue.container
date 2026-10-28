@@ -1,0 +1,20 @@
+# BullMQ Redis for one instance. Persistence is on (AOF) and the data lives in
+# a named volume, so a restart of the container keeps queued job ids.
+# The password is set from the secret steward-@INSTANCE@-redis-password.
+# The password stays out of this file. Redis rewrites its process title, so it
+# does not show in the container's process arguments (checked, docs/decisions.md).
+[Container]
+Image=docker.io/library/redis:7
+ContainerName=steward-@INSTANCE@-redis-queue
+Network=steward-@INSTANCE@.network
+PublishPort=127.0.0.1:@REDIS_QUEUE_PORT@:6379
+Volume=steward-@INSTANCE@-redis-queue.volume:/data
+Secret=steward-@INSTANCE@-redis-password,type=env,target=REDIS_PASSWORD
+Exec=/bin/sh -c "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"
+
+[Service]
+Restart=always
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target

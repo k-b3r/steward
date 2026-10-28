@@ -1,0 +1,7 @@
+# Per-instance Podman network. No container from another instance joins it.
+# NetworkName matches the name derived by src/platform/config.ts instanceNames().
+[Network]
+NetworkName=steward-@INSTANCE@-net
+
+[Install]
+WantedBy=default.target
