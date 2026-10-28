@@ -201,3 +201,19 @@ database, a Redis, or a runs directory between them.
 - [docs/decisions.md](docs/decisions.md): dated decision log, verified facts, unverified
   items, open questions.
 - [docs/project-brief.md](docs/project-brief.md): the design.
+
+## Dashboard
+
+`dashboard/` is a Vite + React app built from a design export (the export itself is not in the repo; `design.css` and `sprite.ts` come from it). It shows the overview, jobs, a live job transcript, slots and approvals, and talks to the API only through `src/api/contract.ts`.
+
+```sh
+pnpm install
+pnpm dev:api                          # the API on 127.0.0.1:3000
+pnpm --filter steward-dashboard dev   # http://127.0.0.1:5173, proxies /v1 to the API
+```
+
+Add `http://127.0.0.1:5173` (or `http://localhost:5173`) to `ALLOWED_ORIGINS`, then sign in with `API_TOKEN`. The token stays in `sessionStorage`. Set `STEWARD_API` to proxy to another API address.
+
+The production build (`pnpm --filter steward-dashboard build`) adds a Content-Security-Policy `<meta>` tag: scripts from the same origin only, no inline script, no eval, network calls to the same origin. Serve `dashboard/dist` from the same origin as the API, or change `connect-src` in `dashboard/csp.ts`. A `<meta>` tag cannot set `frame-ancestors`; add that header where the files are served. Nothing serves `dist` yet.
+
+The API has no job titles, projects, costs or health data yet, so those parts of the design are not built. `pnpm --filter steward-dashboard build` writes `dashboard/dist`.

@@ -160,3 +160,10 @@ config.local.json
 .env.*
 !.env*.example
 *.tsbuildinfo
+
+# Design export (5.9 MB of embedded fonts); the extracted CSS and sprite are what the dashboard uses
+Steward.html
+
+# Editor swap files (a swap of .env holds its secrets)
+*.swp
+*.swo

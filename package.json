@@ -9,9 +9,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "depcruise": "depcruise src --config .dependency-cruiser.cjs",
+    "depcruise": "depcruise src dashboard/src --config .dependency-cruiser.cjs",
     "knip": "knip --no-progress",
-    "typecheck": "tsc -p .",
+    "typecheck": "tsc -p . && pnpm --filter steward-dashboard typecheck",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:mutation": "stryker run",
@@ -36,7 +36,8 @@
       "src/intake-policy.ts"
     ],
     "generatedPaths": [
-      "src/db/migrations/**"
+      "src/db/migrations/**",
+      "dashboard/**"
     ],
     "untestedExempt": [
       "src/api/auth.ts",
