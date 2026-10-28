@@ -17,7 +17,8 @@
     "test:mutation": "stryker run",
     "check": "pnpm format:check && pnpm lint && pnpm depcruise && pnpm knip && pnpm typecheck && pnpm test",
     "dev:api": "tsx --env-file=.env src/entries/api.ts",
-    "dev:worker": "tsx --env-file=.env src/entries/worker.ts"
+    "dev:worker": "tsx --env-file=.env src/entries/worker.ts",
+    "repo:setup": "scripts/setup-repo.sh"
   },
   "agentConfig": {
     "sourceDirs": [

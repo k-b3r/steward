@@ -103,6 +103,18 @@ REPO_PATH=/home/you/Develop/scratch-repo
 
 For local development, copy `.env.example` to `.env` at the repo root and run `pnpm dev:api` or `pnpm dev:worker`; both load `.env` through `tsx --env-file`.
 
+### Point an instance at a repo
+
+```bash
+pnpm repo:setup personal k-b3r/scratch-repo     # -> ~/steward/repos/personal/scratch-repo
+```
+
+An optional fourth argument sets the destination instead of `~/steward/repos/<instance>/<repo>`: `pnpm repo:setup personal k-b3r/scratch-repo scratch-repo /path/to/clone`.
+
+It clones once, then marks the clone as steward's: `steward.instance`, `steward.role` and `steward.repo` in the clone's local git config, and the same in `.git/steward.json`. Both are local, so they survive moving the clone and never appear in `git status`. It also prints the `REPO_PATH` line to put in the instance env file.
+
+Layout: `~/steward/repos/<instance>/<repo>` holds the clones, and `~/steward/runs/<instance>/<jobId>/` holds one worktree and its transcripts per job. Each job gets a worktree from that clone; the clone itself is never touched by an agent.
+
 `REPO_PATH` must be absolute. `RUNS_DIR` defaults to `$HOME/runs/$INSTANCE`, which is
 `~/runs/personal` here. The env file is the only place the app reads secrets.
 
