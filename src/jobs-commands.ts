@@ -1,7 +1,7 @@
 // What a person asks the system to do with a job. Every rule about which moves are allowed
 // lives here, not in the HTTP layer: a route validates its input, calls one function, and
 // turns the errors below into status codes.
-import type { PendingAction } from './db/store'
+import type { PendingAction } from './types'
 import { canTransition, IllegalTransitionError } from './transitions'
 import type { FailureKind, Job, JobState } from './types'
 

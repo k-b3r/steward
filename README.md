@@ -26,7 +26,7 @@ These steps assume the checkout is at `~/steward`, the user units run as your lo
 the instance is named `personal` with port base `15432`. Use another name and base if you
 like; the three ports must stay free.
 
-The units will not start until `dist/api/index.js` and `dist/worker/index.js` exist. There is
+The units will not start until `dist/entries/api.js` and `dist/entries/worker.js` exist. There is
 no build script yet. See open item 1 in [docs/decisions.md](docs/decisions.md).
 
 ### 1. Install dependencies

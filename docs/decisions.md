@@ -201,8 +201,8 @@ deploy/render.test.sh`: 46 checks, 0 failures.
 
 Both units set `NoNewPrivileges=yes`, `ProtectSystem=strict`, `PrivateTmp=yes`, and
 `Restart=on-failure`. `WorkingDirectory=%h/steward` assumes the checkout lives there; edit the
-unit if not. `ExecStart=/usr/bin/node dist/api/index.js` and
-`ExecStart=/usr/bin/node dist/worker/index.js`. The worker alone gets
+unit if not. `ExecStart=/usr/bin/node dist/entries/api.js` and
+`ExecStart=/usr/bin/node dist/entries/worker.js`. The worker alone gets
 `ReadWritePaths=%h/runs/%i`, because it writes transcripts and the brief's default `RUNS_DIR`
 is `$HOME/runs/$INSTANCE`. That directory must exist before the unit starts, so the README
 creates it; systemd fails the unit when a `ReadWritePaths=` path is missing. The API only
@@ -220,7 +220,7 @@ same directory was reported as an error, so the check was live.
 
 ### 25. Build output path is `dist/`
 
-The units expect `dist/api/index.js` and `dist/worker/index.js`. `tsconfig.json` sets
+The units expect `dist/entries/api.js` and `dist/entries/worker.js`. `tsconfig.json` sets
 `noEmit`, and `package.json` has no build script. This is open item 1. Do not add a build
 script as part of deploy work; decide the compiler (tsc or a bundler) with the phase 1 code.
 

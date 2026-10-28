@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { PendingAction } from './db/store'
+import type { PendingAction } from './types'
 import {
   ActionNotPendingError,
   ActionNotFoundError,

@@ -14,7 +14,7 @@ module.exports = {
       inner: ['src/platform'],
       // src/processes (flows spanning modules, created when a second caller needs one) goes here too:
       // it may import modules, modules never import it.
-      entryPoints: ['src/api', 'src/worker'],
+      entryPoints: ['src/entries'],
       // Modules lowest tier first. A module imports only lower tiers; every module must be listed.
       // moduleTiers: { dir: 'src/modules', tiers: [['collection'], ['catalog'], ['pricing']] },
     }),

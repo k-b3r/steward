@@ -4,7 +4,7 @@ export default [
   ...baseConfig({
     tsconfigRootDir: import.meta.dirname,
     // Composition roots: the only files that read process.env.
-    entryPoints: ['src/api/index.ts', 'src/worker/index.ts'],
+    entryPoints: ['src/entries/api.ts', 'src/entries/worker.ts'],
     // The injectable delay; the only place allowed to sleep.
     delayModules: ['src/platform/delay.ts', 'dashboard/src/delay.ts'],
     // Pure decision code (no clock, randomness, fetch, process). Uncomment once the

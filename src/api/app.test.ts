@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { assertTransition } from '../transitions'
 import type { Job, JobState } from '../types'
-import type { PendingAction } from '../db/store'
+import type { PendingAction } from '../types'
 import type { Envelope } from '../runner/transcript'
 import {
   cancelJob,

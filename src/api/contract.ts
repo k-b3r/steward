@@ -2,7 +2,7 @@
 // else from `src/`, so it must stay free of server code: zod plus type-only imports.
 import { z } from 'zod'
 
-import type { ActionStatus } from '../db/schema'
+import type { ActionStatus } from '../types'
 import type { Envelope, TranscriptKind } from '../runner/transcript'
 import type { FailureKind, JobState } from '../types'
 import type { createApp } from './app'

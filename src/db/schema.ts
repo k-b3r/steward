@@ -15,10 +15,15 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 
-import { FAILURE_KINDS, JOB_STATES, type FailureKind, type JobState, type WorkItem } from '../types'
-
-export const ACTION_STATUSES = ['pending', 'approved', 'rejected', 'done', 'failed'] as const
-export type ActionStatus = (typeof ACTION_STATUSES)[number]
+import {
+  ACTION_STATUSES,
+  FAILURE_KINDS,
+  JOB_STATES,
+  type ActionStatus,
+  type FailureKind,
+  type JobState,
+  type WorkItem,
+} from '../types'
 
 function quotedList(values: readonly string[]): string {
   return values.map((value) => `'${value}'`).join(', ')

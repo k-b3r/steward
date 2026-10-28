@@ -55,3 +55,18 @@ export interface AgentRunner {
   resume(sessionId: string, feedback: string): Promise<void>
   cancel(jobId: string): Promise<void>
 }
+
+/** A pending outside write: drafted here, sent only after a human approves it. */
+export const ACTION_STATUSES = ['pending', 'approved', 'rejected', 'done', 'failed'] as const
+export type ActionStatus = (typeof ACTION_STATUSES)[number]
+
+export type PendingAction = {
+  id: string
+  jobId: string
+  kind: string
+  payload: unknown
+  status: ActionStatus
+  reason: string | null
+  createdAt: Date
+  decidedAt: Date | null
+}
