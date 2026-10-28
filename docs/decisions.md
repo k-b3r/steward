@@ -203,8 +203,8 @@ Both units set `NoNewPrivileges=yes`, `ProtectSystem=strict`, `PrivateTmp=yes`, 
 `Restart=on-failure`. `WorkingDirectory=%h/steward` assumes the checkout lives there; edit the
 unit if not. `ExecStart=/usr/bin/node dist/entries/api.js` and
 `ExecStart=/usr/bin/node dist/entries/worker.js`. The worker alone gets
-`ReadWritePaths=%h/runs/%i`, because it writes transcripts and the brief's default `RUNS_DIR`
-is `$HOME/runs/$INSTANCE`. That directory must exist before the unit starts, so the README
+`ReadWritePaths=%h/steward/runs/%i`, because it writes transcripts and the brief's default `RUNS_DIR`
+is `$HOME/steward/runs/$INSTANCE`. That directory must exist before the unit starts, so the README
 creates it; systemd fails the unit when a `ReadWritePaths=` path is missing. The API only
 reads. With `ProtectSystem=strict`, any other write path must be added explicitly; phase 3
 needs `REPO_PATH` writable for git worktrees, and the worker unit must gain that path then.
@@ -249,6 +249,43 @@ Run against the real API with a personal key, one team (`BUY`, one user), dry-ru
 - Not verified: `Todo` and `Backlog` states (no such tickets then), `hasNextPage: true`, a null `description` or `branchName` from the real API, and that `isMe` excludes other people's tickets.
 - Consequence: with dry-run off, all 4 tickets would be proposals on the first poll (baseline rule, and 4 is over the cap of 2). Nothing would run without a confirm.
 
+## Where steward keeps its repos and runs (2026-10-28)
+
+- Clones live under `~/steward/repos/<instance>/<repo>` (`REPO_PATH`), one clone per instance: identity and credentials are per clone, so the personal and work instances never share a commit author and no `gh auth switch` is needed at run time.
+- Runs live under `~/steward/runs/<instance>/<jobId>/` (`RUNS_DIR`): the worktree, `transcript.jsonl` and `raw.jsonl`.
+- One root, `~/steward`, so "this is steward's data" is visible, and cleanup is one directory.
+- Each clone is marked as steward's, in local git config (`steward.instance`, `steward.role`, `steward.repo`) and in `.git/steward.json`. Neither is committed, both survive a move, and `git status` stays clean.
+- `scripts/setup-repo.sh` (alias `pnpm repo:setup`) clones and marks; it is idempotent and prints the `REPO_PATH` line for the env file.
+
+## Which account an instance acts as (2026-10-28)
+
+- Per instance, in the env file (`~/.config/steward/<instance>.env`), non-secret: `GH_ACCOUNT`, `GIT_USER_NAME`, `GIT_USER_EMAIL`. Validated by `config.ts`; they are not redacted, because a mismatch is exactly what you want to see in a log.
+  - Each instance has its own values, so an instance can only ever act as its own account. The real values live in each instance's env file, outside the repo; `.env.example` shows the shape with placeholders.
+- No token in config. At push time the worker runs `GH_TOKEN=$(gh auth token --user "$GH_ACCOUNT")`. If the service user cannot use `gh`, one secret `STEWARD_GH_TOKEN` in the same env file; nothing else carries credentials.
+- The identity is config, not clone state, because **the agent commits inside the container**, which has no `~/.gitconfig`. The container gets `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` from these values (phase 2).
+- `scripts/setup-repo.sh` reads them from the env file, clones with that account's token, and sets the clone's local `user.name`, `user.email` and `steward.account`, so the clone cannot disagree with the instance.
+- The phase 4 pre-push check refuses to push unless the clone's `steward.instance` equals `INSTANCE`, the clone's `user.email` equals `GIT_USER_EMAIL`, and `gh api user` for the resolved token returns `GH_ACCOUNT`. Failure kind `setup`, never retried.
+
+## User units do not sandbox the filesystem on this box (2026-10-28)
+
+Checked on Ubuntu 24.04, systemd 255, with `systemd-run --user` and a probe command:
+
+| Directive               | Effect in a user unit here                            |
+| ----------------------- | ----------------------------------------------------- |
+| `NoNewPrivileges=yes`   | **Applied** (`NoNewPrivs: 1`)                         |
+| `PrivateTmp=yes`        | **Not applied**: a file in the host `/tmp` is visible |
+| `ProtectHome=read-only` | **Not applied**: a write to `$HOME` succeeds          |
+| `ProtectSystem=strict`  | **Not applied**: a write to `$HOME` succeeds          |
+
+Cause: those three need a mount namespace, which a user manager builds inside an unprivileged user namespace, and Ubuntu 24.04 denies that (`kernel.apparmor_restrict_unprivileged_userns=1`; a manual `unshare -Ur` also fails). systemd does not report an error; the units start as if the sandbox were there.
+
+Consequences:
+
+- The orchestrator process (API and worker) runs **unsandboxed** as the login user. Do not rely on `ProtectSystem` or `PrivateTmp` for it; `ReadWritePaths=` is not enforced either, and a missing path does not stop the unit, so the earlier note that "the unit fails to start when the path does not exist" does not hold in user mode.
+- The directives stay in the units, because they are correct and take effect if the services run as system units under a dedicated user.
+- The real isolation boundary is the one planned for phase 2: the Podman container the agent runs in, which has its own mount, user and network namespaces, no credentials, and only the worktree mounted. The orchestrator is the trusted side, and it holds the tokens.
+- Open item: decide whether the orchestrator should run as a system unit under a dedicated `steward` user (sandbox enforced), or stay a user unit and accept the above.
+
 ## Worktree and branch rule (2026-10-28)
 
 How a job gets the code it works on. Decided for phase 2; the git primitives land now.
@@ -257,7 +294,7 @@ How a job gets the code it works on. Decided for phase 2; the git primitives lan
 - Before cutting, every run runs `git fetch --prune origin <base>` and starts from `origin/<base>`, never from the clone's `HEAD`. `HEAD` may be stale or checked out on some other branch, which was a real bug until this change.
 - **No pull request yet:** create `agent/<identifier-slug>` from `origin/<base>`.
 - **A pull request already exists:** attach the **existing PR head branch** into the worktree and **merge `origin/<base>` into it**, so the agent continues the same PR instead of opening a second one. Merge, never rebase: a rebase would rewrite the PR branch and need a force-push.
-- **A conflict is left in the worktree**, with markers, and is handed to the agent to resolve (`mergeIntoWorktree` returns `'conflict'`). Resolving a merge is coding work. Guard: a second conflict on the same job, or a large `origin/<base>..branch` diff, fails the job as `agent` and notifies instead of looping. `abortMerge` exists for that path.
+- **A conflict is for the agent to resolve.** `mergeIntoWorktree` returns `'conflict'` and leaves the markers in the worktree, because resolving a merge is coding work. Phase 2 hands that tree to the runner. **Not built yet:** the runner handoff, and a guard that fails the job as `agent` when the same job conflicts a second time or the `origin/<base>..branch` diff is large (`abortMerge` exists for that path and is only exercised by its own test). Until then the phase 1 stub has no agent to give the tree to, so it fails the job as `agent` with the reason `merge conflict with origin/<base>`, leaves the branch as it was, and removes the worktree. A job that reports `done` after discarding a conflict would be wrong.
 - `jobs.branch` will store the branch actually used, set at claim time (phase 4). It is never recomputed from the identifier afterwards, because a PR's head branch can differ (Linear suggests `branchName`, which is a suggestion, not the PR branch). Phase 1/2 use the rule "attach if the branch exists, else create from the base".
 - The agent commits locally in the worktree. The orchestrator pushes, opens the PR and updates the tracker, from the host, with the instance's git identity checked first.
 - A failed fetch (origin unreachable, wrong remote, missing base branch) is an `infra` failure like any other thrown error: it is retried with backoff up to `MAX_ATTEMPTS`, then lands in `failed`, the dead-letter, where you retry or cancel it. A wrong remote URL therefore costs a few attempts before it surfaces. Telling a permanent cause (a missing base branch) from a transient one (a network blip) and failing the first as `setup` is not built; it needs the fetch error classified, and is a phase 2 item.

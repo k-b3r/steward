@@ -9,7 +9,14 @@ import { migrateDb } from '../../src/db/migrate'
 import { jobEvents } from '../../src/db/schema'
 import { acquireSlot, getJob, heldSlots, insertJob, transitionJob } from '../../src/db/store'
 import { closePool, createDb, createPool } from '../../src/platform/db'
-import { branchExists, createWorktree, fetchBase, removeWorktree } from '../../src/platform/git'
+import {
+  attachWorktree,
+  branchExists,
+  createWorktree,
+  fetchBase,
+  mergeIntoWorktree,
+  removeWorktree,
+} from '../../src/platform/git'
 import { createTranscriptWriter } from '../../src/runner/transcript'
 import type { AgentRunner, Job, WorkItem } from '../../src/types'
 import { processJob, type ProcessJobDeps } from '../../src/worker/process-job'
@@ -135,7 +142,7 @@ function makeDeps(overrides: Partial<ProcessJobDeps> = {}): ProcessJobDeps {
     rand: () => 0.5,
     config: { slotCount: 2, repoPath, runsDir, backoff: BACKOFF },
     queue: makeQueue().queue,
-    git: { branchExists, createWorktree, fetchBase, removeWorktree },
+    git: { attachWorktree, branchExists, createWorktree, fetchBase, mergeIntoWorktree, removeWorktree },
     ...overrides,
   }
 }
@@ -309,6 +316,48 @@ describe('processJob', () => {
 
       expect(git(repoPath, ['rev-parse', BRANCH]).trim()).toBe(originTip)
       expect(git(repoPath, ['rev-parse', 'HEAD']).trim()).not.toBe(originTip)
+    })
+
+    it('continues an existing branch and merges the base into it, keeping earlier commits', async () => {
+      git(repoPath, ['checkout', '-q', '-b', BRANCH])
+      writeFileSync(join(repoPath, 'work.txt'), 'earlier attempt\n')
+      git(repoPath, ['add', 'work.txt'])
+      git(repoPath, ['commit', '-qm', 'earlier work'])
+      const earlier = git(repoPath, ['rev-parse', 'HEAD']).trim()
+      git(repoPath, ['checkout', '-q', 'main'])
+      const originTip = pushToOrigin('remote.txt', 'newer\n')
+      const logs: string[] = []
+      const job = await createJob()
+
+      await processJob(makeDeps({ log: (message) => logs.push(message) }), job.id)
+
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'done' })
+      expect(() => git(repoPath, ['merge-base', '--is-ancestor', earlier, BRANCH])).not.toThrow()
+      expect(() => git(repoPath, ['merge-base', '--is-ancestor', originTip, BRANCH])).not.toThrow()
+      expect(logs.some((message) => message.includes('merge conflict'))).toBe(false)
+    })
+
+    it('fails a merge conflict as an agent failure, because the echo runner cannot resolve it', async () => {
+      git(repoPath, ['checkout', '-q', '-b', BRANCH])
+      writeFileSync(join(repoPath, 'README.md'), 'branch version\n')
+      git(repoPath, ['add', 'README.md'])
+      git(repoPath, ['commit', '-qm', 'branch change'])
+      const before = git(repoPath, ['rev-parse', BRANCH]).trim()
+      git(repoPath, ['checkout', '-q', 'main'])
+      pushToOrigin('README.md', 'main version\n')
+      const logs: string[] = []
+      const enqueued = makeQueue()
+      const job = await createJob()
+
+      await processJob(makeDeps({ queue: enqueued.queue, log: (message) => logs.push(message) }), job.id)
+
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'failed', failureKind: 'agent', slot: null })
+      expect((await eventsFor(job.id)).at(-1)).toMatchObject({ toState: 'failed', failureKind: 'agent' })
+      expect((await eventsFor(job.id)).at(-1)?.reason).toMatch(/merge conflict with origin\/main/)
+      expect(enqueued.calls).toEqual([])
+      expect(git(repoPath, ['rev-parse', BRANCH]).trim()).toBe(before)
+      expect(existsSync(join(runsDir, job.id, 'worktree'))).toBe(false)
+      expect(await heldSlots(db)).toEqual([])
     })
 
     it('treats an unreachable origin as an infra failure and retries, with the slot freed', async () => {
