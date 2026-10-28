@@ -8,31 +8,32 @@ import { z } from 'zod'
 
 import type { Context } from 'hono'
 import type { PendingAction } from '../db/store'
+import { ActionNotFoundError, ActionNotPendingError, JobNotFoundError } from '../jobs-commands'
 import { ACTION_STATUSES } from '../db/schema'
 import type { Envelope } from '../runner/transcript'
-import { IllegalTransitionError, canTransition } from '../transitions'
+import { IllegalTransitionError } from '../transitions'
 import { JOB_STATES } from '../types'
-import type { FailureKind, Job, JobState } from '../types'
+import type { Job, JobState } from '../types'
 import { createAuthMiddleware } from './auth'
 import { declineBodySchema, rejectBodySchema } from './contract'
 import type { ActionResponse, JobResponse } from './contract'
 
 const LOG_POLL_MS = 1000
 
-export type ApiStore = {
+/** Reads the routes need. Writes and their rules live in src/jobs-commands.ts, not here. */
+export type ApiQueries = {
   getJob(id: string): Promise<Job | null>
   listJobs(filter?: { state?: JobState }): Promise<Job[]>
-  transitionJob(
-    id: string,
-    to: JobState,
-    opts: { now: Date; reason?: string; failureKind?: FailureKind; nextRunAt?: Date | null },
-  ): Promise<Job>
   listActions(filter?: { status?: string }): Promise<PendingAction[]>
-  decideAction(
-    id: string,
-    decision: 'approved' | 'rejected',
-    opts: { now: Date; reason?: string },
-  ): Promise<PendingAction>
+}
+
+export type ApiCommands = {
+  confirm: (id: string) => Promise<Job>
+  decline: (id: string, reason: string) => Promise<Job>
+  reconsider: (id: string) => Promise<Job>
+  retry: (id: string) => Promise<Job>
+  cancel: (id: string) => Promise<Job>
+  decideAction: (id: string, decision: 'approved' | 'rejected', reason?: string) => Promise<PendingAction>
 }
 
 type AppConfig = {
@@ -42,11 +43,9 @@ type AppConfig = {
 }
 
 export type AppDeps = {
-  store: ApiStore
-  enqueue(jobId: string): Promise<void>
-  cancelRun(jobId: string): Promise<void>
+  queries: ApiQueries
+  commands: ApiCommands
   readLog(jobId: string, afterSeq: number): Promise<Envelope[]>
-  clock: () => Date
   config: AppConfig
   sleep: (ms: number) => Promise<void>
 }
@@ -148,13 +147,16 @@ function streamJobLog(c: Context, deps: AppDeps, jobId: string, after: number): 
 }
 
 export function createApp(deps: AppDeps) {
-  const { store, config } = deps
+  const { queries, commands, config } = deps
   const app = new Hono()
 
   app.use('/v1/*', createAuthMiddleware(config))
 
   app.onError((error, c) => {
-    if (error instanceof IllegalTransitionError) {
+    if (error instanceof JobNotFoundError || error instanceof ActionNotFoundError) {
+      return c.json({ error: 'not found' }, 404)
+    }
+    if (error instanceof IllegalTransitionError || error instanceof ActionNotPendingError) {
       return c.json({ error: error.message }, 409)
     }
     if (error instanceof HTTPException) {
@@ -164,39 +166,15 @@ export function createApp(deps: AppDeps) {
     return c.json({ error: 'internal' }, 500)
   })
 
-  const findAction = async (id: string): Promise<PendingAction | null> => {
-    const actions = await store.listActions({})
-    return actions.find((action) => action.id === id) ?? null
-  }
-
-  const decide = async (
-    id: string,
-    decision: 'approved' | 'rejected',
-    reason?: string,
-  ): Promise<{ action: PendingAction } | { notFound: true } | { conflict: string }> => {
-    try {
-      const action = await store.decideAction(id, decision, { now: deps.clock(), reason })
-      return { action }
-    } catch (error) {
-      // The store reports both cases as plain errors; read the row to tell them apart.
-      const existing = await findAction(id)
-      if (existing === null) return { notFound: true }
-      if (existing.status !== 'pending') {
-        return { conflict: `Pending action is ${existing.status}, not pending` }
-      }
-      throw error
-    }
-  }
-
   return app
     .get('/v1/jobs', zValidator('query', jobFilterSchema, rejectInvalid), async (c) => {
       const { state } = c.req.valid('query')
-      const jobs = await store.listJobs(state === undefined ? {} : { state })
+      const jobs = await queries.listJobs(state === undefined ? {} : { state })
       return c.json(jobs.map(toJobResponse))
     })
     .get('/v1/jobs/:id', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
       const { id } = c.req.valid('param')
-      const job = await store.getJob(id)
+      const job = await queries.getJob(id)
       if (job === null) return c.json({ error: 'not found' }, 404)
       return c.json(toJobResponse(job))
     })
@@ -206,7 +184,7 @@ export function createApp(deps: AppDeps) {
       zValidator('query', logQuerySchema, rejectInvalid),
       async (c) => {
         const { id } = c.req.valid('param')
-        const job = await store.getJob(id)
+        const job = await queries.getJob(id)
         if (job === null) return c.json({ error: 'not found' }, 404)
 
         const lastEventId = c.req.header('last-event-id')
@@ -221,40 +199,13 @@ export function createApp(deps: AppDeps) {
       },
     )
     .post('/v1/jobs/:id/retry', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
-      const { id } = c.req.valid('param')
-      const job = await store.getJob(id)
-      if (job === null) return c.json({ error: 'not found' }, 404)
-      if (job.state !== 'failed' && job.state !== 'cancelled') {
-        throw new IllegalTransitionError(job.state, 'queued')
-      }
-
-      const updated = await store.transitionJob(id, 'queued', { now: deps.clock() })
-      await deps.enqueue(id)
-      return c.json(toJobResponse(updated))
+      return c.json(toJobResponse(await commands.retry(c.req.valid('param').id)))
     })
     .post('/v1/jobs/:id/cancel', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
-      const { id } = c.req.valid('param')
-      const job = await store.getJob(id)
-      if (job === null) return c.json({ error: 'not found' }, 404)
-      if (!canTransition(job.state, 'cancelled')) {
-        throw new IllegalTransitionError(job.state, 'cancelled')
-      }
-
-      await deps.cancelRun(id)
-      const updated = await store.transitionJob(id, 'cancelled', { now: deps.clock() })
-      return c.json(toJobResponse(updated))
+      return c.json(toJobResponse(await commands.cancel(c.req.valid('param').id)))
     })
     .post('/v1/jobs/:id/confirm', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
-      const { id } = c.req.valid('param')
-      const job = await store.getJob(id)
-      if (job === null) return c.json({ error: 'not found' }, 404)
-      if (job.state !== 'proposed') {
-        throw new IllegalTransitionError(job.state, 'queued')
-      }
-
-      const updated = await store.transitionJob(id, 'queued', { now: deps.clock() })
-      await deps.enqueue(id)
-      return c.json(toJobResponse(updated))
+      return c.json(toJobResponse(await commands.confirm(c.req.valid('param').id)))
     })
     .post(
       '/v1/jobs/:id/decline',
@@ -262,45 +213,28 @@ export function createApp(deps: AppDeps) {
       zValidator('json', declineBodySchema, rejectInvalid),
       async (c) => {
         const { id } = c.req.valid('param')
-        const job = await store.getJob(id)
-        if (job === null) return c.json({ error: 'not found' }, 404)
-
-        const { reason } = c.req.valid('json')
-        const updated = await store.transitionJob(id, 'declined', { now: deps.clock(), reason })
-        return c.json(toJobResponse(updated))
+        return c.json(toJobResponse(await commands.decline(id, c.req.valid('json').reason)))
       },
     )
     .post('/v1/jobs/:id/reconsider', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
-      const { id } = c.req.valid('param')
-      const job = await store.getJob(id)
-      if (job === null) return c.json({ error: 'not found' }, 404)
-
-      const updated = await store.transitionJob(id, 'proposed', { now: deps.clock() })
-      return c.json(toJobResponse(updated))
+      return c.json(toJobResponse(await commands.reconsider(c.req.valid('param').id)))
     })
     .get('/v1/actions', zValidator('query', actionFilterSchema, rejectInvalid), async (c) => {
       const { status } = c.req.valid('query')
-      const actions = await store.listActions(status === undefined ? {} : { status })
+      const actions = await queries.listActions(status === undefined ? {} : { status })
       return c.json(actions.map(toActionResponse))
     })
     .post('/v1/actions/:id/approve', zValidator('param', actionParamSchema, rejectInvalid), async (c) => {
-      const { id } = c.req.valid('param')
-      const result = await decide(id, 'approved')
-      if ('notFound' in result) return c.json({ error: 'not found' }, 404)
-      if ('conflict' in result) return c.json({ error: result.conflict }, 409)
-      return c.json(toActionResponse(result.action))
+      const action = await commands.decideAction(c.req.valid('param').id, 'approved')
+      return c.json(toActionResponse(action))
     })
     .post(
       '/v1/actions/:id/reject',
       zValidator('param', actionParamSchema, rejectInvalid),
       zValidator('json', rejectBodySchema, rejectInvalid),
       async (c) => {
-        const { id } = c.req.valid('param')
-        const { reason } = c.req.valid('json')
-        const result = await decide(id, 'rejected', reason)
-        if ('notFound' in result) return c.json({ error: 'not found' }, 404)
-        if ('conflict' in result) return c.json({ error: result.conflict }, 409)
-        return c.json(toActionResponse(result.action))
+        const action = await commands.decideAction(c.req.valid('param').id, 'rejected', c.req.valid('json').reason)
+        return c.json(toActionResponse(action))
       },
     )
 }

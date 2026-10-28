@@ -285,6 +285,11 @@ export async function createAction(
   return toPendingAction(row)
 }
 
+export async function getAction(db: Db, id: string): Promise<PendingAction | null> {
+  const [row] = await db.select().from(pendingActions).where(eq(pendingActions.id, id)).limit(1)
+  return row === undefined ? null : toPendingAction(row)
+}
+
 export async function decideAction(
   db: Db,
   id: string,
