@@ -32,3 +32,16 @@ export type JobState = (typeof JOB_STATES)[number]
 /** infra: retried with backoff. agent: phase 3 loop. setup: never retried. */
 export const FAILURE_KINDS = ['infra', 'agent', 'setup'] as const
 export type FailureKind = (typeof FAILURE_KINDS)[number]
+
+export type Job = {
+  id: string
+  source: string
+  externalId: string
+  identifier: string
+  state: JobState
+  attempt: number
+  maxAttempts: number
+  slot: number | null
+  nextRunAt: Date | null
+  failureKind: FailureKind | null
+}
