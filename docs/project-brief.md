@@ -21,7 +21,7 @@ TypeScript (strict, ESM), Node 22, pnpm, Hono (+ `@hono/node-server`), Drizzle +
 
 One instance per context (work, personal). Nothing is a global singleton.
 
-- `INSTANCE` env var (zod-validated) prefixes systemd units (`steward@<instance>`), Quadlet containers, ports, database names, and the runs dir (`~/runs/<instance>/<job-id>/`).
+- `INSTANCE` env var (zod-validated) prefixes systemd units (`steward@<instance>`), Quadlet containers, ports, database names, and the runs dir (`~/steward/runs/<instance>/<job-id>/`).
 - Each instance has its own Postgres and two Redis containers (BullMQ, per-slot test use). Never share Redis between roles or instances.
 - Each instance has its own git author name/email and `gh` account in config. Before any push, check `git config` and `gh auth status` match the instance. Mismatch fails the job with kind `setup`.
 - Work config and env live outside the repo.
@@ -122,7 +122,7 @@ Failure kinds (stored with a free-text `reason` on the `job_events` row):
 
 ## Transcripts
 
-`~/runs/<instance>/<job-id>/`:
+`~/steward/runs/<instance>/<job-id>/`:
 
 - `transcript.jsonl`: one envelope per line, `{ seq, ts, kind, data }`. `kind` in `system | assistant | tool | result | error | orchestrator`. `data` holds the raw agent event unmodified. One writer for runner and orchestrator lines. `seq` increases monotonically so the SSE tail can resume (`Last-Event-ID`).
 - `raw.jsonl`: byte-exact runner output, mode `0600`, never served by the API.

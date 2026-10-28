@@ -1,5 +1,5 @@
 # steward worker for one instance: `systemctl --user enable --now steward-worker@personal`
-# The worker writes transcripts under %h/runs/%i (the default RUNS_DIR from
+# The worker writes transcripts under %h/steward/runs/%i (the default RUNS_DIR from
 # src/platform/config.ts). Create that directory before the first start: the
 # unit fails to start when the ReadWritePaths= path does not exist. If RUNS_DIR
 # points elsewhere, change both RUNS_DIR and ReadWritePaths, or the worker
@@ -20,7 +20,7 @@ Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
-ReadWritePaths=%h/runs/%i
+ReadWritePaths=%h/steward/runs/%i
 PrivateTmp=yes
 
 [Install]

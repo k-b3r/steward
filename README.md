@@ -118,16 +118,16 @@ It clones once, then marks the clone as steward's: `steward.instance`, `steward.
 
 Layout: `~/steward/repos/<instance>/<repo>` holds the clones, and `~/steward/runs/<instance>/<jobId>/` holds one worktree and its transcripts per job. Each job gets a worktree from that clone; the clone itself is never touched by an agent.
 
-`REPO_PATH` must be absolute. `RUNS_DIR` defaults to `$HOME/runs/$INSTANCE`, which is
-`~/runs/personal` here. The env file is the only place the app reads secrets.
+`REPO_PATH` must be absolute. `RUNS_DIR` defaults to `$HOME/steward/runs/$INSTANCE`, which is
+`~/steward/runs/personal` here. The env file is the only place the app reads secrets.
 
 ### 6. Create the runs directory
 
-The worker writes transcripts under `~/runs/personal`, and its `ReadWritePaths=` needs that
+The worker writes transcripts under `~/steward/runs/personal`, and its `ReadWritePaths=` needs that
 directory to exist before the unit starts.
 
 ```bash
-mkdir -p ~/runs/personal
+mkdir -p ~/steward/runs/personal
 ```
 
 ### 7. Let user units run without a login

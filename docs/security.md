@@ -63,7 +63,7 @@ So:
 
 ## Files on disk
 
-- `~/runs/<instance>/<job-id>/` is mode 0700.
+- `~/steward/runs/<instance>/<job-id>/` is mode 0700.
 - `transcript.jsonl` and `raw.jsonl` are mode 0600. `raw.jsonl` is never served.
 - The run directory holds the agent's local logs. It is not in the repo and not synced.
 - Retention is `RUN_RETENTION_DAYS` (default 30). The sweep is phase 5. Until then, delete

@@ -150,7 +150,9 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
   const explicitRunsDir = pick('RUNS_DIR', env, file)
   const home = env.HOME
   const defaultRunsDir =
-    typeof instance === 'string' && typeof home === 'string' && home.length > 0 ? `${home}/runs/${instance}` : undefined
+    typeof instance === 'string' && typeof home === 'string' && home.length > 0
+      ? `${home}/steward/runs/${instance}`
+      : undefined
 
   const raw = {
     INSTANCE: instance,
