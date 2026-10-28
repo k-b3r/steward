@@ -19,6 +19,8 @@ fi
 # Identity comes from the instance env file, the same values the container will be given.
 # shellcheck source=lib/read-env.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib/read-env.sh"
+# shellcheck source=lib/json.sh
+source "$(cd "$(dirname "$0")" && pwd)/lib/json.sh"
 env_file="${STEWARD_ENV_FILE:-$HOME/.config/steward/$instance.env}"
 for key in GH_ACCOUNT GIT_USER_NAME GIT_USER_EMAIL; do
   if [[ -z "${!key:-}" ]] && value="$(read_env_value "$env_file" "$key")"; then
@@ -40,7 +42,8 @@ fi
 git -C "$dest" config --local steward.instance "$instance"
 git -C "$dest" config --local steward.role "worktree-source"
 git -C "$dest" config --local steward.repo "$repo"
-printf '{"instance":"%s","repo":"%s","role":"worktree-source","account":"%s"}\n' "$instance" "$repo" "$GH_ACCOUNT" > "$dest/.git/steward.json"
+printf '{"instance":"%s","repo":"%s","role":"worktree-source","account":"%s"}\n' \
+  "$(json_escape "$instance")" "$(json_escape "$repo")" "$(json_escape "$GH_ACCOUNT")" >"$dest/.git/steward.json"
 
 # The clone authors as the instance says, so the orchestrator's commits and the agent's agree.
 git -C "$dest" config --local user.name "$GIT_USER_NAME"

@@ -4,6 +4,8 @@ set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/read-env.sh
 source "$here/lib/read-env.sh"
+# shellcheck source=lib/json.sh
+source "$here/lib/json.sh"
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 fail=0; n=0
@@ -39,6 +41,15 @@ check "command substitution is kept as text" "$name" "\$(touch $marker)"
 read_env_value "$tmp/evil.env" GIT_USER_EMAIL >/dev/null
 read_env_value "$tmp/evil.env" GH_ACCOUNT >/dev/null
 check "nothing in the file ran" "$([[ -e "$marker" ]] && echo ran || echo clean)" "clean"
+
+# json_escape must make any value safe inside a JSON string.
+check "json: plain text is unchanged" "$(json_escape 'k-b3r/steward')" "k-b3r/steward"
+check "json: a double quote is escaped" "$(json_escape 'a"b')" 'a\"b'
+check "json: a backslash is escaped" "$(json_escape 'a\b')" 'a\\b'
+doc="$(printf '{"repo":"%s"}' "$(json_escape 'we"ird\name')")"
+if command -v python3 >/dev/null; then
+  check "json: the document parses and round-trips" "$(printf '%s' "$doc" | python3 -c 'import sys,json;print(json.load(sys.stdin)["repo"])')" 'we"ird\name'
+fi
 
 echo "$n checks, $([[ $fail -eq 0 ]] && echo 0 || echo some) failures"
 exit $fail
