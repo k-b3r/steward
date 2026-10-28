@@ -238,6 +238,17 @@ Run on Ubuntu 24.04, Podman 4.9.3 rootless, systemd user units, instance `person
 - Verified: the worker and API (run with `tsx`, not the systemd units) migrate the database, reconcile a `queued` job missing from Redis, run it to `done`, and serve it through the API. No password appeared in any log.
 - Correction: the Redis password is **not** visible in the container's process arguments. Redis rewrites its process title, and `/proc/1/cmdline` shows `redis-server *:6379`. The Quadlet comment that said otherwise was wrong and is fixed.
 
+## Linear probe (2026-10-28)
+
+Run against the real API with a personal key, one team (`BUY`, one user), dry-run on, nothing stored. The key was read from `.env` and never printed.
+
+- Verified: `POST https://api.linear.app/graphql` with the raw key in `Authorization` (no `Bearer`) returns HTTP 200.
+- Verified: the query's filter (`team.key.eq`, `assignee.isMe.eq`, `state.name.in`) and the `first` and `after` arguments are accepted. No GraphQL errors.
+- Verified: the response has `data.issues.nodes` and `data.issues.pageInfo`. Each node has `id`, `identifier`, `title`, `description`, `url`, `branchName`, `labels.nodes[].name` and `state.name`, with the types the mapper expects.
+- Verified: the client mapped 4 `In Progress` tickets, 2 with a label and all 4 with a `branchName`. Linear builds `branchName` from the user's handle, so it looks like `<handle>/<id>-<title>`.
+- Not verified: `Todo` and `Backlog` states (no such tickets then), `hasNextPage: true`, a null `description` or `branchName` from the real API, and that `isMe` excludes other people's tickets.
+- Consequence: with dry-run off, all 4 tickets would be proposals on the first poll (baseline rule, and 4 is over the cap of 2). Nothing would run without a confirm.
+
 ## Unverified
 
 Each item still needs a run on the box.
@@ -253,8 +264,9 @@ Each item still needs a run on the box.
    a bundler), add the script, and update this log.
 2. Empty-commit draft PR probe (phase 4). Verify in a scratch repo that GitHub accepts a pull
    request whose branch has an empty commit, and record the result here.
-3. Tracker response shape probe. Log raw JSON from the real API before mapping fields. The
-   mapper uses synthetic fixtures today.
+3. Tracker probe: done 2026-10-28 for the query and response shape (see "Linear probe" above). Still open:
+   a run with `Todo` and `Backlog` tickets, a second page of results, and a team with more than
+   one user to prove `isMe` filters.
 4. Notification hosting (phase 4). Decide self-hosted ntfy or a hosted service, what ticket
    text may leave the box, and how a phone action reaches a `127.0.0.1` API.
 5. Readiness ordering between the container services and the host units. A small retry in the

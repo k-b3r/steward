@@ -5,10 +5,11 @@ import { LinearMapError, mapIssueToWorkItem } from './linear-map'
 import type { Logger } from './platform/logger'
 import type { WorkItem, WorkFeed } from './types'
 
-// UNVERIFIED: the filter syntax, field names and pagination argument names below
-// come from the ticket, not from a real Linear response. The dry-run probe MUST
-// confirm the filter (`team.key.eq`, `assignee.isMe.eq`, `state.name.in`), the
-// selected fields and the `after` cursor before this is treated as correct.
+// Verified 2026-10-28 against the real API with a personal key and one team (docs/decisions.md): the
+// filter (`team.key.eq`, `assignee.isMe.eq`, `state.name.in`), the selected fields and the
+// `first`/`after` arguments are accepted, and the response matches src/linear-map.ts. Not
+// verified: the `Todo` and `Backlog` states (only `In Progress` tickets existed), a page
+// with `hasNextPage: true`, and that `isMe` excludes other people's tickets (one user only).
 const ISSUES_QUERY = `query StewardIntake($teamKey: String!, $after: String, $first: Int!) {
   issues(
     filter: {

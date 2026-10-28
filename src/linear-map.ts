@@ -1,9 +1,8 @@
-// UNVERIFIED ASSUMPTION: the Linear GraphQL response shape mapped here
-// (`{ data: { issues: { nodes, pageInfo } } }`, each node carrying `id`,
-// `identifier`, `title`, `description`, `url`, `branchName`, `labels.nodes`,
-// `state.name`) comes from the ticket, not from a real response. It is
-// confirmed later with a dry-run probe. When the probe lands, change this
-// mapper and tests/fixtures/linear-issues.json together.
+// The response shape mapped here (`{ data: { issues: { nodes, pageInfo } } }`, each node with
+// `id`, `identifier`, `title`, `description`, `url`, `branchName`, `labels.nodes`, `state.name`)
+// was checked on 2026-10-28 against a real response: same keys and types. `description` and
+// `branchName` were strings on every ticket seen, so the null and absent cases still rest on the
+// synthetic fixture in tests/fixtures/linear-issues.json.
 
 import type { WorkItem } from './types'
 
