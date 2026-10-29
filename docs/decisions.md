@@ -286,6 +286,17 @@ Consequences:
 - The real isolation boundary is the one planned for phase 2: the Podman container the agent runs in, which has its own mount, user and network namespaces, no credentials, and only the worktree mounted. The orchestrator is the trusted side, and it holds the tokens.
 - Open item: decide whether the orchestrator should run as a system unit under a dedicated `steward` user (sandbox enforced), or stay a user unit and accept the above.
 
+## Decisions taken 2026-10-28
+
+- **A fetch failure is `infra`, unless the setup is wrong.** A missing remote or base branch fails the job as `setup` at once, because retrying cannot fix it. Everything else raised by the fetch (network, auth, timeout) is `infra` and retried with backoff.
+- **The personal instance runs on its Quadlet stack**, not the disposable test containers: `steward-personal-postgres` and the two Redis servers, so data survives restarts.
+- **`BASE_BRANCH` is per instance.** A new `agent/*` branch is cut from `origin/<BASE_BRANCH>`; default `main`.
+- **`DASHBOARD_DIR` serves the built dashboard from the API's origin** when set. One origin, no CORS, and the CSP's `connect-src 'self'` holds. Unset means the API answers only `/v1`.
+- **The orchestrator never moves a ticket past `In Progress`.** `ALLOWED_STATUSES` defaults to `[In Progress]`, so the only tracker status change it may make is Backlog or Todo to In Progress, as part of a confirm. Everything after that is yours.
+- **The build is `tsc`.** Plain Node ESM, nothing needs bundling.
+- **The systemd units stay user units**, and the phase 2 container is the isolation boundary, since the filesystem sandbox is not enforced for user units on this box.
+- **ntfy is self-hosted**, and carries the identifier and title only, never ticket bodies (phase 4).
+
 ## Worktree and branch rule (2026-10-28)
 
 How a job gets the code it works on. Decided for phase 2; the git primitives land now.
