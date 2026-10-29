@@ -58,6 +58,7 @@ export function composeWorker(config: Config, write: (line: string) => void) {
           },
           queue,
           git: { attachWorktree, branchExists, createWorktree, fetchBase, mergeIntoWorktree, removeWorktree },
+          baseBranch: config.BASE_BRANCH,
           log: (msg) => logger.info(msg),
         },
         jobId,

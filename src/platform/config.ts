@@ -30,6 +30,7 @@ export type Config = {
   API_TOKEN: string
   API_PORT: number
   ALLOWED_ORIGINS: string[]
+  ALLOWED_HOSTS: string[]
   SLOT_COUNT: number
   POLL_INTERVAL_MS: number
   MAX_ENQUEUE_PER_POLL: number
@@ -38,6 +39,12 @@ export type Config = {
   MAX_ATTEMPTS: number
   DRY_RUN: boolean
   REPO_PATH: string
+  /** Branch a new `agent/*` branch starts from. */
+  BASE_BRANCH: string
+  /** Built dashboard to serve from the API's origin; unset serves only /v1. */
+  DASHBOARD_DIR?: string
+  /** Tracker statuses the orchestrator may move a ticket into. */
+  ALLOWED_STATUSES: string[]
   RUNS_DIR: string
 }
 
@@ -68,6 +75,27 @@ function parseOrigins(value: unknown): unknown {
   const trimmed = value.trim()
   if (trimmed === '') return []
   return trimmed.split(',').map((origin) => origin.trim())
+}
+
+function parseHosts(value: unknown): unknown {
+  const hosts = parseOrigins(value)
+  return Array.isArray(hosts) ? hosts.map((host) => (typeof host === 'string' ? host.toLowerCase() : host)) : hosts
+}
+
+const HOST_VALUE = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::\d{1,5})?$/
+
+function isHostValue(host: string): boolean {
+  return HOST_VALUE.test(host)
+}
+
+/** The one status the orchestrator may move a ticket into, as a comma-separated list. */
+function parseStatuses(value: unknown): unknown {
+  if (value === undefined) return ['In Progress']
+  if (typeof value !== 'string') return value
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '')
 }
 
 function parseDryRun(value: unknown): unknown {
@@ -119,6 +147,12 @@ const configSchema = z.object({
     parseOrigins,
     z.array(z.string()).refine((origins) => origins.every(isUrlOrigin), 'each entry must be a valid URL origin'),
   ),
+  ALLOWED_HOSTS: z.preprocess(
+    parseHosts,
+    z
+      .array(z.string())
+      .refine((hosts) => hosts.every(isHostValue), 'each entry must be a host name, with an optional :port'),
+  ),
   SLOT_COUNT: integerField({ min: 1, max: 16, fallback: 3 }),
   POLL_INTERVAL_MS: integerField({ min: 1000, fallback: 30000 }),
   MAX_ENQUEUE_PER_POLL: integerField({ min: 0, fallback: 2 }),
@@ -130,6 +164,17 @@ const configSchema = z.object({
     .string()
     .min(1, 'must not be empty')
     .refine((value) => isAbsolute(value), 'must be an absolute path'),
+  // Absent or empty means the default branch name, the same way an empty DASHBOARD_DIR means unset.
+  BASE_BRANCH: z.preprocess((value) => (value === undefined || value === '' ? 'main' : value), z.string().min(1)),
+  DASHBOARD_DIR: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .min(1, 'must not be empty')
+      .refine((value) => isAbsolute(value), 'must be an absolute path')
+      .optional(),
+  ),
+  ALLOWED_STATUSES: z.preprocess(parseStatuses, z.array(z.string().min(1)).min(1)),
   RUNS_DIR: z.string().min(1, 'must not be empty'),
 })
 
@@ -168,6 +213,7 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     API_TOKEN: pick('API_TOKEN', env, file),
     API_PORT: pick('API_PORT', env, file),
     ALLOWED_ORIGINS: pick('ALLOWED_ORIGINS', env, file),
+    ALLOWED_HOSTS: pick('ALLOWED_HOSTS', env, file),
     SLOT_COUNT: pick('SLOT_COUNT', env, file),
     POLL_INTERVAL_MS: pick('POLL_INTERVAL_MS', env, file),
     MAX_ENQUEUE_PER_POLL: pick('MAX_ENQUEUE_PER_POLL', env, file),
@@ -176,6 +222,9 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     MAX_ATTEMPTS: pick('MAX_ATTEMPTS', env, file),
     DRY_RUN: pick('DRY_RUN', env, file),
     REPO_PATH: pick('REPO_PATH', env, file),
+    BASE_BRANCH: pick('BASE_BRANCH', env, file),
+    DASHBOARD_DIR: pick('DASHBOARD_DIR', env, file),
+    ALLOWED_STATUSES: pick('ALLOWED_STATUSES', env, file),
     RUNS_DIR: explicitRunsDir ?? defaultRunsDir,
   }
 
@@ -202,7 +251,7 @@ export function redactConfig(config: Config): Record<string, unknown> {
   for (const [key, value] of Object.entries(config)) {
     if (SECRET_KEY_SET.has(key)) {
       if (value !== undefined) redacted[key] = REDACTED
-    } else if (key === 'ALLOWED_ORIGINS' && Array.isArray(value)) {
+    } else if ((key === 'ALLOWED_ORIGINS' || key === 'ALLOWED_HOSTS') && Array.isArray(value)) {
       redacted[key] = [...value]
     } else {
       redacted[key] = value

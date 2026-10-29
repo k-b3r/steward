@@ -79,10 +79,18 @@ its phase 1 contract.
 - Bind to `127.0.0.1` only. No `0.0.0.0`, no LAN address.
 - Every request needs `Authorization: Bearer <API_TOKEN>`. The token compare is
   constant-time. The token never appears in logs.
-- Reject a `Host` header that is not `127.0.0.1:<port>` or `localhost:<port>`. This blocks
-  DNS rebinding.
+- Reject a `Host` header that is not exactly `127.0.0.1:<API_PORT>` or `localhost:<API_PORT>`,
+  or one of the exact values in `ALLOWED_HOSTS`. That list is for the host name of a reverse
+  proxy or tunnel: a value has no scheme and no wildcard, the comparison is exact apart from
+  case, and the port is part of the value only when the value carries one
+  (`steward.example.ts.net` matches that host with no port, `other.example:8443` matches that
+  host and port). The default is empty, so only the two loopback names pass. This blocks DNS
+  rebinding.
 - Reject a cross-origin request unless the origin is in `ALLOWED_ORIGINS`. The default is
   empty, which rejects every cross-origin request.
+- The built dashboard is served by a route outside `/v1/*` (`app.get('*')` in
+  `src/composition/api.ts`), so it skips the Host check and the bearer auth. That is fine for
+  public built assets, so nothing secret may ever be placed in `DASHBOARD_DIR`.
 - SSE clients use `fetch` streaming, because `EventSource` cannot send an `Authorization`
   header. The resume point is the `Last-Event-ID` header, matched to the envelope `seq`.
 - Postgres and both Redis servers publish their ports on `127.0.0.1` only. They are not

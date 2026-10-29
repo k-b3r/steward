@@ -10,6 +10,7 @@ import * as store from '../db/store'
 import { getJob, listActions, listJobs } from '../jobs-queries'
 import { cancelJob, confirmJob, decideAction, declineJob, reconsiderJob, retryJob } from '../jobs-commands'
 import { createApp } from '../api/app'
+import { staticResponse } from '../platform/static'
 
 export function composeApi(config: Config, write: (line: string) => void) {
   const ctx = createContext(config, write)
@@ -54,14 +55,25 @@ export function composeApi(config: Config, write: (line: string) => void) {
       decideAction: (id, decision, reason) => decideAction(commandDeps, id, decision, reason),
     },
     readLog: (jobId, afterSeq) => Promise.resolve(readTranscript(runner.transcriptDir(jobId), afterSeq)),
-    config: { apiToken: config.API_TOKEN, port: config.API_PORT, allowedOrigins: config.ALLOWED_ORIGINS },
+    config: {
+      apiToken: config.API_TOKEN,
+      port: config.API_PORT,
+      allowedOrigins: config.ALLOWED_ORIGINS,
+      allowedHosts: config.ALLOWED_HOSTS,
+    },
     sleep,
   })
+
+  // The built dashboard, served from the same origin as the API. Absent before the first build,
+  // in which case the API answers only /v1.
+  const dashboardDir = config.DASHBOARD_DIR
+  const withStatic =
+    dashboardDir === undefined ? app : app.get('*', (c) => staticResponse(dashboardDir, c.req.path) ?? c.notFound())
 
   const close = async (): Promise<void> => {
     await queue.close()
     await closePool(ctx.pool)
   }
 
-  return { app, logger: ctx.logger, close }
+  return { app: withStatic, logger: ctx.logger, close }
 }

@@ -3,6 +3,7 @@
   "LINEAR_TEAM_KEY": "TST",
   "API_PORT": 3000,
   "ALLOWED_ORIGINS": "http://localhost:5173",
+  "ALLOWED_HOSTS": "",
   "SLOT_COUNT": 3,
   "POLL_INTERVAL_MS": 30000,
   "MAX_ENQUEUE_PER_POLL": 2,
@@ -14,5 +15,8 @@
   "RUNS_DIR": "/home/you/steward/runs/personal",
   "GH_ACCOUNT": "your-github-login",
   "GIT_USER_NAME": "Your Name",
-  "GIT_USER_EMAIL": "you@example.com"
+  "GIT_USER_EMAIL": "you@example.com",
+  "BASE_BRANCH": "main",
+  "ALLOWED_STATUSES": "In Progress",
+  "DASHBOARD_DIR": ""
 }

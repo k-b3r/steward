@@ -47,6 +47,7 @@ describe('loadConfig', () => {
 
     expect(config.API_PORT).toBe(3000)
     expect(config.ALLOWED_ORIGINS).toEqual([])
+    expect(config.ALLOWED_HOSTS).toEqual([])
     expect(config.SLOT_COUNT).toBe(3)
     expect(config.POLL_INTERVAL_MS).toBe(30000)
     expect(config.MAX_ENQUEUE_PER_POLL).toBe(2)
@@ -114,6 +115,7 @@ describe('loadConfig', () => {
     ['GH_ACCOUNT with a space', { GH_ACCOUNT: 'k b3r' }, 'GH_ACCOUNT'],
     ['GIT_USER_NAME empty', { GIT_USER_NAME: '' }, 'GIT_USER_NAME'],
     ['GIT_USER_EMAIL not an email', { GIT_USER_EMAIL: 'nope' }, 'GIT_USER_EMAIL'],
+    ['ALLOWED_STATUSES empty', { ALLOWED_STATUSES: '' }, 'ALLOWED_STATUSES'],
     ['API_TOKEN missing', { API_TOKEN: undefined }, 'API_TOKEN'],
     ['API_TOKEN too short', { API_TOKEN: 'token-too-short'.padEnd(31, 'x') }, 'API_TOKEN'],
     ['API_PORT not numeric', { API_PORT: '3000abc' }, 'API_PORT'],
@@ -131,7 +133,11 @@ describe('loadConfig', () => {
     ['MAX_ATTEMPTS below range', { MAX_ATTEMPTS: '0' }, 'MAX_ATTEMPTS'],
     ['REPO_PATH missing', { REPO_PATH: undefined }, 'REPO_PATH'],
     ['REPO_PATH relative', { REPO_PATH: 'scratch-repo' }, 'REPO_PATH'],
+    ['DASHBOARD_DIR relative', { DASHBOARD_DIR: 'dist' }, 'DASHBOARD_DIR'],
     ['RUNS_DIR and HOME both missing', { RUNS_DIR: undefined, HOME: undefined }, 'RUNS_DIR'],
+    ['ALLOWED_HOSTS is a wildcard', { ALLOWED_HOSTS: '*' }, 'ALLOWED_HOSTS'],
+    ['ALLOWED_HOSTS has a scheme', { ALLOWED_HOSTS: 'https://steward.example' }, 'ALLOWED_HOSTS'],
+    ['ALLOWED_HOSTS has an empty entry', { ALLOWED_HOSTS: 'a.example,,b.example' }, 'ALLOWED_HOSTS'],
     ['ALLOWED_ORIGINS not a URL', { ALLOWED_ORIGINS: 'not-a-url' }, 'ALLOWED_ORIGINS'],
     ['ALLOWED_ORIGINS has a path', { ALLOWED_ORIGINS: 'https://example.com/api' }, 'ALLOWED_ORIGINS'],
     [
@@ -162,6 +168,7 @@ describe('loadConfig', () => {
       },
       {
         INSTANCE: 'from-file',
+        BASE_BRANCH: 'release',
         LINEAR_TEAM_KEY: 'FIL',
         GH_ACCOUNT: 'from-file-gh',
         GIT_USER_NAME: 'From File',
@@ -178,6 +185,7 @@ describe('loadConfig', () => {
     expect(config.SLOT_COUNT).toBe(4)
     expect(config.ALLOWED_ORIGINS).toEqual(['https://file.example.com'])
     expect(config.RUNS_DIR).toBe('/home/file-user/steward/runs/from-file')
+    expect(config.BASE_BRANCH).toBe('release')
   })
 
   it('lets env values win over config file values', () => {
@@ -214,6 +222,12 @@ describe('loadConfig', () => {
 
   it.each(['TRUE', 'yes', 'on', '2', ''])('rejects DRY_RUN=%s', (value) => {
     expect(errorMessage(() => loadConfig(env({ DRY_RUN: value })))).toContain('DRY_RUN')
+  })
+
+  it('parses ALLOWED_HOSTS as a lowercase list', () => {
+    const config = loadConfig(env({ ALLOWED_HOSTS: 'Steward.Example.ts.net, other.example:8443' }))
+
+    expect(config.ALLOWED_HOSTS).toEqual(['steward.example.ts.net', 'other.example:8443'])
   })
 
   it('defaults ALLOWED_ORIGINS to an empty list for an empty string', () => {
@@ -289,5 +303,28 @@ describe('instanceNames', () => {
       dbName: 'steward_my_work',
       redisNetwork: 'steward-my-work-net',
     })
+  })
+})
+
+describe('deployment and tracker settings', () => {
+  it('starts branches from main unless told otherwise', () => {
+    expect(loadConfig(env()).BASE_BRANCH).toBe('main')
+    expect(loadConfig(env({ BASE_BRANCH: '' })).BASE_BRANCH).toBe('main')
+    expect(loadConfig(env({ BASE_BRANCH: 'release/2' })).BASE_BRANCH).toBe('release/2')
+  })
+
+  it('serves only the API when no dashboard directory is given', () => {
+    expect(loadConfig(env()).DASHBOARD_DIR).toBeUndefined()
+    expect(loadConfig(env({ DASHBOARD_DIR: '/srv/steward/dashboard' })).DASHBOARD_DIR).toBe('/srv/steward/dashboard')
+    expect(loadConfig(env({ DASHBOARD_DIR: '' })).DASHBOARD_DIR).toBeUndefined()
+  })
+
+  it('may only move a ticket into In Progress by default', () => {
+    expect(loadConfig(env()).ALLOWED_STATUSES).toEqual(['In Progress'])
+    expect(loadConfig(env({ ALLOWED_STATUSES: 'In Progress' })).ALLOWED_STATUSES).toEqual(['In Progress'])
+  })
+
+  it('rejects a list of statuses that is empty after trimming', () => {
+    expect(() => loadConfig(env({ ALLOWED_STATUSES: ' , ' }))).toThrow(/ALLOWED_STATUSES/)
   })
 })

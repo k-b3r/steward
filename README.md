@@ -104,7 +104,9 @@ DRY_RUN=true
 REPO_PATH=/home/you/Develop/scratch-repo
 ```
 
-For local development, copy `.env.example` to `.env` at the repo root and run `pnpm dev:api` or `pnpm dev:worker`; both load `.env` through `tsx --env-file`.
+There is one env file per instance, at `~/.config/steward/<instance>.env` (mode 0600, outside the repo). `pnpm dev:api` and `pnpm dev:worker` read the personal one; set `STEWARD_ENV_FILE` to point them at another. The systemd units read the same file. `.env.example` is the template.
+
+Three more keys, all non-secret. `BASE_BRANCH` is the branch each job starts from: a new `agent/*` branch is cut from `origin/<BASE_BRANCH>`, and it defaults to `main`. `DASHBOARD_DIR` is optional: set it to the absolute path of the built `dashboard/dist` and the API serves it from its own origin; unset means the API answers only `/v1`. `ALLOWED_STATUSES` is a comma-separated list of the tracker statuses the orchestrator may move a ticket into, default `In Progress`, and an empty list is a config error; it is parsed and validated now, but nothing reads it yet, because nothing writes to Linear.
 
 ### Point an instance at a repo
 
@@ -229,6 +231,19 @@ pnpm --filter steward-dashboard dev   # http://127.0.0.1:5173, proxies /v1 to th
 
 Add `http://127.0.0.1:5173` (or `http://localhost:5173`) to `ALLOWED_ORIGINS`, then sign in with `API_TOKEN`. The token stays in `sessionStorage`. Set `STEWARD_API` to proxy to another API address.
 
-The production build (`pnpm --filter steward-dashboard build`) adds a Content-Security-Policy `<meta>` tag: scripts from the same origin only, no inline script, no eval, network calls to the same origin. Serve `dashboard/dist` from the same origin as the API, or change `connect-src` in `dashboard/csp.ts`. A `<meta>` tag cannot set `frame-ancestors`; add that header where the files are served. Nothing serves `dist` yet.
+### Open the dashboard from another device on your tailnet
+
+Keep the API on `127.0.0.1` and let `tailscale serve` proxy to it. Do not use `tailscale funnel`: it is public.
+
+```sh
+tailscale serve --bg 3000      # HTTPS on the tailnet name -> 127.0.0.1:3000
+tailscale serve status         # must say "(tailnet only)"
+```
+
+Set `ALLOWED_HOSTS=<machine>.<tailnet>.ts.net` and add `https://<machine>.<tailnet>.ts.net` to `ALLOWED_ORIGINS`, then restart the API. The tailnet needs MagicDNS and HTTPS certificates enabled (admin console, DNS page). The other device only needs the Tailscale app on; open the URL and sign in with `API_TOKEN`. Every device on the tailnet can reach the page, so limit it with a Tailscale access rule, and rotate `API_TOKEN` if a device is lost.
+
+The production build (`pnpm --filter steward-dashboard build`) adds a Content-Security-Policy `<meta>` tag: scripts from the same origin only, no inline script, no eval, network calls to the same origin. Serve `dashboard/dist` from the same origin as the API, or change `connect-src` in `dashboard/csp.ts`. A `<meta>` tag cannot set `frame-ancestors`; add that header where the files are served.
+
+The API serves the built `dashboard/dist` when `DASHBOARD_DIR` is set to its absolute path (`pnpm --filter steward-dashboard build` writes it). The dashboard is then at the API origin, `http://127.0.0.1:<API_PORT>`. Over an SSH tunnel the local port must equal `API_PORT`, because the Host and Origin checks compare it.
 
 The API has no job titles, projects, costs or health data yet, so those parts of the design are not built. `pnpm --filter steward-dashboard build` writes `dashboard/dist`.

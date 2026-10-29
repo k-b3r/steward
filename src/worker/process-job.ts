@@ -50,6 +50,29 @@ class SetupError extends Error {
   }
 }
 
+/** A fetch that cannot succeed on retry: no remote, or no such base branch. */
+function isSetupFetchMessage(message: string): boolean {
+  return /does not appear to be a git repository|No such remote|couldn't find remote ref|Repository not found/.test(
+    message,
+  )
+}
+
+/**
+ * Fetches the base branch. Only a fetch has the setup failures below, so the
+ * classification lives here: anything else is rethrown unchanged and retried.
+ */
+async function fetchBaseClassified(deps: ProcessJobDeps, baseBranch: string): Promise<void> {
+  try {
+    await deps.git.fetchBase(deps.config.repoPath, 'origin', baseBranch)
+  } catch (error) {
+    const message = errorMessage(error)
+    if (!isSetupFetchMessage(message)) {
+      throw error
+    }
+    throw new SetupError(message)
+  }
+}
+
 /** Work only an agent can do. It is not retried by backoff: the same input would fail the same way. */
 class AgentError extends Error {
   constructor(message: string) {
@@ -159,7 +182,7 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
 
     // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
     const baseBranch = deps.baseBranch ?? 'main'
-    await deps.git.fetchBase(deps.config.repoPath, 'origin', baseBranch)
+    await fetchBaseClassified(deps, baseBranch)
     const branch = branchName(current.identifier)
     if (await deps.git.branchExists(deps.config.repoPath, branch)) {
       // An earlier attempt or an open pull request already owns this branch: continue on it,
