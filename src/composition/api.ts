@@ -73,7 +73,11 @@ export function composeApi(config: Config, write: (line: string) => void) {
       : app.get('*', (c) => {
           const file = readStaticFile(dashboardDir, c.req.path)
           if (file === null) return c.notFound()
-          return new Response(file.body, { status: 200, headers: { 'Content-Type': file.contentType } })
+          return new Response(file.body, {
+            status: 200,
+            // nosniff: the browser must trust the type we send, never guess one from the bytes.
+            headers: { 'Content-Type': file.contentType, 'X-Content-Type-Options': 'nosniff' },
+          })
         })
 
   const close = async (): Promise<void> => {
