@@ -360,15 +360,93 @@ describe('processJob', () => {
       expect(await heldSlots(db)).toEqual([])
     })
 
-    it('treats an unreachable origin as an infra failure and retries, with the slot freed', async () => {
+    it('fails a missing base branch as setup, at once and without a retry', async () => {
+      const enqueued = makeQueue()
+      const job = await createJob()
+
+      await processJob(makeDeps({ queue: enqueued.queue, baseBranch: 'no-such-branch' }), job.id)
+
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'failed', failureKind: 'setup', slot: null })
+      expect(enqueued.calls).toEqual([])
+      expect(await heldSlots(db)).toEqual([])
+    })
+
+    it('fails a remote that cannot be reached as setup, at once', async () => {
       git(repoPath, ['remote', 'set-url', 'origin', join(root, 'does-not-exist.git')])
       const enqueued = makeQueue()
       const job = await createJob()
 
       await processJob(makeDeps({ queue: enqueued.queue }), job.id)
 
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'failed', failureKind: 'setup', slot: null })
+      expect(enqueued.calls).toEqual([])
+      expect(await heldSlots(db)).toEqual([])
+    })
+
+    it('retries a transient network failure as infra, with the slot freed', async () => {
+      const enqueued = makeQueue()
+      const job = await createJob()
+      const deps = makeDeps({ queue: enqueued.queue })
+      const gitWithOfflineRemote = {
+        ...deps.git,
+        fetchBase: async (): Promise<void> => {
+          throw new Error("fatal: unable to access 'https://github.com/x/y.git/': Could not resolve host: github.com")
+        },
+      }
+
+      await processJob({ ...deps, git: gitWithOfflineRemote }, job.id)
+
       expect(await getJob(db, job.id)).toMatchObject({ state: 'queued', failureKind: 'infra', slot: null })
       expect(enqueued.calls).toHaveLength(1)
+      expect(await heldSlots(db)).toEqual([])
+    })
+
+    it('retries a missing tool from the runner as infra, not setup', async () => {
+      const enqueued = makeQueue()
+      const job = await createJob()
+      const runner = makeRunner({ failStart: new Error('sh: tool: command not found') })
+
+      await processJob(makeDeps({ runner, queue: enqueued.queue }), job.id)
+
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'queued', failureKind: 'infra', slot: null })
+      expect((await eventsFor(job.id)).at(-1)).toMatchObject({ toState: 'queued', failureKind: 'infra' })
+      expect(enqueued.calls).toHaveLength(1)
+      expect(await heldSlots(db)).toEqual([])
+    })
+
+    it('retries an unrelated fetch error that says "not found" as infra', async () => {
+      const enqueued = makeQueue()
+      const job = await createJob()
+      const deps = makeDeps({ queue: enqueued.queue })
+      const gitWithOddFetchError = {
+        ...deps.git,
+        fetchBase: async (): Promise<void> => {
+          throw new Error('fatal: unrelated lookup: not found')
+        },
+      }
+
+      await processJob({ ...deps, git: gitWithOddFetchError }, job.id)
+
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'queued', failureKind: 'infra', slot: null })
+      expect(enqueued.calls).toHaveLength(1)
+      expect(await heldSlots(db)).toEqual([])
+    })
+
+    it('fails a fetch from a repository that is not there as setup, at once', async () => {
+      const enqueued = makeQueue()
+      const job = await createJob()
+      const deps = makeDeps({ queue: enqueued.queue })
+      const gitWithMissingRepo = {
+        ...deps.git,
+        fetchBase: async (): Promise<void> => {
+          throw new Error("remote: Repository not found.\nfatal: repository 'https://github.com/x/y.git/' not found")
+        },
+      }
+
+      await processJob({ ...deps, git: gitWithMissingRepo }, job.id)
+
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'failed', failureKind: 'setup', slot: null })
+      expect(enqueued.calls).toEqual([])
       expect(await heldSlots(db)).toEqual([])
     })
   })
