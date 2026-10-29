@@ -196,7 +196,7 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
   const home = env.HOME
   const defaultRunsDir =
     typeof instance === 'string' && typeof home === 'string' && home.length > 0
-      ? `${home}/steward/runs/${instance}`
+      ? `${home}/steward-instances/${instance}/runs`
       : undefined
 
   const raw = {
