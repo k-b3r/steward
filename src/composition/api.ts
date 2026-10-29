@@ -55,7 +55,12 @@ export function composeApi(config: Config, write: (line: string) => void) {
       decideAction: (id, decision, reason) => decideAction(commandDeps, id, decision, reason),
     },
     readLog: (jobId, afterSeq) => Promise.resolve(readTranscript(runner.transcriptDir(jobId), afterSeq)),
-    config: { apiToken: config.API_TOKEN, port: config.API_PORT, allowedOrigins: config.ALLOWED_ORIGINS },
+    config: {
+      apiToken: config.API_TOKEN,
+      port: config.API_PORT,
+      allowedOrigins: config.ALLOWED_ORIGINS,
+      allowedHosts: config.ALLOWED_HOSTS,
+    },
     sleep,
   })
 

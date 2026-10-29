@@ -47,6 +47,7 @@ type AppConfig = {
   apiToken: string
   port: number
   allowedOrigins: string[]
+  allowedHosts: string[]
 }
 
 export type AppDeps = {

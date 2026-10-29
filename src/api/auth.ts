@@ -8,15 +8,17 @@ export type AuthConfig = {
   apiToken: string
   port: number
   allowedOrigins: readonly string[]
+  /** Extra exact Host values (lowercase) a trusted proxy forwards, e.g. a tailnet name. */
+  allowedHosts: readonly string[]
 }
 
 const ALLOW_HEADERS = 'Authorization, Content-Type, Last-Event-ID'
 const ALLOW_METHODS = 'GET, POST, OPTIONS'
 
-function isAllowedHost(host: string | undefined, port: number): boolean {
+function isAllowedHost(host: string | undefined, port: number, extraHosts: readonly string[]): boolean {
   if (host === undefined) return false
   const normalized = host.toLowerCase()
-  return normalized === `127.0.0.1:${port}` || normalized === `localhost:${port}`
+  return normalized === `127.0.0.1:${port}` || normalized === `localhost:${port}` || extraHosts.includes(normalized)
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -35,7 +37,7 @@ function bearerToken(header: string | undefined): string | null {
 
 export function createAuthMiddleware(config: AuthConfig): MiddlewareHandler {
   return async (c, next) => {
-    if (!isAllowedHost(c.req.header('host'), config.port)) {
+    if (!isAllowedHost(c.req.header('host'), config.port, config.allowedHosts)) {
       return c.json({ error: 'forbidden' }, 403)
     }
 

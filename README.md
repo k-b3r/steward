@@ -229,6 +229,17 @@ pnpm --filter steward-dashboard dev   # http://127.0.0.1:5173, proxies /v1 to th
 
 Add `http://127.0.0.1:5173` (or `http://localhost:5173`) to `ALLOWED_ORIGINS`, then sign in with `API_TOKEN`. The token stays in `sessionStorage`. Set `STEWARD_API` to proxy to another API address.
 
+### Open the dashboard from another device on your tailnet
+
+Keep the API on `127.0.0.1` and let `tailscale serve` proxy to it. Do not use `tailscale funnel`: it is public.
+
+```sh
+tailscale serve --bg 3000      # HTTPS on the tailnet name -> 127.0.0.1:3000
+tailscale serve status         # must say "(tailnet only)"
+```
+
+Set `ALLOWED_HOSTS=<machine>.<tailnet>.ts.net` and add `https://<machine>.<tailnet>.ts.net` to `ALLOWED_ORIGINS`, then restart the API. The tailnet needs MagicDNS and HTTPS certificates enabled (admin console, DNS page). The other device only needs the Tailscale app on; open the URL and sign in with `API_TOKEN`. Every device on the tailnet can reach the page, so limit it with a Tailscale access rule, and rotate `API_TOKEN` if a device is lost.
+
 The production build (`pnpm --filter steward-dashboard build`) adds a Content-Security-Policy `<meta>` tag: scripts from the same origin only, no inline script, no eval, network calls to the same origin. Serve `dashboard/dist` from the same origin as the API, or change `connect-src` in `dashboard/csp.ts`. A `<meta>` tag cannot set `frame-ancestors`; add that header where the files are served. Nothing serves `dist` yet.
 
 The API has no job titles, projects, costs or health data yet, so those parts of the design are not built. `pnpm --filter steward-dashboard build` writes `dashboard/dist`.

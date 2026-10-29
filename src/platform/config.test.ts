@@ -47,6 +47,7 @@ describe('loadConfig', () => {
 
     expect(config.API_PORT).toBe(3000)
     expect(config.ALLOWED_ORIGINS).toEqual([])
+    expect(config.ALLOWED_HOSTS).toEqual([])
     expect(config.SLOT_COUNT).toBe(3)
     expect(config.POLL_INTERVAL_MS).toBe(30000)
     expect(config.MAX_ENQUEUE_PER_POLL).toBe(2)
@@ -133,6 +134,9 @@ describe('loadConfig', () => {
     ['REPO_PATH missing', { REPO_PATH: undefined }, 'REPO_PATH'],
     ['REPO_PATH relative', { REPO_PATH: 'scratch-repo' }, 'REPO_PATH'],
     ['RUNS_DIR and HOME both missing', { RUNS_DIR: undefined, HOME: undefined }, 'RUNS_DIR'],
+    ['ALLOWED_HOSTS is a wildcard', { ALLOWED_HOSTS: '*' }, 'ALLOWED_HOSTS'],
+    ['ALLOWED_HOSTS has a scheme', { ALLOWED_HOSTS: 'https://steward.example' }, 'ALLOWED_HOSTS'],
+    ['ALLOWED_HOSTS has an empty entry', { ALLOWED_HOSTS: 'a.example,,b.example' }, 'ALLOWED_HOSTS'],
     ['ALLOWED_ORIGINS not a URL', { ALLOWED_ORIGINS: 'not-a-url' }, 'ALLOWED_ORIGINS'],
     ['ALLOWED_ORIGINS has a path', { ALLOWED_ORIGINS: 'https://example.com/api' }, 'ALLOWED_ORIGINS'],
     [
@@ -217,6 +221,12 @@ describe('loadConfig', () => {
 
   it.each(['TRUE', 'yes', 'on', '2', ''])('rejects DRY_RUN=%s', (value) => {
     expect(errorMessage(() => loadConfig(env({ DRY_RUN: value })))).toContain('DRY_RUN')
+  })
+
+  it('parses ALLOWED_HOSTS as a lowercase list', () => {
+    const config = loadConfig(env({ ALLOWED_HOSTS: 'Steward.Example.ts.net, other.example:8443' }))
+
+    expect(config.ALLOWED_HOSTS).toEqual(['steward.example.ts.net', 'other.example:8443'])
   })
 
   it('defaults ALLOWED_ORIGINS to an empty list for an empty string', () => {

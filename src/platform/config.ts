@@ -30,6 +30,7 @@ export type Config = {
   API_TOKEN: string
   API_PORT: number
   ALLOWED_ORIGINS: string[]
+  ALLOWED_HOSTS: string[]
   SLOT_COUNT: number
   POLL_INTERVAL_MS: number
   MAX_ENQUEUE_PER_POLL: number
@@ -74,6 +75,17 @@ function parseOrigins(value: unknown): unknown {
   const trimmed = value.trim()
   if (trimmed === '') return []
   return trimmed.split(',').map((origin) => origin.trim())
+}
+
+function parseHosts(value: unknown): unknown {
+  const hosts = parseOrigins(value)
+  return Array.isArray(hosts) ? hosts.map((host) => (typeof host === 'string' ? host.toLowerCase() : host)) : hosts
+}
+
+const HOST_VALUE = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::\d{1,5})?$/
+
+function isHostValue(host: string): boolean {
+  return HOST_VALUE.test(host)
 }
 
 /** The one status the orchestrator may move a ticket into, as a comma-separated list. */
@@ -135,6 +147,12 @@ const configSchema = z.object({
     parseOrigins,
     z.array(z.string()).refine((origins) => origins.every(isUrlOrigin), 'each entry must be a valid URL origin'),
   ),
+  ALLOWED_HOSTS: z.preprocess(
+    parseHosts,
+    z
+      .array(z.string())
+      .refine((hosts) => hosts.every(isHostValue), 'each entry must be a host name, with an optional :port'),
+  ),
   SLOT_COUNT: integerField({ min: 1, max: 16, fallback: 3 }),
   POLL_INTERVAL_MS: integerField({ min: 1000, fallback: 30000 }),
   MAX_ENQUEUE_PER_POLL: integerField({ min: 0, fallback: 2 }),
@@ -188,6 +206,7 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     API_TOKEN: pick('API_TOKEN', env, file),
     API_PORT: pick('API_PORT', env, file),
     ALLOWED_ORIGINS: pick('ALLOWED_ORIGINS', env, file),
+    ALLOWED_HOSTS: pick('ALLOWED_HOSTS', env, file),
     SLOT_COUNT: pick('SLOT_COUNT', env, file),
     POLL_INTERVAL_MS: pick('POLL_INTERVAL_MS', env, file),
     MAX_ENQUEUE_PER_POLL: pick('MAX_ENQUEUE_PER_POLL', env, file),
@@ -225,7 +244,7 @@ export function redactConfig(config: Config): Record<string, unknown> {
   for (const [key, value] of Object.entries(config)) {
     if (SECRET_KEY_SET.has(key)) {
       if (value !== undefined) redacted[key] = REDACTED
-    } else if (key === 'ALLOWED_ORIGINS' && Array.isArray(value)) {
+    } else if ((key === 'ALLOWED_ORIGINS' || key === 'ALLOWED_HOSTS') && Array.isArray(value)) {
       redacted[key] = [...value]
     } else {
       redacted[key] = value

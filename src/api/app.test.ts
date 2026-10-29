@@ -162,12 +162,14 @@ function setup(
       readLogCalls.push({ jobId, afterSeq })
       return options.readLog === undefined ? [] : options.readLog(jobId, afterSeq)
     },
-    config: { apiToken: TOKEN, port: PORT, allowedOrigins: [ORIGIN] },
+    config: { apiToken: TOKEN, port: PORT, allowedOrigins: [ORIGIN], allowedHosts: [PROXY_HOST] },
     sleep: options.sleep ?? (async () => {}),
   })
 
   return { app, store, enqueued, cancelled, readLogCalls }
 }
+
+const PROXY_HOST = 'steward.example.ts.net'
 
 type RequestOptions = {
   method?: string
@@ -259,6 +261,20 @@ describe('auth', () => {
     const response = await request(app, '/v1/jobs', { host: `127.0.0.1:${PORT}` })
 
     expect(response.status).toBe(200)
+  })
+
+  it('accepts a configured proxy host, ignoring case', async () => {
+    const { app } = setup()
+    const response = await request(app, '/v1/jobs', { host: PROXY_HOST.toUpperCase() })
+
+    expect(response.status).toBe(200)
+  })
+
+  it('rejects a host that only contains a configured one', async () => {
+    const { app } = setup()
+    const response = await request(app, '/v1/jobs', { host: `${PROXY_HOST}.evil.example` })
+
+    expect(response.status).toBe(403)
   })
 
   it('rejects a bad Origin', async () => {
