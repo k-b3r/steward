@@ -114,6 +114,7 @@ describe('loadConfig', () => {
     ['GH_ACCOUNT with a space', { GH_ACCOUNT: 'k b3r' }, 'GH_ACCOUNT'],
     ['GIT_USER_NAME empty', { GIT_USER_NAME: '' }, 'GIT_USER_NAME'],
     ['GIT_USER_EMAIL not an email', { GIT_USER_EMAIL: 'nope' }, 'GIT_USER_EMAIL'],
+    ['ALLOWED_STATUSES empty', { ALLOWED_STATUSES: '' }, 'ALLOWED_STATUSES'],
     ['API_TOKEN missing', { API_TOKEN: undefined }, 'API_TOKEN'],
     ['API_TOKEN too short', { API_TOKEN: 'token-too-short'.padEnd(31, 'x') }, 'API_TOKEN'],
     ['API_PORT not numeric', { API_PORT: '3000abc' }, 'API_PORT'],
@@ -305,5 +306,14 @@ describe('deployment and tracker settings', () => {
     expect(loadConfig(env()).DASHBOARD_DIR).toBeUndefined()
     expect(loadConfig(env({ DASHBOARD_DIR: '/srv/steward/dashboard' })).DASHBOARD_DIR).toBe('/srv/steward/dashboard')
     expect(loadConfig(env({ DASHBOARD_DIR: '' })).DASHBOARD_DIR).toBeUndefined()
+  })
+
+  it('may only move a ticket into In Progress by default', () => {
+    expect(loadConfig(env()).ALLOWED_STATUSES).toEqual(['In Progress'])
+    expect(loadConfig(env({ ALLOWED_STATUSES: 'In Progress' })).ALLOWED_STATUSES).toEqual(['In Progress'])
+  })
+
+  it('rejects a list of statuses that is empty after trimming', () => {
+    expect(() => loadConfig(env({ ALLOWED_STATUSES: ' , ' }))).toThrow(/ALLOWED_STATUSES/)
   })
 })

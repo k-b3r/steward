@@ -16,5 +16,6 @@
   "GIT_USER_NAME": "Your Name",
   "GIT_USER_EMAIL": "you@example.com",
   "BASE_BRANCH": "main",
+  "ALLOWED_STATUSES": "In Progress",
   "DASHBOARD_DIR": ""
 }

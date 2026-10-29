@@ -42,6 +42,8 @@ export type Config = {
   BASE_BRANCH: string
   /** Built dashboard to serve from the API's origin; unset serves only /v1. */
   DASHBOARD_DIR?: string
+  /** Tracker statuses the orchestrator may move a ticket into. */
+  ALLOWED_STATUSES: string[]
   RUNS_DIR: string
 }
 
@@ -72,6 +74,16 @@ function parseOrigins(value: unknown): unknown {
   const trimmed = value.trim()
   if (trimmed === '') return []
   return trimmed.split(',').map((origin) => origin.trim())
+}
+
+/** The one status the orchestrator may move a ticket into, as a comma-separated list. */
+function parseStatuses(value: unknown): unknown {
+  if (value === undefined) return ['In Progress']
+  if (typeof value !== 'string') return value
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '')
 }
 
 function parseDryRun(value: unknown): unknown {
@@ -137,6 +149,7 @@ const configSchema = z.object({
   // Absent or empty means the default branch name, the same way an empty DASHBOARD_DIR means unset.
   BASE_BRANCH: z.preprocess((value) => (value === undefined || value === '' ? 'main' : value), z.string().min(1)),
   DASHBOARD_DIR: z.preprocess((value) => (value === '' ? undefined : value), z.string().min(1).optional()),
+  ALLOWED_STATUSES: z.preprocess(parseStatuses, z.array(z.string().min(1)).min(1)),
   RUNS_DIR: z.string().min(1, 'must not be empty'),
 })
 
@@ -185,6 +198,7 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     REPO_PATH: pick('REPO_PATH', env, file),
     BASE_BRANCH: pick('BASE_BRANCH', env, file),
     DASHBOARD_DIR: pick('DASHBOARD_DIR', env, file),
+    ALLOWED_STATUSES: pick('ALLOWED_STATUSES', env, file),
     RUNS_DIR: explicitRunsDir ?? defaultRunsDir,
   }
 
