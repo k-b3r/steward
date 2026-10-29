@@ -51,6 +51,16 @@ describe('resolveAssetPath', () => {
   })
 })
 
+describe('resolveAssetPath with an unnormalised root', () => {
+  it('still serves files when the root contains a dot-dot segment', () => {
+    // Plain concatenation: path.join would normalise the root before the code under test sees it.
+    const roundabout = `${root}/assets/..`
+
+    expect(resolveAssetPath(roundabout, '/')).toBe(join(root, 'index.html'))
+    expect(resolveAssetPath(roundabout, '/../secret.txt')).toBeNull()
+  })
+})
+
 describe('readStaticFile', () => {
   it('reads a file with its content type', () => {
     const file = readStaticFile(root, '/assets/app.js')

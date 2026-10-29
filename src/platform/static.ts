@@ -1,7 +1,7 @@
 // Serves the built dashboard from the same origin as the API, so no CORS is needed and the
 // Content-Security-Policy's `connect-src 'self'` holds.
 import { readFileSync, statSync } from 'node:fs'
-import { join, normalize, sep } from 'node:path'
+import { join, normalize, resolve, sep } from 'node:path'
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -26,8 +26,10 @@ export function resolveAssetPath(root: string, requestPath: string): string | nu
     return null
   }
   const relative = decoded === '/' ? 'index.html' : decoded.replace(/^\/+/, '')
-  const resolved = normalize(join(root, relative))
-  if (!resolved.startsWith(root.endsWith(sep) ? root : root + sep)) return null
+  // Normalise the root too: a root such as /srv/x/../dist would otherwise never prefix its own files.
+  const base = resolve(root)
+  const resolved = normalize(join(base, relative))
+  if (!resolved.startsWith(base.endsWith(sep) ? base : base + sep)) return null
   return resolved
 }
 
