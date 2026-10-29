@@ -133,7 +133,7 @@ Failure kinds (stored with a free-text `reason` on the `job_events` row):
 Hono, `/v1` prefix, chained route definitions, `src/api/contract.ts` exports `AppType` and the zod schemas. Bind to `127.0.0.1` only.
 
 - `GET /v1/jobs`, `GET /v1/jobs/:id`, `GET /v1/jobs/:id/log` (SSE tail), `POST /v1/jobs/:id/{retry,cancel,confirm,decline}`, `GET /v1/actions?status=pending`, `POST /v1/actions/:id/{approve,reject}`.
-- Auth: `API_TOKEN` bearer, constant-time compare, redacted in logs. Reject any `Host` that is not `127.0.0.1:PORT` or `localhost:PORT`. Reject cross-origin requests unless in `ALLOWED_ORIGINS` (default empty).
+- Auth: `API_TOKEN` bearer, constant-time compare, redacted in logs. Reject any `Host` that is not `127.0.0.1:PORT` or `localhost:PORT`, or one of the exact values in `ALLOWED_HOSTS` (default empty). Reject cross-origin requests unless in `ALLOWED_ORIGINS` (default empty).
 - SSE clients use `fetch` streaming, since `EventSource` cannot set headers.
 - Dashboard (later): `dashboard/` in this repo, a pnpm workspace member added when it starts. It imports only `src/api/contract.ts` as types (enforced with a dependency-cruiser rule). The token sits in `sessionStorage`; note the XSS risk in `docs/security.md`.
 
