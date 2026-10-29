@@ -22,8 +22,8 @@ does not do.
 - Secrets come from the environment only. `loadConfig` throws if a secret key appears in the
   JSON config file. The secret keys are `DATABASE_URL`, `TEST_DATABASE_URL`,
   `REDIS_QUEUE_URL`, `REDIS_SLOT_URL`, `LINEAR_API_KEY`, and `API_TOKEN`.
-- Each instance has one env file outside the repo: `~/.config/steward/<instance>.env`,
-  mode 0600. The systemd units read it with `EnvironmentFile=`.
+- Each instance has one env file outside the repo: `~/steward-instances/<instance>/.env`,
+  mode 0600 in a 0700 folder. The systemd units read it with `EnvironmentFile=`.
 - `API_TOKEN` must be at least 32 characters.
 - The Postgres and Redis containers get their passwords from Podman secrets, not from the
   Quadlet files: `steward-<instance>-postgres-password` sets `POSTGRES_PASSWORD`, and
@@ -63,13 +63,26 @@ So:
 
 ## Files on disk
 
-- `~/steward/runs/<instance>/<job-id>/` is mode 0700.
+- `~/steward-instances/<instance>/runs/<job-id>/` is mode 0700.
 - `transcript.jsonl` and `raw.jsonl` are mode 0600. `raw.jsonl` is never served.
 - The run directory holds the agent's local logs. It is not in the repo and not synced.
 - Retention is `RUN_RETENTION_DAYS` (default 30). The sweep is phase 5. Until then, delete
   old run directories by hand.
-- `~/.config/steward/<instance>.env` is mode 0600 and holds the database passwords.
-  Quadlet files hold no secrets, so they can be 0644.
+- `~/steward-instances/<instance>/.env` is mode 0600 and holds the database passwords. The
+  whole instance folder is 0700, because `runs/` and `repo/` are under it.
+- Quadlet files hold no secrets, so they can be 0644. They are real files in the instance's
+  `quadlet/` folder; `~/.config/containers/systemd` only holds symlinks to them.
+- Secrets are readable by the login user, and the orchestrator runs as that user. The folder
+  mode keeps other OS users out, not agents. Agent containers see only their worktree (phase
+  2), and the agent session for a run lives in `runs/<job-id>/`, so it cannot read the env
+  file unless it is pointed at the instance folder.
+- The agent-config guard hook blocks reads of files named `.env` or `.env.*` only, which is
+  why the file is `.env` and not `<instance>.env`. That guard is not present in every agent
+  session: a pi session was checked and had no such hook. Open an interactive agent session
+  in `repo/` or `runs/`, never in the instance folder.
+- The Postgres volume is in Podman's store, not in the instance folder. Its files belong to
+  a sub-uid, so they are not readable as the user; `podman volume export` into `backups/` is
+  the copy that can be read and moved.
 
 ## API exposure
 
@@ -115,13 +128,14 @@ The work instance and the personal instance share the box but not state:
 - Two separate Redis containers per instance: queue and slots. Never shared between roles or
   instances.
 - Separate Podman network, so containers of one instance cannot reach the other.
-- Separate ports on `127.0.0.1`, separate env file, separate runs directory.
+- Separate ports on `127.0.0.1`, and one folder per instance for its env file, clone, runs,
+  Quadlet files and backups.
 - Separate git author name and email, and a separate `gh` account, in each config.
 - Before any push, the worker checks `git config` and `gh auth status` against the instance
   config. A mismatch fails the job with kind `setup`, which is never retried.
 
-The shared things are the box, the OS user, and the checkout. The checkout is code only;
-config and env live outside the repo.
+The shared things are the box, the OS user, and the app checkout. The checkout is code only;
+every instance's data lives in its own folder.
 
 ## Notifications and tracker text
 

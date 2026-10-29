@@ -21,7 +21,7 @@ TypeScript (strict, ESM), Node 22, pnpm, Hono (+ `@hono/node-server`), Drizzle +
 
 One instance per context (work, personal). Nothing is a global singleton.
 
-- `INSTANCE` env var (zod-validated) prefixes systemd units (`steward@<instance>`), Quadlet containers, ports, database names, and the runs dir (`~/steward/runs/<instance>/<job-id>/`).
+- `INSTANCE` env var (zod-validated) prefixes systemd units (`steward@<instance>`), Quadlet containers, ports, database names, and the runs dir (`~/steward-instances/<instance>/runs/<job-id>/`).
 - Each instance has its own Postgres and two Redis containers (BullMQ, per-slot test use). Never share Redis between roles or instances.
 - Each instance has its own git author name/email and `gh` account in config. Before any push, check `git config` and `gh auth status` match the instance. Mismatch fails the job with kind `setup`.
 - Work config and env live outside the repo.
@@ -122,7 +122,7 @@ Failure kinds (stored with a free-text `reason` on the `job_events` row):
 
 ## Transcripts
 
-`~/steward/runs/<instance>/<job-id>/`:
+`~/steward-instances/<instance>/runs/<job-id>/`:
 
 - `transcript.jsonl`: one envelope per line, `{ seq, ts, kind, data }`. `kind` in `system | assistant | tool | result | error | orchestrator`. `data` holds the raw agent event unmodified. One writer for runner and orchestrator lines. `seq` increases monotonically so the SSE tail can resume (`Last-Event-ID`).
 - `raw.jsonl`: byte-exact runner output, mode `0600`, never served by the API.
@@ -189,7 +189,7 @@ Personal first. The work instance is created only after the personal one has run
 
 - Build and test against a personal Linear workspace and a private scratch repo on the personal GitHub account. Use the scratch repo for the probes too (empty-commit draft PR, `gh` identity check).
 - Every phase starts in dry-run on the personal instance. Turn dry-run off only after reading the logged JSON.
-- The work instance is a second config and env file outside the repo, with its own `INSTANCE`, key, team key, `gh` account and git identity. Nothing in the repo changes to add it.
+- The work instance is a second instance folder outside the app checkout (its own env file, clone, runs and Quadlet files), with its own `INSTANCE`, key, team key, `gh` account and git identity. Nothing in the app repo changes to add it.
 
 ## Phase roadmap
 
