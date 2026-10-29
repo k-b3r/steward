@@ -374,7 +374,11 @@ Consequences:
 - **The orchestrator never moves a ticket past `In Progress`.** `ALLOWED_STATUSES` defaults to `[In Progress]`, so the only tracker status change it may make is Backlog or Todo to In Progress, as part of a confirm. Everything after that is yours.
   - That limit is only enforced once phase 4 builds the confirm path. **Today intake only reads tickets, and nothing in the code writes to Linear**: no status is moved at all, so the guarantee currently holds by absence, not by a check.
   - `ALLOWED_STATUSES` is parsed and validated but **not read by anything outside config**: `grep -rn ALLOWED_STATUSES src` returns `src/platform/config.ts` (the type field, the `parseStatuses` preprocess that splits on commas and defaults to `['In Progress']`, and the schema's `.min(1)` that rejects an empty list) and `src/platform/config.test.ts` only. Wired: config loading, defaulting, validation and redaction. Not wired: intake, the confirm command, and the Linear client, which take no status argument. Phase 4 must pass `ALLOWED_STATUSES` to the write path and check the target status against it before any mutation.
-- **The build is `tsc`.** Plain Node ESM, nothing needs bundling.
+- **The build is undecided.** There is no build script yet. `tsconfig.json` uses
+  `moduleResolution: Bundler`, and `src/` has about 129 relative imports without a `.js`
+  extension, which Node cannot load from plain `tsc` output. Two options, neither chosen: add
+  `.js` to every relative import, or emit with esbuild (`--packages=external`) and copy the
+  migrations next to the output.
 - **The systemd units stay user units**, and the phase 2 container is the isolation boundary, since the filesystem sandbox is not enforced for user units on this box.
 - **ntfy is self-hosted**, and carries the identifier and title only, never ticket bodies (phase 4).
 
