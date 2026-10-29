@@ -337,6 +337,37 @@ describe('processJob', () => {
       expect(logs.some((message) => message.includes('merge conflict'))).toBe(false)
     })
 
+    // A worker that dies mid-run never reaches its cleanup, so the next attempt finds the worktree still there.
+    it('recovers when a crashed run left its worktree behind, keeping the commits on the branch', async () => {
+      const job = await createJob()
+      const worktreePath = join(runsDir, job.id, 'worktree')
+      await createWorktree({ repoPath, worktreePath, branch: BRANCH, baseRef: 'origin/main' })
+      writeFileSync(join(worktreePath, 'committed.txt'), 'kept\n')
+      git(worktreePath, ['add', 'committed.txt'])
+      git(worktreePath, ['commit', '-qm', 'work before the crash'])
+      const committed = git(worktreePath, ['rev-parse', 'HEAD']).trim()
+      writeFileSync(join(worktreePath, 'unsaved.txt'), 'lost\n')
+
+      await processJob(makeDeps(), job.id)
+
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'done', slot: null })
+      expect(() => git(repoPath, ['merge-base', '--is-ancestor', committed, BRANCH])).not.toThrow()
+      expect(existsSync(worktreePath)).toBe(false)
+      expect(git(repoPath, ['worktree', 'list', '--porcelain'])).not.toContain(worktreePath)
+    })
+
+    it('recovers when a crash left a directory that git does not know as a worktree', async () => {
+      const job = await createJob()
+      const worktreePath = join(runsDir, job.id, 'worktree')
+      mkdirSync(worktreePath, { recursive: true })
+      writeFileSync(join(worktreePath, 'half-made.txt'), 'debris\n')
+
+      await processJob(makeDeps(), job.id)
+
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'done', slot: null })
+      expect(existsSync(worktreePath)).toBe(false)
+    })
+
     it('fails a merge conflict as an agent failure, because the echo runner cannot resolve it', async () => {
       git(repoPath, ['checkout', '-q', '-b', BRANCH])
       writeFileSync(join(repoPath, 'README.md'), 'branch version\n')
@@ -538,6 +569,7 @@ describe('processJob', () => {
     const job = await createJob()
     const runner = makeRunner({ failStart: new Error('original failure') })
     const enqueued = makeQueue()
+    let removals = 0
 
     await expect(
       processJob(
@@ -548,7 +580,9 @@ describe('processJob', () => {
             ...makeDeps().git,
             async createWorktree(): Promise<void> {},
             async removeWorktree(): Promise<void> {
-              throw new Error('cleanup failure')
+              // The first call clears a leftover before the run; only the cleanup after the run fails.
+              removals += 1
+              if (removals > 1) throw new Error('cleanup failure')
             },
           },
         }),

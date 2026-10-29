@@ -1,7 +1,8 @@
 // Git helpers. Every command runs through execFile with an argument array, never a
 // shell string, so a path or branch name cannot inject a command.
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
+import { resolve, sep } from 'node:path'
 
 /** Refuse a branch name that git could read as an option, or that breaks ref rules. */
 function assertSafeBranch(branch: string): void {
@@ -71,16 +72,30 @@ export async function branchExists(repoPath: string, branch: string): Promise<bo
 
 /**
  * Removes a worktree and forces it even when it has local changes. Removing an
- * already removed worktree is a no-op.
+ * already removed worktree is a no-op. A directory that git does not know as a
+ * worktree (a crash before git recorded it) is deleted outright, but never the
+ * clone itself or a folder that holds it.
  */
 export async function removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
-  if (!existsSync(worktreePath)) {
+  const repo = resolve(repoPath)
+  const target = resolve(worktreePath)
+  if (target === repo || repo.startsWith(target + sep)) {
+    throw new Error(`Refusing to remove ${target}: it is the clone or a folder that holds it`)
+  }
+  if (!existsSync(target)) {
     // The directory can be gone while git still has its admin entry. Pruning
     // keeps a later worktree at the same path from being rejected as registered.
     await runGit(['-C', repoPath, 'worktree', 'prune'])
     return
   }
-  await runGit(['-C', repoPath, 'worktree', 'remove', '--force', worktreePath])
+  const listing = await runGit(['-C', repoPath, 'worktree', 'list', '--porcelain'])
+  const registered = listing.split('\n').some((line) => line === `worktree ${target}`)
+  if (registered) {
+    await runGit(['-C', repoPath, 'worktree', 'remove', '--force', worktreePath])
+    return
+  }
+  rmSync(target, { recursive: true, force: true })
+  await runGit(['-C', repoPath, 'worktree', 'prune'])
 }
 
 /** Fetches one branch from a remote so a worktree can start from what is really on origin. */
