@@ -78,7 +78,8 @@
   },
   "pnpm": {
     "overrides": {
-      "qs": "^6.17.1"
+      "qs": "^6.17.1",
+      "@esbuild-kit/core-utils>esbuild": "^0.25.0"
     },
     "onlyBuiltDependencies": [
       "esbuild",
