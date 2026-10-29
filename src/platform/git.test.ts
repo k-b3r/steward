@@ -89,6 +89,25 @@ describe('git worktrees', () => {
     expect(existsSync(join(worktreePath, 'README.md'))).toBe(true)
   })
 
+  it('removes a directory that git does not know as a worktree, so the path can be used again', async () => {
+    const worktreePath = join(root, 'half-made')
+    mkdirSync(worktreePath)
+    writeFileSync(join(worktreePath, 'debris.txt'), 'left by a crash\n')
+
+    await removeWorktree(repoPath, worktreePath)
+
+    expect(existsSync(worktreePath)).toBe(false)
+    await createWorktree({ repoPath, worktreePath, branch: 'agent/tst-1' })
+    expect(existsSync(join(worktreePath, 'README.md'))).toBe(true)
+  })
+
+  it('never deletes the clone itself or a folder that holds it', async () => {
+    await expect(removeWorktree(repoPath, repoPath)).rejects.toThrow(/clone/i)
+    await expect(removeWorktree(repoPath, root)).rejects.toThrow(/clone/i)
+
+    expect(existsSync(join(repoPath, '.git'))).toBe(true)
+  })
+
   it('fails clearly when the same worktree is created twice', async () => {
     const worktreePath = join(root, 'worktree')
     await createWorktree({ repoPath, worktreePath, branch: 'agent/tst-1' })

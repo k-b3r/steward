@@ -356,6 +356,18 @@ describe('processJob', () => {
       expect(git(repoPath, ['worktree', 'list', '--porcelain'])).not.toContain(worktreePath)
     })
 
+    it('recovers when a crash left a directory that git does not know as a worktree', async () => {
+      const job = await createJob()
+      const worktreePath = join(runsDir, job.id, 'worktree')
+      mkdirSync(worktreePath, { recursive: true })
+      writeFileSync(join(worktreePath, 'half-made.txt'), 'debris\n')
+
+      await processJob(makeDeps(), job.id)
+
+      expect(await getJob(db, job.id)).toMatchObject({ state: 'done', slot: null })
+      expect(existsSync(worktreePath)).toBe(false)
+    })
+
     it('fails a merge conflict as an agent failure, because the echo runner cannot resolve it', async () => {
       git(repoPath, ['checkout', '-q', '-b', BRANCH])
       writeFileSync(join(repoPath, 'README.md'), 'branch version\n')
