@@ -10,6 +10,7 @@ import * as store from '../db/store'
 import { getJob, listActions, listJobs } from '../jobs-queries'
 import { cancelJob, confirmJob, decideAction, declineJob, reconsiderJob, retryJob } from '../jobs-commands'
 import { createApp } from '../api/app'
+import { readStaticFile } from '../platform/static'
 
 export function composeApi(config: Config, write: (line: string) => void) {
   const ctx = createContext(config, write)
@@ -58,10 +59,22 @@ export function composeApi(config: Config, write: (line: string) => void) {
     sleep,
   })
 
+  // The built dashboard, served from the same origin as the API. Absent before the first build,
+  // in which case the API answers only /v1.
+  const dashboardDir = config.DASHBOARD_DIR
+  const withStatic =
+    dashboardDir === undefined
+      ? app
+      : app.get('*', (c) => {
+          const file = readStaticFile(dashboardDir, c.req.path)
+          if (file === null) return c.notFound()
+          return new Response(file.body, { status: 200, headers: { 'Content-Type': file.contentType } })
+        })
+
   const close = async (): Promise<void> => {
     await queue.close()
     await closePool(ctx.pool)
   }
 
-  return { app, logger: ctx.logger, close }
+  return { app: withStatic, logger: ctx.logger, close }
 }

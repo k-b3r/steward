@@ -40,6 +40,8 @@ export type Config = {
   REPO_PATH: string
   /** Branch a new `agent/*` branch starts from. */
   BASE_BRANCH: string
+  /** Built dashboard to serve from the API's origin; unset serves only /v1. */
+  DASHBOARD_DIR?: string
   RUNS_DIR: string
 }
 
@@ -134,6 +136,7 @@ const configSchema = z.object({
     .refine((value) => isAbsolute(value), 'must be an absolute path'),
   // Absent or empty means the default branch name, the same way an empty DASHBOARD_DIR means unset.
   BASE_BRANCH: z.preprocess((value) => (value === undefined || value === '' ? 'main' : value), z.string().min(1)),
+  DASHBOARD_DIR: z.preprocess((value) => (value === '' ? undefined : value), z.string().min(1).optional()),
   RUNS_DIR: z.string().min(1, 'must not be empty'),
 })
 
@@ -181,6 +184,7 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     DRY_RUN: pick('DRY_RUN', env, file),
     REPO_PATH: pick('REPO_PATH', env, file),
     BASE_BRANCH: pick('BASE_BRANCH', env, file),
+    DASHBOARD_DIR: pick('DASHBOARD_DIR', env, file),
     RUNS_DIR: explicitRunsDir ?? defaultRunsDir,
   }
 

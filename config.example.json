@@ -15,5 +15,6 @@
   "GH_ACCOUNT": "your-github-login",
   "GIT_USER_NAME": "Your Name",
   "GIT_USER_EMAIL": "you@example.com",
-  "BASE_BRANCH": "main"
+  "BASE_BRANCH": "main",
+  "DASHBOARD_DIR": ""
 }

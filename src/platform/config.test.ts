@@ -300,4 +300,10 @@ describe('deployment and tracker settings', () => {
     expect(loadConfig(env({ BASE_BRANCH: '' })).BASE_BRANCH).toBe('main')
     expect(loadConfig(env({ BASE_BRANCH: 'release/2' })).BASE_BRANCH).toBe('release/2')
   })
+
+  it('serves only the API when no dashboard directory is given', () => {
+    expect(loadConfig(env()).DASHBOARD_DIR).toBeUndefined()
+    expect(loadConfig(env({ DASHBOARD_DIR: '/srv/steward/dashboard' })).DASHBOARD_DIR).toBe('/srv/steward/dashboard')
+    expect(loadConfig(env({ DASHBOARD_DIR: '' })).DASHBOARD_DIR).toBeUndefined()
+  })
 })
