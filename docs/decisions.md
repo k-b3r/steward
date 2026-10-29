@@ -15,8 +15,8 @@ phase adds a feature with its own data (validation reports, pull request records
 
 `INSTANCE` names the context (`personal`, later `work`). It prefixes every external name:
 systemd units, Quadlet containers and services, Podman network and volumes, secrets, ports,
-database, env file, and the runs directory. Nothing is a global singleton. A second instance
-needs only a second env file and a second render, not a code change.
+database, env file, and the instance folder. Nothing is a global singleton. A second instance
+needs only a second instance folder and a second render, not a code change.
 
 ### 3. Postgres is the source of truth
 
@@ -200,14 +200,18 @@ deploy/render.test.sh`: 46 checks, 0 failures.
 ### 23. Host unit hardening and paths
 
 Both units set `NoNewPrivileges=yes`, `ProtectSystem=strict`, `PrivateTmp=yes`, and
-`Restart=on-failure`. `WorkingDirectory=%h/steward` assumes the checkout lives there; edit the
-unit if not. `ExecStart=/usr/bin/node dist/entries/api.js` and
-`ExecStart=/usr/bin/node dist/entries/worker.js`. The worker alone gets
-`ReadWritePaths=%h/steward/runs/%i`, because it writes transcripts and the brief's default `RUNS_DIR`
-is `$HOME/steward/runs/$INSTANCE`. That directory must exist before the unit starts, so the README
-creates it; systemd fails the unit when a `ReadWritePaths=` path is missing. The API only
-reads. With `ProtectSystem=strict`, any other write path must be added explicitly; phase 3
-needs `REPO_PATH` writable for git worktrees, and the worker unit must gain that path then.
+`Restart=on-failure`. `WorkingDirectory=%h/steward` points at the app checkout, not at instance
+data; edit the unit when the app is cloned elsewhere. `ExecStart=/usr/bin/node
+dist/entries/api.js` and `ExecStart=/usr/bin/node dist/entries/worker.js`.
+`EnvironmentFile=%h/steward-instances/%i/.env` is the instance's env file. The worker alone
+gets `ReadWritePaths=%h/steward-instances/%i`, the whole instance folder: it writes
+transcripts and worktrees under `runs/`, and `git worktree add` writes into the clone's `.git`
+under `repo/`. `RUNS_DIR` defaults to `$HOME/steward-instances/$INSTANCE/runs`. That directory
+must exist before the unit starts, so the README creates it: systemd requires a
+`ReadWritePaths=` path to exist while the directive is enforced. The API only reads. With
+`ProtectSystem=strict`, any other write path must be added explicitly. On this box the
+directives are not enforced for user units (see "User units do not sandbox..." below); they
+are correct for system units.
 
 ### 24. Template unit dependencies use `%i`
 
@@ -251,15 +255,88 @@ Run against the real API with a personal key, one team (`BUY`, one user), dry-ru
 
 ## Where steward keeps its repos and runs (2026-10-28)
 
-- Clones live under `~/steward/repos/<instance>/<repo>` (`REPO_PATH`), one clone per instance: identity and credentials are per clone, so the personal and work instances never share a commit author and no `gh auth switch` is needed at run time.
-- Runs live under `~/steward/runs/<instance>/<jobId>/` (`RUNS_DIR`): the worktree, `transcript.jsonl` and `raw.jsonl`.
-- One root, `~/steward`, so "this is steward's data" is visible, and cleanup is one directory.
-- Each clone is marked as steward's, in local git config (`steward.instance`, `steward.role`, `steward.repo`) and in `.git/steward.json`. Neither is committed, both survive a move, and `git status` stays clean.
-- `scripts/setup-repo.sh` (alias `pnpm repo:setup`) clones and marks; it is idempotent and prints the `REPO_PATH` line for the env file.
+Revised 2026-10-29: the single `~/steward` root is replaced by one folder per instance. See
+"Two roots: app and instance data" below.
+
+- One folder per instance, `~/steward-instances/<instance>/`, named like `INSTANCE`. It holds
+  `.env`, `repo/`, `runs/`, `quadlet/` and `backups/`.
+- The clone lives at `repo/` inside it (`REPO_PATH`), one clone per instance: identity and
+  credentials are per clone, so the personal and work instances never share a commit author
+  and no `gh auth switch` is needed at run time.
+- Runs live under `runs/<jobId>/` (`RUNS_DIR`): the worktree, `transcript.jsonl` and
+  `raw.jsonl`.
+- The env file is `.env` in the same folder, mode 0600, and the folder is 0700.
+- One folder per instance, so "this is steward's data" is visible, cleanup is one directory,
+  and adding or removing an instance is adding or removing one folder. Adding a repo is
+  filling that instance's `repo/`; removing it is deleting the folder.
+- Each clone is marked as steward's, in local git config (`steward.instance`, `steward.role`,
+  `steward.repo`) and in `.git/steward.json`. Neither is committed, both survive a move, and
+  `git status` stays clean.
+- `scripts/setup-repo.sh` (alias `pnpm repo:setup`) clones and marks; it is idempotent and
+  prints the `REPO_PATH` line for the env file.
+
+## Two roots: app and instance data (2026-10-29)
+
+Two roots, not one: the app checkout, and `~/steward-instances/<instance>/` per instance.
+
+```
+~/steward-instances/<instance>/
+  .env      secrets, mode 0600; the folder is 0700
+  repo/     the clone (REPO_PATH)
+  runs/     job output (RUNS_DIR default $HOME/steward-instances/$INSTANCE/runs)
+  quadlet/  the real rendered Quadlet files
+  backups/  podman volume export files
+```
+
+**Why.** Everything an instance owns is state about one repo and shares one lifecycle: you add
+a repo, you remove a repo, and the folder follows. One folder per instance, named like
+`INSTANCE`, makes that visible: everything the instance owns is in it, and deleting an
+instance deletes one folder. The app checkout is separate and unchanged: it is code with no
+instance state, and the units' `WorkingDirectory=` points at it, never at instance data.
+`~/.config/containers/systemd` holds symlinks to the files in `quadlet/`, so the real files
+live with the instance data and one removal takes them too.
+
+**What stays outside, and why.**
+
+- The Postgres volume stays in Podman's store, not in the folder. Its files are owned by a
+  sub-uid and are not readable as the user, so `podman volume export` into `backups/` is the
+  only usable copy.
+- Two tool-owned folders stay outside: `~/.config/containers/systemd` (Quadlet) and
+  `~/.config/systemd/user` (systemd units). The Quadlet folder holds symlinks to the files in
+  the instance's `quadlet/`. The unit folder holds copies, as the README installs them, or
+  symlinks made with `systemctl --user link`, which was tested with a unit living elsewhere.
+  Neither holds state worth backing up: a copy or a link is recreated from the app checkout
+  or the instance folder.
+
+**Verified facts.**
+
+- (a) Quadlet follows symlinks. Six symlinks in `~/.config/containers/systemd` pointing at
+  files elsewhere produced the same six services as the real files; only the process ids
+  differed. Tested with podman 4.9.3:
+  `QUADLET_UNIT_DIRS=<dir> /usr/lib/systemd/system-generators/podman-system-generator --user --dryrun`.
+- (b) `systemctl --user link <unit>` registers a unit that lives elsewhere. Tested, and the
+  probe unit was removed.
+- (c) The agent-config guard (`hooks/guard.mjs`) blocks reads of files named `.env` or
+  `.env.*` only. A file named `<instance>.env` was **not** protected, so the file is named
+  `.env`. In a pi session no guard hook was found, so open agent sessions in `repo/` or
+  `runs/`, never in the instance folder.
+- (d) This machine has no backup, sync or dotfiles tool, so the leak risk is agent reads, not
+  a sync client copying the file somewhere.
+
+**Per-job lifecycle.** The worktree `runs/<job-id>/worktree` is created at claim and removed
+in `finally` after every outcome (done, failure, cancel). `transcript.jsonl` and `raw.jsonl`
+stay. The branch `agent/<slug>` stays in `repo/`, so a retry or a later run continues it. The
+retention sweep and branch cleanup are phase 5 and are not built.
+
+**Known bug (not fixed here).** If the worker dies mid-run, `finally` never runs. The worktree
+path stays registered, and the next attempt's `git worktree add` fails with `already exists`
+(`git.test.ts` pins that error), so the job can never recover without manual cleanup. Planned
+fix: call `removeWorktree` on the path before creating the worktree, test first, in its own
+PR. Note that `removeWorktree` uses `--force`, so uncommitted work in a stale worktree is lost.
 
 ## Which account an instance acts as (2026-10-28)
 
-- Per instance, in the env file (`~/.config/steward/<instance>.env`), non-secret: `GH_ACCOUNT`, `GIT_USER_NAME`, `GIT_USER_EMAIL`. Validated by `config.ts`; they are not redacted, because a mismatch is exactly what you want to see in a log.
+- Per instance, in the env file (`~/steward-instances/<instance>/.env`), non-secret: `GH_ACCOUNT`, `GIT_USER_NAME`, `GIT_USER_EMAIL`. Validated by `config.ts`; they are not redacted, because a mismatch is exactly what you want to see in a log.
   - Each instance has its own values, so an instance can only ever act as its own account. The real values live in each instance's env file, outside the repo; `.env.example` shows the shape with placeholders.
 - No token in config. At push time the worker runs `GH_TOKEN=$(gh auth token --user "$GH_ACCOUNT")`. If the service user cannot use `gh`, one secret `STEWARD_GH_TOKEN` in the same env file; nothing else carries credentials.
 - The identity is config, not clone state, because **the agent commits inside the container**, which has no `~/.gitconfig`. The container gets `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` from these values (phase 2).
@@ -297,7 +374,11 @@ Consequences:
 - **The orchestrator never moves a ticket past `In Progress`.** `ALLOWED_STATUSES` defaults to `[In Progress]`, so the only tracker status change it may make is Backlog or Todo to In Progress, as part of a confirm. Everything after that is yours.
   - That limit is only enforced once phase 4 builds the confirm path. **Today intake only reads tickets, and nothing in the code writes to Linear**: no status is moved at all, so the guarantee currently holds by absence, not by a check.
   - `ALLOWED_STATUSES` is parsed and validated but **not read by anything outside config**: `grep -rn ALLOWED_STATUSES src` returns `src/platform/config.ts` (the type field, the `parseStatuses` preprocess that splits on commas and defaults to `['In Progress']`, and the schema's `.min(1)` that rejects an empty list) and `src/platform/config.test.ts` only. Wired: config loading, defaulting, validation and redaction. Not wired: intake, the confirm command, and the Linear client, which take no status argument. Phase 4 must pass `ALLOWED_STATUSES` to the write path and check the target status against it before any mutation.
-- **The build is `tsc`.** Plain Node ESM, nothing needs bundling.
+- **The build is undecided.** There is no build script yet. `tsconfig.json` uses
+  `moduleResolution: Bundler`, and `src/` has about 129 relative imports without a `.js`
+  extension, which Node cannot load from plain `tsc` output. Two options, neither chosen: add
+  `.js` to every relative import, or emit with esbuild (`--packages=external`) and copy the
+  migrations next to the output.
 - **The systemd units stay user units**, and the phase 2 container is the isolation boundary, since the filesystem sandbox is not enforced for user units on this box.
 - **ntfy is self-hosted**, and carries the identifier and title only, never ticket bodies (phase 4).
 
@@ -337,8 +418,9 @@ Each item still needs a run on the box.
    text may leave the box, and how a phone action reaches a `127.0.0.1` API.
 5. Readiness ordering between the container services and the host units. A small retry in the
    entry point, or a health-based unit dependency, is needed before phase 2.
-6. `REPO_PATH` writable for git worktrees (phase 3): add it to the worker's
-   `ReadWritePaths=`, or run the worker without `ProtectSystem=strict`.
+6. `REPO_PATH` writable for git worktrees: resolved 2026-10-29 for the default layout, because
+   `ReadWritePaths=%h/steward-instances/%i` covers `repo/` and `runs/`. A custom `REPO_PATH`
+   or `RUNS_DIR` still needs `ReadWritePaths=` changed to match.
 7. `instanceNames().unit` returns `steward@<instance>` while the deployed units are
    `steward-api@<instance>` and `steward-worker@<instance>`. Nothing consumes the unit name
    yet. Align it when code needs to start or query units.

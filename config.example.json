@@ -12,7 +12,7 @@
   "MAX_ATTEMPTS": 3,
   "DRY_RUN": true,
   "REPO_PATH": "/home/you/Develop/scratch-repo",
-  "RUNS_DIR": "/home/you/steward/runs/personal",
+  "RUNS_DIR": "/home/you/steward-instances/personal/runs",
   "GH_ACCOUNT": "your-github-login",
   "GIT_USER_NAME": "Your Name",
   "GIT_USER_EMAIL": "you@example.com",

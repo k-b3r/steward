@@ -1,12 +1,12 @@
 # steward worker for one instance: `systemctl --user enable --now steward-worker@personal`
-# The worker writes transcripts under %h/steward/runs/%i (the default RUNS_DIR from
-# src/platform/config.ts). Create that directory before the first start. If RUNS_DIR points
-# elsewhere, change both RUNS_DIR and ReadWritePaths. As a USER unit on Ubuntu 24.04 the
-# filesystem rules below are not enforced (see docs/decisions.md); they take effect for a
-# system unit.
-# The worker also runs `git fetch` and `git worktree add` inside the clone under
-# %h/steward/repos/%i, which writes to that clone's .git, so that tree is writable too
-# (the leading '-' means a missing directory is not an error).
+# One folder per instance: %h/steward-instances/%i holds .env, repo/ (the clone), runs/,
+# quadlet/ and backups/. The worker writes transcripts and worktrees under runs/ (the
+# default RUNS_DIR from src/platform/config.ts). Create that directory before the first
+# start. It also runs `git fetch` and `git worktree add` inside the clone, and
+# `git worktree add` writes to the clone's .git under repo/, so that folder must be
+# writable too. If the layout is customised, change RUNS_DIR/REPO_PATH and ReadWritePaths
+# together. As a USER unit on Ubuntu 24.04 the filesystem rules below are not enforced
+# (see docs/decisions.md); they take effect for a system unit.
 [Unit]
 Description=steward worker (%i)
 Requires=steward-%i-postgres.service steward-%i-redis-queue.service steward-%i-redis-slots.service
@@ -15,14 +15,15 @@ After=steward-%i-postgres.service steward-%i-redis-queue.service steward-%i-redi
 
 [Service]
 Type=simple
+# The app checkout, not the per-instance data folder; edit if cloned elsewhere.
 WorkingDirectory=%h/steward
-EnvironmentFile=%h/.config/steward/%i.env
+EnvironmentFile=%h/steward-instances/%i/.env
 ExecStart=/usr/bin/node dist/entries/worker.js
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
-ReadWritePaths=%h/steward/runs/%i -%h/steward/repos/%i
+ReadWritePaths=%h/steward-instances/%i
 PrivateTmp=yes
 
 [Install]

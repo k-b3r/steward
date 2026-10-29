@@ -55,7 +55,7 @@ describe('loadConfig', () => {
     expect(config.RUN_RETENTION_DAYS).toBe(30)
     expect(config.MAX_ATTEMPTS).toBe(3)
     expect(config.DRY_RUN).toBe(true)
-    expect(config.RUNS_DIR).toBe('/home/you/steward/runs/personal')
+    expect(config.RUNS_DIR).toBe('/home/you/steward-instances/personal/runs')
   })
 
   it('coerces numeric strings and trims origins', () => {
@@ -184,7 +184,7 @@ describe('loadConfig', () => {
     expect(config.REPO_PATH).toBe('/tmp/from-file')
     expect(config.SLOT_COUNT).toBe(4)
     expect(config.ALLOWED_ORIGINS).toEqual(['https://file.example.com'])
-    expect(config.RUNS_DIR).toBe('/home/file-user/steward/runs/from-file')
+    expect(config.RUNS_DIR).toBe('/home/file-user/steward-instances/from-file/runs')
     expect(config.BASE_BRANCH).toBe('release')
   })
 
@@ -263,7 +263,7 @@ describe('loadConfig', () => {
     expect(redacted.INSTANCE).toBe('personal')
     expect(redacted.API_PORT).toBe(3000)
     expect(redacted.DRY_RUN).toBe(true)
-    expect(redacted.RUNS_DIR).toBe('/home/you/steward/runs/personal')
+    expect(redacted.RUNS_DIR).toBe('/home/you/steward-instances/personal/runs')
     expect(redacted.TEST_DATABASE_URL).toBe('[REDACTED]')
 
     const serialized = JSON.stringify(redacted)

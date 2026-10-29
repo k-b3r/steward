@@ -67,6 +67,30 @@ Rule of thumb from the README: add a rule once the same correction was needed tw
 - **Proposed.** Say in `ship-ticket` and the testing section that fixtures use a neutral prefix (`TST-`) and `example.com` hosts. Optionally add a `repo-checks` rule that flags known real keys from a local, untracked list.
 - **Where.** `CODING_STANDARDS.md` Testing, `skills/ship-ticket/SKILL.md`.
 
+### 2026-10-29: the secret-file guard misses `<instance>.env` (seen: 1, open)
+
+- **What happened.** `hooks/guard.mjs` blocks reads of files named `.env` or `.env.*` only. A per-instance file named `<instance>.env`, outside the repo, held the database passwords and the hook did not match it. Renaming the file `.env` was the workaround.
+- **Proposed.** Match `*.env` too, and accept an extra, configurable list of names and globs for repos that keep secrets under other names.
+- **Where.** `hooks/guard.mjs`, `hooks/guard.test.mjs`.
+
+### 2026-10-29: the secret scan's allowlist drifts between CI and a local full-history run (seen: 1, open)
+
+- **What happened.** CI runs `gitleaks git --log-opts="origin/$BASE..HEAD"`, so it sees only the PR's commits. A local full-history scan sees every synthetic placeholder ever committed, so the repo needs a `.gitleaks.toml` of exact regexes, and each new placeholder needs another entry. A path entry would also hide a real key in that file later.
+- **Proposed.** Ship a template `.gitleaks.toml` with the common placeholders (`REPLACE_WITH_*`, example hosts), document the local command with the same `--log-opts`, and prefer exact-value regexes over path allowlists.
+- **Where.** `skills/init-repo/templates/typescript/`, `README.md` (secret scan note).
+
+### 2026-10-29: the agent review blocks a commit that mixes a refactor with a behaviour change (seen: 1, open)
+
+- **What happened.** `pr-review.yml` reads every commit (`gh pr view --json commits`) and treats "a refactor never shares a commit with a behaviour change" as blocking. An agent that commits "move X and fix Y" gets the whole PR blocked, and the fix is a history rewrite.
+- **Proposed.** Say it in `ship-ticket` before the first commit: refactor commits stay separate from behaviour commits, one logical change per commit. Keep the review rule.
+- **Where.** `skills/ship-ticket/SKILL.md`; the rule in `.github/workflows/pr-review.yml` is already right.
+
+### 2026-10-29: systemd user units silently ignore sandbox directives on Ubuntu 24.04 (seen: 1, open)
+
+- **What happened.** A probe with `systemd-run --user` on systemd 255 applied `NoNewPrivileges=yes` and silently ignored `ProtectSystem=strict`, `ProtectHome` and `PrivateTmp`, because unprivileged user namespaces are blocked (`kernel.apparmor_restrict_unprivileged_userns=1`). The unit starts as if the sandbox were there, so a missing `ReadWritePaths=` path does not fail it either.
+- **Proposed.** A note in `standards/security.md`: a user unit is not a sandbox on this box; the container, or a system unit under a dedicated user, is. Ship the `systemd-run --user` probe as a script so a repo can check its own box.
+- **Where.** `standards/security.md`, `scripts/` (probe).
+
 ## Delegated work (sub-agents)
 
 ### 2026-10-27: "all green" reports from sub-agents hid real bugs (seen: 1, open)
@@ -95,6 +119,12 @@ Rule of thumb from the README: add a rule once the same correction was needed tw
 - **What happened.** Six agents in one checkout worked without conflicts because each prompt named the files it owned and forbade `git`, `pnpm add` and edits to shared files. One agent was the only one allowed to touch `package.json`. Dependencies added up front by the orchestrator avoided clashes later.
 - **Proposed.** Write this as a recipe in `dispatch-tickets` or a new short skill: ownership list, shared-file owner, no git for workers, dependencies first, orchestrator commits one piece at a time.
 - **Where.** `skills/dispatch-tickets/SKILL.md`.
+
+### 2026-10-29: deleting a PR's base branch closes the PRs stacked on it (seen: 1, open)
+
+- **What happened.** A merged branch was deleted while two PRs were based on it. Both were closed. `gh pr edit --base main` printed a Projects-classic GraphQL warning and changed nothing; the base stayed the deleted branch. `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f base=main` did change it.
+- **Proposed.** In the stacked-PR path, retarget with the API and check `gh pr view --json baseRefName` afterwards. Do not delete a branch that is another open PR's base.
+- **Where.** `skills/address-pr-review/SKILL.md`, `skills/ship-ticket/SKILL.md`.
 
 ## Open questions for later
 

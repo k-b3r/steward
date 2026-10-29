@@ -12,7 +12,8 @@ validator, and the GitHub and tracker writes. See [Phase boundaries](#phase-boun
 - One host runs every instance. Each instance gets its own Postgres, its own Redis for
   BullMQ, its own Redis for per-slot tests, its own network, and its own ports.
 - Postgres and both Redis servers run as Podman containers, started by systemd user units.
-  The Quadlet files are in `deploy/quadlet/`.
+  The Quadlet templates are in `deploy/quadlet/`; `deploy/render.sh` writes the real files
+  into the instance's `quadlet/` folder.
 - The API and the worker run on the host as systemd user units
   (`steward-api@<instance>.service`, `steward-worker@<instance>.service`). They are not
   containers.
@@ -131,7 +132,8 @@ The startup reconciler runs before the worker takes new work:
 
 ## Transcripts
 
-Each job has a run directory: `~/steward/runs/<instance>/<job-id>/`. The directory is mode 0700.
+Each job has a run directory: `~/steward-instances/<instance>/runs/<job-id>/`. The directory
+is mode 0700.
 
 - `transcript.jsonl`: one envelope per line, `{ seq, ts, kind, data }`. `kind` is one of
   `system`, `assistant`, `tool`, `result`, `error`, `orchestrator`. `seq` increases
@@ -142,6 +144,22 @@ Each job has a run directory: `~/steward/runs/<instance>/<job-id>/`. The directo
   output; see [security.md](security.md).
 - Retention is `RUN_RETENTION_DAYS` (default 30). The sweep is phase 5.
 
+## Per-instance data
+
+Each instance keeps all of its state in one folder, `~/steward-instances/<instance>/`, named
+like `INSTANCE`. The app checkout is separate and holds code only.
+
+- `.env`: secrets and non-secret config, mode 0600. The folder is 0700.
+- `repo/`: the clone the jobs work from (`REPO_PATH`).
+- `runs/`: one directory per job (`RUNS_DIR`, default
+  `~/steward-instances/<instance>/runs`).
+- `quadlet/`: the rendered Quadlet files. `~/.config/containers/systemd` holds symlinks to
+  them, so the real files live with the rest of the instance data.
+- `backups/`: files written by `podman volume export`.
+
+The Postgres volume stays in Podman's store, outside the folder: its files belong to a sub-uid
+and are not readable as the user. See [decisions.md](decisions.md).
+
 ## Per-instance naming
 
 `INSTANCE` matches `/^[a-z][a-z0-9-]{0,30}$/`. Nothing is a global singleton.
@@ -149,7 +167,7 @@ Each job has a run directory: `~/steward/runs/<instance>/<job-id>/`. The directo
 
 | Thing              | Value                                                                       |
 | ------------------ | --------------------------------------------------------------------------- |
-| Env file           | `~/.config/steward/<instance>.env`                                          |
+| Env file           | `~/steward-instances/<instance>/.env`                                       |
 | API unit           | `steward-api@<instance>.service`                                            |
 | Worker unit        | `steward-worker@<instance>.service`                                         |
 | Postgres container | `steward-<instance>-postgres` (`steward-<instance>-postgres.service`)       |
@@ -160,7 +178,7 @@ Each job has a run directory: `~/steward/runs/<instance>/<job-id>/`. The directo
 | Queue Redis volume | `steward-<instance>-redis-queue-data`                                       |
 | Database           | `steward_<instance>` with hyphens replaced by underscores                   |
 | Podman secrets     | `steward-<instance>-postgres-password`, `steward-<instance>-redis-password` |
-| Runs dir           | `~/steward/runs/<instance>/`                                                |
+| Runs dir           | `~/steward-instances/<instance>/runs/`                                      |
 | Ports (127.0.0.1)  | base for Postgres, base+1 for queue Redis, base+2 for slots Redis           |
 
 `instanceNames().unit` returns `steward@<instance>`. That is the instance prefix; the

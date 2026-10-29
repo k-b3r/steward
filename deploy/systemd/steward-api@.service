@@ -10,8 +10,9 @@ After=steward-%i-postgres.service steward-%i-redis-queue.service steward-%i-redi
 
 [Service]
 Type=simple
+# The app checkout, not the per-instance data folder; edit if cloned elsewhere.
 WorkingDirectory=%h/steward
-EnvironmentFile=%h/.config/steward/%i.env
+EnvironmentFile=%h/steward-instances/%i/.env
 ExecStart=/usr/bin/node dist/entries/api.js
 Restart=on-failure
 RestartSec=5

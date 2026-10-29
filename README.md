@@ -20,11 +20,40 @@ start until one exists. Phases are listed in [docs/architecture.md](docs/archite
 - A tracker workspace and a private scratch repo (the personal instance). Intake only reads
   the tracker, and creates no jobs or runs, while `DRY_RUN=true`.
 
+## Layout on disk
+
+Each instance has one folder under `~/steward-instances`. The app checkout sits elsewhere.
+
+```text
+~/steward-instances/<instance>/
+  .env        secrets and settings (file mode 0600, folder mode 0700)
+  repo/       the clone the instance works on (REPO_PATH)
+  runs/       job output: runs/<job-id>/{worktree,transcript.jsonl,raw.jsonl} (RUNS_DIR)
+  quadlet/    the rendered Quadlet files; ~/.config/containers/systemd holds symlinks to them
+  backups/    `podman volume export` files
+```
+
+The env file is named `.env` on purpose. The agent-config secret guard only protects files
+named `.env` or `.env.*`, and the repo's `.gitignore` covers them. Open agent sessions in
+`repo/` or `runs/`, not in the instance folder itself.
+
+The database stays in Podman's store (`~/.local/share/containers/storage`). Its files map to a
+sub-uid, so you cannot open them as your user. Back it up with `podman volume export` into
+`backups/`; create that folder when you take the first export.
+
+Podman's Quadlet folder and systemd's user-unit folder stay where the tools look:
+`~/.config/containers/systemd` and `~/.config/systemd/user`. Quadlet follows symlinks (tested
+with `QUADLET_UNIT_DIRS` and the `podman-system-generator --dryrun`: identical output), so the
+rendered files live in the instance `quadlet/` folder and `~/.config/containers/systemd` holds
+symlinks to them.
+
 ## Install the personal instance
 
-These steps assume the checkout is at `~/steward`, the user units run as your login user, and
-the instance is named `personal` with port base `15432`. Use another name and base if you
-like; the three ports must stay free.
+These steps assume the user units run as your login user, and the instance is named `personal`
+with port base `15432`. Use another name and base if you like; the three ports must stay free.
+
+The app checkout is wherever you cloned this repo. The commands below call it `<where you
+cloned steward>`; if you are already in it, `steward` is enough.
 
 The units will not start until `dist/entries/api.js` and `dist/entries/worker.js` exist. There is
 no build script yet. See open item 1 in [docs/decisions.md](docs/decisions.md).
@@ -32,7 +61,7 @@ no build script yet. See open item 1 in [docs/decisions.md](docs/decisions.md).
 ### 1. Install dependencies
 
 ```bash
-cd ~/steward
+cd <where you cloned steward>     # e.g. cd ~/Develop/steward
 pnpm install
 podman info >/dev/null && echo "rootless Podman is ready"
 ```
@@ -55,14 +84,19 @@ Podman's user store and are not in the repo.
 ### 3. Render the Quadlet files
 
 ```bash
-mkdir -p ~/.config/containers/systemd
-deploy/render.sh personal 15432 ~/.config/containers/systemd
+mkdir -p ~/steward-instances/personal/quadlet ~/.config/containers/systemd
+deploy/render.sh personal 15432 ~/steward-instances/personal/quadlet
+ln -s ~/steward-instances/personal/quadlet/steward-personal* ~/.config/containers/systemd/
+systemctl --user daemon-reload
 ```
 
 The script writes six files: the network, two volumes, and the three containers. It refuses
 to overwrite files that already exist; add `--force` to replace them. Every published port
 binds `127.0.0.1` only. To check the output without touching the real directory, render into
 a temporary directory first.
+
+Quadlet reads `~/.config/containers/systemd` and follows the symlinks into the instance
+folder. Run `daemon-reload` after every render, so systemd picks up the new units.
 
 ### 4. Install the host units
 
@@ -72,17 +106,18 @@ cp deploy/systemd/steward-api@.service deploy/systemd/steward-worker@.service ~/
 systemctl --user daemon-reload
 ```
 
-The units expect the checkout at `~/steward`. If it is elsewhere, edit `WorkingDirectory=` in
-both files before copying them.
+The units' `WorkingDirectory=%h/steward` is the app checkout. Edit it to wherever you cloned
+the app, in both files, before you copy them.
 
 ### 5. Create the env file
 
-The units read `~/.config/steward/personal.env`. Start from `.env.example`.
+The units read `~/steward-instances/personal/.env`. Start from `.env.example`.
 
 ```bash
-mkdir -p ~/.config/steward
-cp .env.example ~/.config/steward/personal.env
-chmod 600 ~/.config/steward/personal.env
+mkdir -p -m 700 ~/steward-instances/personal
+cp .env.example ~/steward-instances/personal/.env
+chmod 700 ~/steward-instances/personal
+chmod 600 ~/steward-instances/personal/.env
 ```
 
 Fill it in. The database and Redis URLs must carry the same passwords you created in step 2.
@@ -101,35 +136,37 @@ API_TOKEN=REPLACE_WITH_TOKEN
 API_PORT=3000
 SLOT_COUNT=3
 DRY_RUN=true
-REPO_PATH=/home/you/Develop/scratch-repo
+REPO_PATH=/home/you/steward-instances/personal/repo
 ```
 
-There is one env file per instance, at `~/.config/steward/<instance>.env` (mode 0600, outside the repo). `pnpm dev:api` and `pnpm dev:worker` read the personal one; set `STEWARD_ENV_FILE` to point them at another. The systemd units read the same file. `.env.example` is the template.
+There is one env file per instance, at `~/steward-instances/<instance>/.env` (file mode 0600, folder mode 0700, outside the repo). `pnpm dev:api` and `pnpm dev:worker` pick the env file from `STEWARD_ENV_FILE`, else `STEWARD_INSTANCE`, else the only folder under `~/steward-instances`; set `STEWARD_INSTANCES_DIR` to move that root. Several instances and no choice is an error. The systemd units read the same file. `.env.example` is the template.
 
 Three more keys, all non-secret. `BASE_BRANCH` is the branch each job starts from: a new `agent/*` branch is cut from `origin/<BASE_BRANCH>`, and it defaults to `main`. `DASHBOARD_DIR` is optional: set it to the absolute path of the built `dashboard/dist` and the API serves it from its own origin; unset means the API answers only `/v1`. `ALLOWED_STATUSES` is a comma-separated list of the tracker statuses the orchestrator may move a ticket into, default `In Progress`, and an empty list is a config error; it is parsed and validated now, but nothing reads it yet, because nothing writes to Linear.
 
 ### Point an instance at a repo
 
 ```bash
-pnpm repo:setup personal k-b3r/scratch-repo     # -> ~/steward/repos/personal/scratch-repo
+pnpm repo:setup personal k-b3r/scratch-repo     # -> ~/steward-instances/personal/repo
 ```
 
-An optional fourth argument sets the destination instead of `~/steward/repos/<instance>/<repo>`: `pnpm repo:setup personal k-b3r/scratch-repo scratch-repo /path/to/clone`. The identity (`GH_ACCOUNT`, `GIT_USER_NAME`, `GIT_USER_EMAIL`) comes from the environment, or else from `~/.config/steward/<instance>.env`, which is parsed and never run as shell code.
+A third argument sets the destination instead of `~/steward-instances/<instance>/repo`: `pnpm repo:setup personal k-b3r/scratch-repo /path/to/clone`. The identity (`GH_ACCOUNT`, `GIT_USER_NAME`, `GIT_USER_EMAIL`) comes from the environment, or else from `~/steward-instances/<instance>/.env`, which is parsed and never run as shell code.
 
 It clones once, then marks the clone as steward's: `steward.instance`, `steward.role` and `steward.repo` in the clone's local git config, and the same in `.git/steward.json`. Both are local, so they survive moving the clone and never appear in `git status`. It also prints the `REPO_PATH` line to put in the instance env file.
 
-Layout: `~/steward/repos/<instance>/<repo>` holds the clones, and `~/steward/runs/<instance>/<jobId>/` holds one worktree and its transcripts per job. Each job gets a worktree from that clone; the clone itself is never touched by an agent.
+Layout: `~/steward-instances/<instance>/repo` holds the clone, and `~/steward-instances/<instance>/runs/<job-id>/` holds one worktree and its transcripts per job. Each job gets a worktree from that clone; the clone itself is never touched by an agent.
 
-`REPO_PATH` must be absolute. `RUNS_DIR` defaults to `$HOME/steward/runs/$INSTANCE`, which is
-`~/steward/runs/personal` here. The env file is the only place the app reads secrets.
+`REPO_PATH` must be absolute. `RUNS_DIR` defaults to `$HOME/steward-instances/$INSTANCE/runs`,
+which is `~/steward-instances/personal/runs` here. The env file is the only place the app
+reads secrets.
 
 ### 6. Create the runs directory
 
-The worker writes transcripts under `~/steward/runs/personal`, and its `ReadWritePaths=` needs that
-directory to exist before the unit starts.
+The worker writes transcripts under `~/steward-instances/personal/runs`, and its `ReadWritePaths=`
+needs that folder to exist before the unit starts. The worker unit allows writes under
+`%h/steward-instances/%i`, the whole instance folder.
 
 ```bash
-mkdir -p ~/steward/runs/personal
+mkdir -p ~/steward-instances/personal/runs
 ```
 
 ### 7. Let user units run without a login
@@ -172,7 +209,7 @@ is absent. While it is on, ticket intake logs each match and the raw JSON it rec
 creates nothing: no job row, no proposal, no container. Use it to check field names and
 filters before anything runs.
 
-To turn it off, set `DRY_RUN=false` in `~/.config/steward/personal.env` and restart the worker:
+To turn it off, set `DRY_RUN=false` in `~/steward-instances/personal/.env` and restart the worker:
 
 ```bash
 systemctl --user restart steward-worker@personal.service
@@ -200,14 +237,14 @@ The deploy test creates nothing outside a temporary directory.
 deploy/
   quadlet/       templates with @INSTANCE@, @PG_PORT@, @REDIS_QUEUE_PORT@,
                  @REDIS_SLOTS_PORT@, and @PG_DB@ placeholders
-  render.sh      renders one instance and port base into a directory
+  render.sh      renders one instance and port base into a directory (the instance quadlet/)
   render.test.sh shell test for render.sh
   systemd/       steward-api@.service and steward-worker@.service
 ```
 
-A second instance is a second render with another name and port base, a second env file, and a
-second pair of secrets. Nothing in the repo changes. Keep instances apart: never share a
-database, a Redis, or a runs directory between them.
+A second instance is a second folder under `~/steward-instances`, a render with another name
+and port base, and its own secrets. Nothing in the repo changes. Keep instances apart: never
+share a database, a Redis, or a runs folder between them.
 
 ## Documentation
 
