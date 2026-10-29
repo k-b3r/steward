@@ -162,6 +162,7 @@ describe('loadConfig', () => {
       },
       {
         INSTANCE: 'from-file',
+        BASE_BRANCH: 'release',
         LINEAR_TEAM_KEY: 'FIL',
         GH_ACCOUNT: 'from-file-gh',
         GIT_USER_NAME: 'From File',
@@ -178,6 +179,7 @@ describe('loadConfig', () => {
     expect(config.SLOT_COUNT).toBe(4)
     expect(config.ALLOWED_ORIGINS).toEqual(['https://file.example.com'])
     expect(config.RUNS_DIR).toBe('/home/file-user/steward/runs/from-file')
+    expect(config.BASE_BRANCH).toBe('release')
   })
 
   it('lets env values win over config file values', () => {
@@ -289,5 +291,13 @@ describe('instanceNames', () => {
       dbName: 'steward_my_work',
       redisNetwork: 'steward-my-work-net',
     })
+  })
+})
+
+describe('deployment and tracker settings', () => {
+  it('starts branches from main unless told otherwise', () => {
+    expect(loadConfig(env()).BASE_BRANCH).toBe('main')
+    expect(loadConfig(env({ BASE_BRANCH: '' })).BASE_BRANCH).toBe('main')
+    expect(loadConfig(env({ BASE_BRANCH: 'release/2' })).BASE_BRANCH).toBe('release/2')
   })
 })

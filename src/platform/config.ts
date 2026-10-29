@@ -38,6 +38,8 @@ export type Config = {
   MAX_ATTEMPTS: number
   DRY_RUN: boolean
   REPO_PATH: string
+  /** Branch a new `agent/*` branch starts from. */
+  BASE_BRANCH: string
   RUNS_DIR: string
 }
 
@@ -130,6 +132,8 @@ const configSchema = z.object({
     .string()
     .min(1, 'must not be empty')
     .refine((value) => isAbsolute(value), 'must be an absolute path'),
+  // Absent or empty means the default branch name, the same way an empty DASHBOARD_DIR means unset.
+  BASE_BRANCH: z.preprocess((value) => (value === undefined || value === '' ? 'main' : value), z.string().min(1)),
   RUNS_DIR: z.string().min(1, 'must not be empty'),
 })
 
@@ -176,6 +180,7 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     MAX_ATTEMPTS: pick('MAX_ATTEMPTS', env, file),
     DRY_RUN: pick('DRY_RUN', env, file),
     REPO_PATH: pick('REPO_PATH', env, file),
+    BASE_BRANCH: pick('BASE_BRANCH', env, file),
     RUNS_DIR: explicitRunsDir ?? defaultRunsDir,
   }
 
