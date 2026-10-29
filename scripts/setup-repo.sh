@@ -2,15 +2,16 @@
 # Clones the repo an instance works on, marks it as steward's, and pins that instance's git identity.
 # usage: scripts/setup-repo.sh <instance> <owner/name> [dest]
 #   scripts/setup-repo.sh personal k-b3r/scratch-repo
+#   scripts/setup-repo.sh personal k-b3r/scratch-repo ~/src/scratch-repo
 # Reads GH_ACCOUNT, GIT_USER_NAME and GIT_USER_EMAIL from the environment, or else from
-# ~/.config/steward/<instance>.env (the file is parsed, never run as shell code). Clones with that
-# account's token and never stores the token anywhere.
+# ~/steward-instances/<instance>/.env (the file is parsed, never run as shell code). Clones with
+# that account's token and never stores the token anywhere. dest defaults to
+# ~/steward-instances/<instance>/repo.
 set -euo pipefail
 
 instance="${1:?instance name, e.g. personal}"
 repo="${2:?repository, e.g. k-b3r/scratch-repo}"
-name="${3:-$(basename "$repo")}"
-dest="${4:-$HOME/steward/repos/$instance/$name}"
+dest="${3:-$HOME/steward-instances/$instance/repo}"
 
 if ! [[ "$instance" =~ ^[a-z][a-z0-9-]{0,30}$ ]]; then
   echo "instance must match ^[a-z][a-z0-9-]{0,30}$" >&2; exit 1
@@ -21,7 +22,7 @@ fi
 source "$(cd "$(dirname "$0")" && pwd)/lib/read-env.sh"
 # shellcheck source=lib/json.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib/json.sh"
-env_file="${STEWARD_ENV_FILE:-$HOME/.config/steward/$instance.env}"
+env_file="${STEWARD_ENV_FILE:-$HOME/steward-instances/$instance/.env}"
 for key in GH_ACCOUNT GIT_USER_NAME GIT_USER_EMAIL; do
   if [[ -z "${!key:-}" ]] && value="$(read_env_value "$env_file" "$key")"; then
     printf -v "$key" '%s' "$value"
@@ -59,4 +60,4 @@ printf 'instance %s -> %s\n' "$instance" "$dest"
 printf '  steward.instance: %s\n' "$(git -C "$dest" config --local steward.instance)"
 printf '  steward.account:  %s\n' "$(git -C "$dest" config --local steward.account)"
 printf '  author now:       %s <%s>\n' "$(git -C "$dest" config user.name || echo UNSET)" "$(git -C "$dest" config user.email || echo UNSET)"
-printf 'Next: set REPO_PATH=%s in ~/.config/steward/%s.env\n' "$dest" "$instance"
+printf 'Next: set REPO_PATH=%s in ~/steward-instances/%s/.env\n' "$dest" "$instance"

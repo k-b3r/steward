@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests for scripts/lib/read-env.sh. Run: bash scripts/setup-repo.test.sh
+# Tests for scripts/lib/read-env.sh and the default paths of scripts/setup-repo.sh.
+# Run: bash scripts/setup-repo.test.sh
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/read-env.sh
@@ -50,6 +51,23 @@ doc="$(printf '{"repo":"%s"}' "$(json_escape 'we"ird\name')")"
 if command -v python3 >/dev/null; then
   check "json: the document parses and round-trips" "$(printf '%s' "$doc" | python3 -c 'import sys,json;print(json.load(sys.stdin)["repo"])')" 'we"ird\name'
 fi
+
+# setup-repo.sh's defaults: the env file and the clone dest both live under ~/steward-instances/<instance>.
+# The dest already exists, so the script only marks it, and a fake git keeps this offline.
+fake_home="$tmp/home"
+mkdir -p "$fake_home/steward-instances/personal/repo/.git" "$tmp/bin"
+cat >"$fake_home/steward-instances/personal/.env" <<EOT
+GH_ACCOUNT=octo
+GIT_USER_NAME="Octo Cat"
+GIT_USER_EMAIL='octo@example.test'
+EOT
+printf '#!/bin/sh\nexit 0\n' >"$tmp/bin/git"; chmod +x "$tmp/bin/git"
+setup_out="$(env -u GH_ACCOUNT -u GIT_USER_NAME -u GIT_USER_EMAIL -u STEWARD_ENV_FILE \
+  HOME="$fake_home" PATH="$tmp/bin:$PATH" "$here/setup-repo.sh" personal octo/repo 2>&1)"
+check "the default dest is ~/steward-instances/<instance>/repo" \
+  "$(printf '%s\n' "$setup_out" | grep -Fxc "instance personal -> $fake_home/steward-instances/personal/repo")" "1"
+check "the Next line names the instance env file" \
+  "$(printf '%s\n' "$setup_out" | grep -Fxc "Next: set REPO_PATH=$fake_home/steward-instances/personal/repo in ~/steward-instances/personal/.env")" "1"
 
 echo "$n checks, $([[ $fail -eq 0 ]] && echo 0 || echo some) failures"
 exit $fail
