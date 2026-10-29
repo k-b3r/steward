@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { readStaticFile, resolveAssetPath } from './static'
+import { readStaticFile, resolveAssetPath, staticResponse } from './static'
 
 let root: string
 
@@ -78,5 +78,26 @@ describe('readStaticFile', () => {
     expect(new TextDecoder().decode(readStaticFile(root, '/assets/app.js?v=2')?.body ?? new ArrayBuffer(0))).toBe(
       'console.log(1)',
     )
+  })
+})
+
+describe('staticResponse', () => {
+  it('answers 200 with the content type and nosniff', async () => {
+    const response = staticResponse(root, '/')
+
+    expect(response?.status).toBe(200)
+    expect(response?.headers.get('Content-Type')).toBe('text/html; charset=utf-8')
+    expect(response?.headers.get('X-Content-Type-Options')).toBe('nosniff')
+    expect(await response?.text()).toContain('<')
+  })
+
+  it('returns null for a missing file, so the caller answers 404', () => {
+    expect(staticResponse(root, '/no-such-file.js')).toBeNull()
+  })
+
+  it('returns null for a traversal path and for a malformed escape', () => {
+    expect(staticResponse(root, '/../secret.txt')).toBeNull()
+    expect(staticResponse(root, '/%2e%2e/secret.txt')).toBeNull()
+    expect(staticResponse(root, '/%zz')).toBeNull()
   })
 })

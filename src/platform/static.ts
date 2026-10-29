@@ -48,3 +48,14 @@ export function readStaticFile(root: string, requestPath: string): StaticFile | 
     return null
   }
 }
+
+/** The response for a dashboard request, or null when there is nothing to serve (the caller answers 404). */
+export function staticResponse(root: string, requestPath: string): Response | null {
+  const file = readStaticFile(root, requestPath)
+  if (file === null) return null
+  return new Response(file.body, {
+    status: 200,
+    // nosniff: the browser must trust the type we send, never guess one from the bytes.
+    headers: { 'Content-Type': file.contentType, 'X-Content-Type-Options': 'nosniff' },
+  })
+}

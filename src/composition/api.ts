@@ -10,7 +10,7 @@ import * as store from '../db/store'
 import { getJob, listActions, listJobs } from '../jobs-queries'
 import { cancelJob, confirmJob, decideAction, declineJob, reconsiderJob, retryJob } from '../jobs-commands'
 import { createApp } from '../api/app'
-import { readStaticFile } from '../platform/static'
+import { staticResponse } from '../platform/static'
 
 export function composeApi(config: Config, write: (line: string) => void) {
   const ctx = createContext(config, write)
@@ -68,17 +68,7 @@ export function composeApi(config: Config, write: (line: string) => void) {
   // in which case the API answers only /v1.
   const dashboardDir = config.DASHBOARD_DIR
   const withStatic =
-    dashboardDir === undefined
-      ? app
-      : app.get('*', (c) => {
-          const file = readStaticFile(dashboardDir, c.req.path)
-          if (file === null) return c.notFound()
-          return new Response(file.body, {
-            status: 200,
-            // nosniff: the browser must trust the type we send, never guess one from the bytes.
-            headers: { 'Content-Type': file.contentType, 'X-Content-Type-Options': 'nosniff' },
-          })
-        })
+    dashboardDir === undefined ? app : app.get('*', (c) => staticResponse(dashboardDir, c.req.path) ?? c.notFound())
 
   const close = async (): Promise<void> => {
     await queue.close()
