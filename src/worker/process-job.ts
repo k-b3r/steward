@@ -184,6 +184,9 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
     const baseBranch = deps.baseBranch ?? 'main'
     await fetchBaseClassified(deps, baseBranch)
     const branch = branchName(current.identifier)
+    // A worker that died mid-run never ran its cleanup. Clear what it left, or `git worktree add`
+    // refuses the path on every retry. The branch and its commits are not touched.
+    await deps.git.removeWorktree(deps.config.repoPath, worktreePath)
     if (await deps.git.branchExists(deps.config.repoPath, branch)) {
       // An earlier attempt or an open pull request already owns this branch: continue on it,
       // then bring it up to date. A conflict is left in place for the agent, not thrown away.
