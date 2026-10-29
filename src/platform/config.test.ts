@@ -133,6 +133,7 @@ describe('loadConfig', () => {
     ['MAX_ATTEMPTS below range', { MAX_ATTEMPTS: '0' }, 'MAX_ATTEMPTS'],
     ['REPO_PATH missing', { REPO_PATH: undefined }, 'REPO_PATH'],
     ['REPO_PATH relative', { REPO_PATH: 'scratch-repo' }, 'REPO_PATH'],
+    ['DASHBOARD_DIR relative', { DASHBOARD_DIR: 'dist' }, 'DASHBOARD_DIR'],
     ['RUNS_DIR and HOME both missing', { RUNS_DIR: undefined, HOME: undefined }, 'RUNS_DIR'],
     ['ALLOWED_HOSTS is a wildcard', { ALLOWED_HOSTS: '*' }, 'ALLOWED_HOSTS'],
     ['ALLOWED_HOSTS has a scheme', { ALLOWED_HOSTS: 'https://steward.example' }, 'ALLOWED_HOSTS'],
