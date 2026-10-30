@@ -53,8 +53,8 @@ interface AgentRunner {
 
 - `WorkFeed` is the only way work enters the system. The tracker adapter implements it.
 - A status reporter (tracker and chat writes) is added in phase 4, when something implements it.
-- `AgentRunner` starts, resumes and cancels one agent run. The echo stub is phase 1 work and
-  is not built yet. The container runner is phase 2.
+- `AgentRunner` starts, resumes and cancels one agent run. The echo runner is built
+  (`src/runner/echo.ts`) and stands in for a real agent. The container runner is phase 2.
 
 ## Job states and transitions
 
@@ -68,7 +68,7 @@ Self-transitions are never legal.
 | `declined`          | `proposed`                                           | A declined job can be reconsidered.                       |
 | `queued`            | `claiming`, `cancelled`, `failed`                    | A queued job can fail before it claims a slot.            |
 | `claiming`          | `running`, `queued`, `failed`, `cancelled`           | `queued` is the automatic infra retry with backoff.       |
-| `running`           | `pr_open`, `done`, `queued`, `failed`, `cancelled`   | `done` exists only for the phase 1 echo worker stub.      |
+| `running`           | `pr_open`, `done`, `queued`, `failed`, `cancelled`   | `done` is reached by the echo runner only today.          |
 | `pr_open`           | `in_review`, `failed`, `cancelled`                   | The draft pull request is the visible claim.              |
 | `in_review`         | `changes_requested`, `merged`, `failed`, `cancelled` | A review asks for changes or approves.                    |
 | `changes_requested` | `in_review`, `running`, `failed`, `cancelled`        | Feedback can start another run.                           |
@@ -190,27 +190,36 @@ Flat shape: pure decision files sit beside the shell files. See `CONTEXT.md`.
 
 ```
 src/
-  platform/       config.ts, logger.ts; clock, delay, http, git helpers are planned
-  transitions.ts  pure job state machine
-  retry-policy.ts pure backoff and failure-kind routing
-  allocate.ts     pure slot allocation
-  linear-map.ts   pure tracker JSON to WorkItem
-  types.ts        WorkItem, Job, JobState, FailureKind, the interfaces
-  db/             Drizzle schema and migrations: phase 1, not built yet
-  linear.ts       WorkFeed implementation: phase 1, not built yet
-  runner/         transcript.ts; the echo runner stub is phase 1 and not built yet
-  api/            index.ts is a stub until phase 1 completes
-  worker/         index.ts is a stub until phase 1 completes
+  transitions.ts     pure job state machine
+  retry-policy.ts    pure backoff and failure-kind routing
+  allocate.ts        pure slot allocation
+  intake-policy.ts   pure intake rules: proposal, queued, baseline, burst cap
+  linear-map.ts      pure tracker JSON to WorkItem
+  types.ts           WorkItem, Job, JobState, FailureKind, the interfaces
+  intake.ts          one poll: read the tracker, apply the policy, write jobs
+  linear.ts          WorkFeed implementation: the Linear client (read only)
+  jobs-commands.ts   every write a person or the API may make, with allowed source states
+  jobs-queries.ts    every read the API serves: summaries, allowed actions, limits
+  bootstrap.ts       config, logger, pool: shared start-up
+  platform/          config, logger, db pool, delay, git helpers, static file serving
+  db/                Drizzle schema, store, migrations, intake queries
+  runner/            transcript writer and the echo runner (stands in for a real agent)
+  worker/            process-job, the BullMQ queue, the start-up reconciler
+  api/               Hono app, auth middleware, and the contract types
+  composition/       wires config into the API and the worker
+  entries/           the two processes: api.ts and worker.ts
+dashboard/           Vite and React dashboard, built and served by the API
+scripts/             setup-repo.sh, instance-env.sh, and their tests
 tests/
-  fixtures/       synthetic tracker data
-  integration/    needs TEST_DATABASE_URL
+  fixtures/          synthetic tracker data
+  integration/       needs TEST_DATABASE_URL
 deploy/
-  quadlet/        Podman Quadlet templates with @INSTANCE@ placeholders
-  render.sh       renders the templates for one instance and port base
-  render.test.sh  shell test for render.sh
-  systemd/        steward-api@.service and steward-worker@.service
+  quadlet/           Podman Quadlet templates with @INSTANCE@ placeholders
+  render.sh          renders the templates for one instance and port base
+  render.test.sh     shell test for render.sh
+  systemd/           steward-api@.service and steward-worker@.service
 docs/
-  architecture.md, security.md, decisions.md, project-brief.md
+  architecture.md, security.md, decisions.md, project-brief.md, status.md
 ```
 
 The API contract (`src/api/contract.ts`, exporting `AppType`) is the only thing the future
@@ -219,7 +228,7 @@ dashboard imports from `src/`. A dependency-cruiser rule enforces that.
 ## Phase boundaries
 
 1. Phase 1: config, logger, state machine, retry policy, slot allocator, tracker intake,
-   transcripts, Hono API, worker stub, deploy files.
+   transcripts, Hono API, a worker with an echo runner, deploy files.
 2. Phase 2: Podman worker image and launch, headless agent run, timeout and turn caps.
 3. Phase 3: validator (typecheck, lint, tests, diff policy), retries at most 2.
 4. Phase 4: claim with an empty commit and a draft PR, push, validation report, tracker
@@ -228,11 +237,13 @@ dashboard imports from `src/`. A dependency-cruiser rule enforces that.
    sweep.
 6. Phase 6: second agent adapter, box-wide test semaphore, dashboard.
 
-The entry points are stubs today, and there is no build script yet. The systemd units
-therefore expect `dist/` files that do not exist. See `docs/decisions.md`.
+The entry points run (`src/entries/api.ts` and `worker.ts`, through the composition roots), but
+there is no build script yet. The systemd units therefore expect `dist/` files that do not
+exist. See `docs/decisions.md`.
 
 ## Related documents
 
 - [security.md](security.md): secrets, API exposure, per-instance isolation.
 - [decisions.md](decisions.md): dated decision log, verified facts, open items.
 - [project-brief.md](project-brief.md): the design.
+- [status.md](status.md): what works, what is left, and what is still open. Updated as things change.
