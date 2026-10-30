@@ -228,8 +228,9 @@ dashboard imports from `src/`. A dependency-cruiser rule enforces that.
    sweep.
 6. Phase 6: second agent adapter, box-wide test semaphore, dashboard.
 
-The entry points are stubs today, and there is no build script yet. The systemd units
-therefore expect `dist/` files that do not exist. See `docs/decisions.md`.
+The entry points run (`src/entries/api.ts` and `worker.ts`, through the composition roots), but
+there is no build script yet. The systemd units therefore expect `dist/` files that do not
+exist. See `docs/decisions.md`.
 
 ## Related documents
 
