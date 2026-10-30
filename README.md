@@ -257,6 +257,8 @@ share a database, a Redis, or a runs folder between them.
   items, open questions.
 - [docs/project-brief.md](docs/project-brief.md): the design.
 - [docs/status.md](docs/status.md): what works today, what is left, and what is still open.
+- [docs/flows/](docs/flows/README.md): how it works, step by step with the code: the happy path,
+  intake, failures, crash recovery, git, the API, deploy, and the planned phases.
 
 ## Dashboard
 

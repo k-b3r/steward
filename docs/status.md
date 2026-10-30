@@ -6,7 +6,8 @@ it drift: a stale line here is worse than no line.
 
 Last updated: 2026-10-29, after pull requests #22 to #25 (main `60ba869`).
 
-Other documents hold the reasons. This one holds the state.
+Other documents hold the reasons. This one holds the state. [flows/](flows/README.md) explains
+the behaviour step by step, with the code, one flow at a time.
 
 - `project-brief.md`: what steward must do, and the phases.
 - `architecture.md`: how the parts fit.
@@ -113,6 +114,12 @@ touch Linear or GitHub.
 
 - Layering: `jobs-runs.ts` and `jobs-recovery.ts`, so `processJob` and the reconciler stop
   calling the store directly.
+- Two bugs found while documenting the flows (see `flows/README.md`), each test first: the `limit`
+  on `GET /v1/jobs` is validated but never applied; a non-UUID action id answers `500`, not `400`.
+- Reconcile the ten places where `decisions.md`, `architecture.md`, `project-brief.md`, `security.md`
+  or the README disagree with the code (the table in `flows/README.md`).
+- Check `docs/flows` in CI: the excerpts, paths and test titles are verified by hand today, so a
+  code change can make a flow file stale without any check failing.
 - Small fixes: a reason in the body of a 403 Host or Origin error; readable assistant text and
   tool names in the dashboard (not raw JSON); a debug log when a static file cannot be read;
   a test that `redactConfig` leaves `ALLOWED_HOSTS` alone; the `stryker.config.json` mutate glob
