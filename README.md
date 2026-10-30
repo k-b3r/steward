@@ -255,6 +255,7 @@ share a database, a Redis, or a runs folder between them.
 - [docs/decisions.md](docs/decisions.md): dated decision log, verified facts, unverified
   items, open questions.
 - [docs/project-brief.md](docs/project-brief.md): the design.
+- [docs/status.md](docs/status.md): what works today, what is left, and what is still open.
 
 ## Dashboard
 
