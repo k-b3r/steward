@@ -217,7 +217,7 @@ systemctl --user restart steward-worker@personal.service
 ```
 
 Turn it off only after reading the logged JSON. Every phase starts in dry run on the personal
-instance. Ticket intake itself is phase 1 work and is not built yet.
+instance.
 
 ## Tests
 

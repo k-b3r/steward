@@ -53,8 +53,8 @@ interface AgentRunner {
 
 - `WorkFeed` is the only way work enters the system. The tracker adapter implements it.
 - A status reporter (tracker and chat writes) is added in phase 4, when something implements it.
-- `AgentRunner` starts, resumes and cancels one agent run. The echo stub is phase 1 work and
-  is not built yet. The container runner is phase 2.
+- `AgentRunner` starts, resumes and cancels one agent run. The echo runner is built
+  (`src/runner/echo.ts`) and stands in for a real agent. The container runner is phase 2.
 
 ## Job states and transitions
 
@@ -68,7 +68,7 @@ Self-transitions are never legal.
 | `declined`          | `proposed`                                                        | A declined job can be reconsidered.                       |
 | `queued`            | `claiming`, `cancelled`, `failed`                                 | A queued job can fail before it claims a slot.            |
 | `claiming`          | `running`, `queued`, `failed`, `cancelled`                        | `queued` is the automatic infra retry with backoff.       |
-| `running`           | `pr_open`, `done`, `queued`, `failed`, `cancelled`                | `done` exists only for the phase 1 echo worker stub.      |
+| `running`           | `pr_open`, `done`, `queued`, `failed`, `cancelled`                | `done` is reached by the echo runner only today.          |
 | `pr_open`           | `in_review`, `ci_failed`, `failed`, `cancelled`                   | The draft pull request is the visible claim.              |
 | `ci_failed`         | `running`, `in_review`, `failed`, `cancelled`                     | A check failed on this PR. Still ongoing; see below.      |
 | `in_review`         | `changes_requested`, `ci_failed`, `merged`, `failed`, `cancelled` | A review asks for changes or approves.                    |
@@ -77,8 +77,7 @@ Self-transitions are never legal.
 | `done`              | none                                                              | Final.                                                    |
 | `failed`            | `queued`, `cancelled`                                             | Failed means retries are exhausted. Retry reuses the row. |
 | `cancelled`         | `queued`                                                          | A cancelled job can be retried.                           |
-
-Notes:
+| Notes:              |
 
 - `merged` and `done` are final. A retry on either returns 409.
 - A job response carries the ticket's `identifier`, `title` and `url` (a read-only tracker link) and
@@ -257,7 +256,7 @@ dashboard imports from `src/`. A dependency-cruiser rule enforces that.
 ## Phase boundaries
 
 1. Phase 1: config, logger, state machine, retry policy, slot allocator, tracker intake,
-   transcripts, Hono API, worker stub, deploy files.
+   transcripts, Hono API, a worker with an echo runner, deploy files.
 2. Phase 2: Podman worker image and launch, headless agent run, timeout and turn caps.
 3. Phase 3: validator (typecheck, lint, tests, diff policy), retries at most 2.
 4. Phase 4: claim with an empty commit and a draft PR, push, validation report, tracker
