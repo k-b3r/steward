@@ -190,27 +190,36 @@ Flat shape: pure decision files sit beside the shell files. See `CONTEXT.md`.
 
 ```
 src/
-  platform/       config.ts, logger.ts; clock, delay, http, git helpers are planned
-  transitions.ts  pure job state machine
-  retry-policy.ts pure backoff and failure-kind routing
-  allocate.ts     pure slot allocation
-  linear-map.ts   pure tracker JSON to WorkItem
-  types.ts        WorkItem, Job, JobState, FailureKind, the interfaces
-  db/             Drizzle schema and migrations: phase 1, not built yet
-  linear.ts       WorkFeed implementation: phase 1, not built yet
-  runner/         transcript.ts; the echo runner stub is phase 1 and not built yet
-  api/            index.ts is a stub until phase 1 completes
-  worker/         index.ts is a stub until phase 1 completes
+  transitions.ts     pure job state machine
+  retry-policy.ts    pure backoff and failure-kind routing
+  allocate.ts        pure slot allocation
+  intake-policy.ts   pure intake rules: proposal, queued, baseline, burst cap
+  linear-map.ts      pure tracker JSON to WorkItem
+  types.ts           WorkItem, Job, JobState, FailureKind, the interfaces
+  intake.ts          one poll: read the tracker, apply the policy, write jobs
+  linear.ts          WorkFeed implementation: the Linear client (read only)
+  jobs-commands.ts   every write a person or the API may make, with allowed source states
+  jobs-queries.ts    every read the API serves: summaries, allowed actions, limits
+  bootstrap.ts       config, logger, pool: shared start-up
+  platform/          config, logger, db pool, delay, git helpers, static file serving
+  db/                Drizzle schema, store, migrations, intake queries
+  runner/            transcript writer and the echo runner (stands in for a real agent)
+  worker/            process-job, the BullMQ queue, the start-up reconciler
+  api/               Hono app, auth middleware, and the contract types
+  composition/       wires config into the API and the worker
+  entries/           the two processes: api.ts and worker.ts
+dashboard/           Vite and React dashboard, built and served by the API
+scripts/             setup-repo.sh, instance-env.sh, and their tests
 tests/
-  fixtures/       synthetic tracker data
-  integration/    needs TEST_DATABASE_URL
+  fixtures/          synthetic tracker data
+  integration/       needs TEST_DATABASE_URL
 deploy/
-  quadlet/        Podman Quadlet templates with @INSTANCE@ placeholders
-  render.sh       renders the templates for one instance and port base
-  render.test.sh  shell test for render.sh
-  systemd/        steward-api@.service and steward-worker@.service
+  quadlet/           Podman Quadlet templates with @INSTANCE@ placeholders
+  render.sh          renders the templates for one instance and port base
+  render.test.sh     shell test for render.sh
+  systemd/           steward-api@.service and steward-worker@.service
 docs/
-  architecture.md, security.md, decisions.md, project-brief.md
+  architecture.md, security.md, decisions.md, project-brief.md, status.md
 ```
 
 The API contract (`src/api/contract.ts`, exporting `AppType`) is the only thing the future
