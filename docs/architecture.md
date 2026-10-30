@@ -236,3 +236,4 @@ therefore expect `dist/` files that do not exist. See `docs/decisions.md`.
 - [security.md](security.md): secrets, API exposure, per-instance isolation.
 - [decisions.md](decisions.md): dated decision log, verified facts, open items.
 - [project-brief.md](project-brief.md): the design.
+- [status.md](status.md): what works, what is left, and what is still open. Updated as things change.
