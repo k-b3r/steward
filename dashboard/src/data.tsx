@@ -11,20 +11,40 @@ const TOAST_MS = 5000
 const STALE_AFTER_MS = 20_000
 
 type Connection = 'live' | 'reconnecting' | 'stale'
-export type Toast = { id: number; tone: 'ok' | 'bad'; text: string }
+export type Toast = {
+  /** Counter from `nextToast`, unique per toast. Used as the React key and passed back to `dismiss`. */
+  id: number
+  /** `ok` when the call in `run` resolved, `bad` when it threw; picks the check or alert icon. */
+  tone: 'ok' | 'bad'
+  /** The line shown in the toast, for example `TST-1: cancelled` or `TST-1: confirm failed: HTTP 409`. */
+  text: string
+}
 
 type Store = {
+  /** Latest `/v1/jobs` response, replaced whole on every refresh. The only job list the pages read. */
   jobs: JobResponse[]
+  /** Latest `/v1/actions` response, replaced whole on every refresh. */
   actions: ActionResponse[]
+  /** Set on the first successful fetch and never reset; pages show a skeleton until then. */
   loaded: boolean
+  /**
+   * Polling health, computed in the render: `live` while fetches succeed, then `reconnecting`, and
+   * `stale` once 20s pass since the last success. Before any success `lastOk` is 0, so it reads `stale`.
+   */
   connection: Connection
+  /** Message of the last failed refresh, or `null`. Cleared by the next success; shown in the banner. */
   error: string | null
+  /** `Date.now()` bumped once a second, so `relativeTime` labels re-render and `connection` can age. */
   now: number
+  /** Fetches both lists and replaces them. Run on mount, every 5s, after a successful `run`, and by "Retry now". */
   refresh: () => Promise<void>
   /** Runs an API call, refreshes, and reports the outcome as a toast. */
   run: (label: string, call: () => Promise<unknown>) => Promise<boolean>
+  /** Notifications from `run`, newest last; each is removed by `dismiss` after 5s or by its close button. */
   toasts: Toast[]
+  /** Removes one toast by its `id`; a missing id is ignored. */
   dismiss: (id: number) => void
+  /** Drops the API token from sessionStorage and returns to the sign-in form. Called on a 401 too. */
   signOut: () => void
 }
 

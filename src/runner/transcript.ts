@@ -5,14 +5,29 @@ export const TRANSCRIPT_KINDS = ['system', 'assistant', 'tool', 'result', 'error
 export type TranscriptKind = (typeof TRANSCRIPT_KINDS)[number]
 
 export type Envelope = {
+  /** 1-based line number in the job's transcript, monotonic. Also the SSE `id`, so `Last-Event-ID` resumes after it. */
   seq: number
+  /** ISO 8601 UTC string from the writer's clock at append time, for example `2026-01-02T03:04:05.000Z`. */
   ts: string
+  /**
+   * `orchestrator` for lines the orchestrator writes itself, otherwise the agent event's own type.
+   * Every kind is written to `transcript.jsonl`; agent lines also copy the raw line to `raw.jsonl`.
+   */
   kind: TranscriptKind
+  /**
+   * Parsed line body. Orchestrator lines hold `{ msg, ...extra }` with secrets redacted; agent lines
+   * hold the event as the runner sent it, unredacted. `raw.jsonl` is never served by the API.
+   */
   data: unknown
 }
 
 export interface TranscriptWriter {
+  /** Appends one `orchestrator` line whose `data` is `{ msg, ...data }` with secrets and `authorization` redacted. */
   writeOrchestrator(msg: string, data?: Record<string, unknown>): Envelope
+  /**
+   * Appends `rawLine` byte-exact to `raw.jsonl` and `event` to the transcript under `kind`.
+   * `orchestrator` is excluded because those lines come from `writeOrchestrator`.
+   */
   writeAgent(kind: Exclude<TranscriptKind, 'orchestrator'>, event: unknown, rawLine: string): Envelope
 }
 

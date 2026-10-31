@@ -5,7 +5,10 @@ import type { JobResponse } from './api'
 import { useStore } from './data'
 import { Icon } from './ui'
 
-type Pending = { kind: 'decline' | 'cancel' }
+type Pending = {
+  /** Which dialog is open: `decline` collects a required reason, `cancel` only asks to confirm. */
+  kind: 'decline' | 'cancel'
+}
 
 /** The buttons a job offers in its current state. Destructive ones ask first. */
 export function JobActions({ job, size = 'sm' }: { job: JobResponse; size?: 'sm' | 'lg' }) {

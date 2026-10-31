@@ -5,7 +5,12 @@ import { createTranscriptWriter } from './transcript'
 
 const SESSION_PREFIX = 'echo-'
 
-type AgentEvent = { type: 'system' | 'assistant' | 'result'; [key: string]: unknown }
+type AgentEvent = {
+  /** Type of agent event; the echo runner emits only these three, as init, message and success. */
+  type: 'system' | 'assistant' | 'result'
+  /** Other fields the event carries (`subtype`, `sessionId`, `model`, `message`); passed to the transcript unread. */
+  [key: string]: unknown
+}
 
 function systemEvent(sessionId: string): AgentEvent {
   return { type: 'system', subtype: 'init', sessionId, model: 'echo' }
