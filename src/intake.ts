@@ -48,6 +48,11 @@ type IntakeConfig = {
   maxAttempts: number
 }
 
+/**
+ * Everything `runIntakePoll` needs for one poll, assembled by src/composition/worker.ts. No timer lives here:
+ * the caller runs polls and asks `nextPollDelayMs` for the wait after each one, so a single poll can be run
+ * by hand, in a dry run, or in a test with a fake feed, store and queue.
+ */
 export type IntakeDeps = {
   /** The tracker feed. `poll()` is called once and drained fully. */
   feed: WorkFeed
@@ -65,6 +70,11 @@ export type IntakeDeps = {
   store: IntakeStore
 }
 
+/**
+ * What one poll did, returned by `runIntakePoll` and logged as the finished line. The three numbers are never
+ * read back by the caller, and in a dry run they are what would have happened. No other module imports the
+ * type by name yet.
+ */
 export type IntakeCounts = {
   /** Jobs created as `queued` and enqueued; in a dry run, the number that would have been. */
   queued: number

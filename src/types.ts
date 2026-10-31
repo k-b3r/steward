@@ -93,11 +93,23 @@ export type Job = {
   failureKind: FailureKind | null
 }
 
+/**
+ * The read-only tracker port: one `poll` per intake pass, yielding every ticket the feed wants considered.
+ * Nothing writes to a tracker through it, so an intake dry run cannot touch anything outside the database.
+ * src/linear.ts `createLinearClient` is the only implementation; src/intake.test.ts passes a fake.
+ */
 export interface WorkFeed {
   /** Called once per intake poll; the caller drains the whole iterable before it decides. */
   poll(): AsyncIterable<WorkItem>
 }
 
+/**
+ * The port the worker runs an agent through. src/worker/process-job.ts calls `start` once the job reaches
+ * `running`, and `cancelJob` in src/jobs-commands.ts reaches `cancel` through `cancelRun`; `resume` has no
+ * caller in src/ yet. The only implementation is the echo runner in src/runner/echo.ts, wired in
+ * src/bootstrap.ts under TODO(phase-2) where the Claude Code runner belongs. Note that src/worker/
+ * process-job.ts drops the session id `start` returns, so nothing can resume a live job today.
+ */
 export interface AgentRunner {
   /** Called after the job reaches `running`. The returned session id is not stored yet. */
   start(job: Job): Promise<{ sessionId: string }>
@@ -109,8 +121,19 @@ export interface AgentRunner {
 
 /** A pending outside write: drafted here, sent only after a human approves it. */
 export const ACTION_STATUSES = ['pending', 'approved', 'rejected', 'done', 'failed'] as const
+
+/**
+ * The closed set of statuses for a pending outside write. `ACTION_STATUSES` above is the source of truth and
+ * `pending_actions_status_check` in src/db/schema.ts enforces it. Only `pending`, `approved` and `rejected`
+ * are ever written today: nothing sets `done` or `failed`, though the API accepts them as filters.
+ */
 export type ActionStatus = (typeof ACTION_STATUSES)[number]
 
+/**
+ * An outside write the orchestrator drafted and a human has to approve: one `pending_actions` row. Nothing
+ * in src/ drafts one yet, `createAction` in src/db/store.ts is only called from tests. `decideAction` there
+ * moves a row from `pending` to `approved` or `rejected` once, and src/api/app.ts serves and decides them.
+ */
 export type PendingAction = {
   /** Random UUID, the primary key. The API serves it as the action id. */
   id: string

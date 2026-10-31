@@ -49,6 +49,12 @@ const MAX_TRIES = 5
 const BASE_RETRY_DELAY_MS = 1000
 const RETRY_FACTOR = 2
 
+/**
+ * Every outside dependency of the Linear client, passed in so it runs without a network or a timer: `fetch`
+ * is the global one in production and a fake with canned responses in tests, and `sleep` is awaited between
+ * retries. src/composition/worker.ts builds it from `Config`. The key goes only in the Authorization header,
+ * and `secretsOf` in src/bootstrap.ts keeps it out of the logs.
+ */
 export type LinearClientOptions = {
   /** Personal Linear API key. Sent raw in the Authorization header and never put in a log field. */
   apiKey: string
@@ -66,12 +72,27 @@ export type LinearClientOptions = {
   source?: string
 }
 
+/**
+ * What `createLinearClient` returns: the `WorkFeed` port, so intake depends on `WorkFeed` and only this file
+ * names Linear. The extra `poll` member restates the one `WorkFeed` already declares, so the intersection
+ * adds nothing today; nothing writes to Linear through it.
+ */
 export type LinearClient = WorkFeed & {
   poll(): AsyncIterable<WorkItem>
 }
 
+/**
+ * Unknown JSON from a Linear response after the object check, so the reader below can index it by field
+ * name. src/linear-map.ts has its own `JsonObject` for narrowing issue nodes; the two stay separate because
+ * each file checks its own slice of the payload.
+ */
 type JsonObject = Record<string, unknown>
 
+/**
+ * One page of the issues query once the envelope is validated: the raw nodes, each still `unknown` and
+ * mapped on its own so one bad node is skipped rather than dropping the page, plus the cursor to ask for
+ * next. `parsePageEnvelope` throws instead of returning a half-valid page; only the paging loop reads it.
+ */
 type IssuesPage = {
   /** Raw issue nodes of one page. They are mapped one at a time, so a bad node is skipped, not fatal. */
   nodes: unknown[]

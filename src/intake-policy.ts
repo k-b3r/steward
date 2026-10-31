@@ -3,8 +3,18 @@
 
 import type { WorkItem } from './types'
 
+/**
+ * What to do with one feed item. `queue` creates a job in `queued` and enqueues it now; `propose` creates it
+ * in `proposed` and waits for a human to confirm. Local to this file: only `IntakeDecision.action` carries
+ * it, and src/intake.ts maps it to the job state to insert.
+ */
 type IntakeAction = 'queue' | 'propose'
 
+/**
+ * One item the policy says to act on, in feed order. Built by `decideIntake` and consumed by `runIntakePoll`
+ * in src/intake.ts, which inserts the job and enqueues it for `queue`. The `reason` is a log tag only:
+ * nothing reads it back, so it is free to change.
+ */
 type IntakeDecision = {
   /** The feed item, unchanged. */
   item: WorkItem
@@ -14,6 +24,11 @@ type IntakeDecision = {
   reason: string
 }
 
+/**
+ * One item that gets no job this poll, with a log tag saying why. Built by `decideIntake`, logged by
+ * `runIntakePoll` in src/intake.ts and then dropped: a skip is not recorded, so the next poll decides on the
+ * same item again.
+ */
 type IntakeSkip = {
   /** The item that gets no job this poll. */
   item: WorkItem
@@ -21,6 +36,11 @@ type IntakeSkip = {
   reason: string
 }
 
+/**
+ * One poll's outcome, split into what to act on and what to skip, each list in feed order. `decideIntake`
+ * builds it and `runIntakePoll` in src/intake.ts is the only consumer; that function does the database work,
+ * which is what keeps this policy pure.
+ */
 export type IntakeResult = {
   /** Items to act on, in feed order. */
   decisions: IntakeDecision[]

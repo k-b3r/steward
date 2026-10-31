@@ -14,6 +14,11 @@ export class LinearMapError extends Error {
   }
 }
 
+/**
+ * Unknown JSON from a Linear issue node, after the object check, so the readers in this file can pull fields
+ * out one at a time. Local to this file: src/linear.ts keeps its own for the page envelope, and each file
+ * checks only the keys it reads.
+ */
 type JsonObject = Record<string, unknown>
 
 function isJsonObject(value: unknown): value is JsonObject {

@@ -3,6 +3,12 @@
 
 import type { FailureKind } from './types'
 
+/**
+ * The dials `backoffDelayMs` reads: first delay, ceiling, and an optional multiplier and jitter. Production
+ * passes `BACKOFF` from src/bootstrap.ts (30 s doubling, capped at 10 min) through src/worker/process-job.ts
+ * and src/worker/reconcile.ts; tests pass their own values. Omitted `factor` and `jitterRatio` fall back to
+ * `DEFAULT_FACTOR` and `DEFAULT_JITTER_RATIO`, and the bounds are checked on every call.
+ */
 export type BackoffOptions = {
   /** Delay before the first retry, in milliseconds; must be >= 0. Production starts at 30 s. */
   baseMs: number
@@ -17,8 +23,18 @@ export type BackoffOptions = {
 const DEFAULT_FACTOR = 2
 const DEFAULT_JITTER_RATIO = 0.2
 
+/**
+ * The verdict for one failed run: `retry` carries the time it may run again, `fail` says give up. Returned
+ * by `decideAfterFailure` and read by src/worker/process-job.ts and src/worker/reconcile.ts, which move the
+ * row to `queued` with a delay or to `failed`. Nothing acts on a failure except through this value.
+ */
 export type FailureDecision = { action: 'retry'; nextRunAt: Date } | { action: 'fail' }
 
+/**
+ * What `decideAfterFailure` needs to route one failure: the kind, the attempts made, the clock reading and a
+ * random number for the jitter. Local to this file; src/worker/process-job.ts and src/worker/reconcile.ts
+ * build it from the job row and the `BackoffOptions` they were given.
+ */
 type FailureInput = {
   /** Routes the decision: `infra` retries with backoff; `agent` and `setup` fail at once. */
   kind: FailureKind
