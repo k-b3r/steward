@@ -4,35 +4,63 @@ import { allowedActionsFor, type JobAction } from './jobs-commands'
 import type { ActionStatus, FailureKind, Job, JobState, PendingAction } from './types'
 
 export type QueryStore = {
+  /** Raw job row, `Date` fields intact, or null; production is `src/db/store.ts` getJob. */
   getJob(id: string): Promise<Job | null>
+  /** Raw rows, newest first; the caller's `limit` is passed straight through to the store. */
   listJobs(filter?: { state?: JobState; limit?: number }): Promise<Job[]>
+  /** Raw rows, newest first; an unknown `status` returns an empty array instead of an error. */
   listActions(filter?: { status?: string; limit?: number }): Promise<PendingAction[]>
 }
 
-export type QueryDeps = { store: QueryStore }
+export type QueryDeps = {
+  /** The only dependency; production wraps `src/db/store.ts`, tests pass an in-memory fake. */
+  store: QueryStore
+}
 
-/** A job as the API returns it. No tracker external id, dates as ISO strings, actions included. */
+/**
+ * A job as the API returns it: dates as ISO strings and no tracker external id.
+ * `src/api/contract.ts` asserts this shape against `jobResponseSchema` at compile time.
+ */
 export type JobSummary = {
+  /** Job UUID, the primary key; the routes take it as the `:id` path parameter. */
   id: string
+  /** Tracker identifier as people see it, for example `TST-1`; dedupe uses source plus external id, not this. */
   identifier: string
+  /** Tracker name, for example `linear`; intake dedupes on source plus external id, which this shape omits. */
   source: string
+  /** One of the twelve job states; `allowedActions` is derived from it. */
   state: JobState
+  /** Attempts started: 0 before the first `claiming`, +1 on each `claiming`, reset to 0 by a manual retry. */
   attempt: number
+  /** Ceiling for `attempt`, set from `MAX_ATTEMPTS` (default 3) when the job row is created. */
   maxAttempts: number
+  /** Slot number (0..`SLOT_COUNT`-1) and its database while held; null when the job holds no slot. */
   slot: number | null
+  /** ISO time when a delayed retry becomes eligible; null when no retry is scheduled. */
   nextRunAt: string | null
+  /** `infra`, `agent` or `setup`, set when the job enters `failed` or falls back to `queued`; else null. */
   failureKind: FailureKind | null
+  /** From `allowedActionsFor(state)`, so a client never shows a button the command would refuse. */
   allowedActions: JobAction[]
 }
 
+/** A pending action as the API returns it: dates as ISO strings, `payload` left as untyped JSON. */
 export type ActionSummary = {
+  /** Action UUID; approve and reject take it as the `:id` path parameter. */
   id: string
+  /** UUID of the job that drafted this write; no route filters actions by it. */
   jobId: string
+  /** Free text naming the write, for example `comment` or `close_pr`; no CHECK and nothing reads it yet. */
   kind: string
+  /** JSON for the write, shaped by `kind`, for example `{ body: 'hi' }` for a comment; stored as untyped jsonb. */
   payload: unknown
+  /** `pending` until decided, then `approved` or `rejected`; no code writes `done` or `failed` yet. */
   status: ActionStatus
+  /** Text given with the decision, for example a decline reason; null while pending and when none was given. */
   reason: string | null
+  /** ISO time the action was drafted; no update writes it. */
   createdAt: string
+  /** ISO time of the approve or reject; null while the action is still pending. */
   decidedAt: string | null
 }
 
@@ -60,7 +88,7 @@ function toJobSummary(job: Job): JobSummary {
   }
 }
 
-/** One decided action, mapped for the response. */
+/** One pending action mapped for the response, whatever its status. */
 export function toActionSummary(action: PendingAction): ActionSummary {
   return {
     id: action.id,

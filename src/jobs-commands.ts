@@ -6,13 +6,17 @@ import { canTransition, IllegalTransitionError } from './transitions'
 import type { FailureKind, Job, JobState } from './types'
 
 export type CommandStore = {
+  /** Raw job row, or null when the id is unknown; each command turns null into `JobNotFoundError`. */
   getJob(id: string): Promise<Job | null>
+  /** Raw action row, or null; `decideAction` turns null into `ActionNotFoundError`. */
   getAction(id: string): Promise<PendingAction | null>
+  /** Moves the job and appends a job event in one transaction; `now` comes from `deps.clock`, never here. */
   transitionJob(
     id: string,
     to: JobState,
     opts: { now: Date; reason?: string; failureKind?: FailureKind; nextRunAt?: Date | null },
   ): Promise<Job>
+  /** Updates status, reason and decidedAt only while the row is still `pending`; otherwise it throws. */
   decideAction(
     id: string,
     decision: 'approved' | 'rejected',
@@ -21,9 +25,13 @@ export type CommandStore = {
 }
 
 export type CommandDeps = {
+  /** Production is `src/db/store.ts` via `src/composition/api.ts`; tests pass an in-memory fake. */
   store: CommandStore
+  /** Every timestamp comes from here; production is `ctx.clock`, tests return a fixed date. */
   clock: () => Date
+  /** Puts the job id on the BullMQ queue with no delay; `confirm` and `retry` call it after the row is `queued`. */
   enqueue: (jobId: string) => Promise<void>
+  /** Stops a run that may still be working; production is `runner.cancel`, called before the row changes. */
   cancelRun: (jobId: string) => Promise<void>
 }
 

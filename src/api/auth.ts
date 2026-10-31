@@ -5,10 +5,16 @@ import { timingSafeEqual } from 'node:crypto'
 import type { MiddlewareHandler } from 'hono'
 
 export type AuthConfig = {
+  /** The full `API_TOKEN` value (32+ characters); compared with the bearer token in constant time. */
   apiToken: string
+  /** `API_PORT`; the Host header must be exactly `127.0.0.1:<port>` or `localhost:<port>`. */
   port: number
+  /** Exact `Origin` values, from `ALLOWED_ORIGINS`; empty by default, which rejects every cross-origin request. */
   allowedOrigins: readonly string[]
-  /** Extra exact Host values (lowercase) a trusted proxy forwards, e.g. a tailnet name. */
+  /**
+   * Extra exact Host values (lowercase) for a reverse proxy or tunnel, from `ALLOWED_HOSTS`;
+   * empty by default, which leaves only the two loopback names.
+   */
   allowedHosts: readonly string[]
 }
 

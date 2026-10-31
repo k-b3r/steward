@@ -62,12 +62,13 @@ export const actionStatusSchema = z.enum(ACTION_STATUS_VALUES)
 /** @public */
 export const transcriptKindSchema = z.enum(TRANSCRIPT_KIND_VALUES)
 
+/** The five buttons a job can offer; matches `JobAction` in `src/jobs-commands.ts`. */
+const jobActionSchema = z.enum(['confirm', 'decline', 'reconsider', 'retry', 'cancel'])
+
 /**
  * The wire shape of a job, asserted against the read layer's JobSummary at compile time, so the
  * schema and the projection cannot drift.
  */
-const jobActionSchema = z.enum(['confirm', 'decline', 'reconsider', 'retry', 'cancel'])
-
 export const jobResponseSchema = z.object({
   id: z.uuid(),
   source: z.string(),

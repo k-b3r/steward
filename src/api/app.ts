@@ -29,32 +29,50 @@ async function reload(reads: ApiReads, id: string): Promise<JobSummary> {
 
 /** Reads, already shaped for the wire by src/jobs-queries.ts. */
 export type ApiReads = {
+  /** One job in wire shape, or null when the id is unknown; `src/jobs-queries.ts` getJob. */
   getJob(id: string): Promise<JobSummary | null>
+  /** Newest first; `limit` defaults to 100 and must be 1..500; `src/jobs-queries.ts` listJobs. */
   listJobs(filter?: { state?: JobState; limit?: number }): Promise<JobSummary[]>
+  /** Newest first, one status at a time, same 1..500 limit; `src/jobs-queries.ts` listActions. */
   listActions(filter?: { status?: string; limit?: number }): Promise<ActionSummary[]>
 }
 
 export type ApiCommands = {
+  /** `proposed` to `queued`, then the job id goes on the queue; any other state is refused with 409. */
   confirm: (id: string) => Promise<Job>
+  /** `proposed` to `declined`; stores the trimmed reason on the job event and queues nothing. */
   decline: (id: string, reason: string) => Promise<Job>
+  /** `declined` back to `proposed`, so the job can be decided again. */
   reconsider: (id: string) => Promise<Job>
+  /** `failed` or `cancelled` to `queued`, attempt reset to 0, then enqueued; the row is reused. */
   retry: (id: string) => Promise<Job>
+  /** Stops the run first, then moves the job to `cancelled`; allowed from `queued` up to `changes_requested`. */
   cancel: (id: string) => Promise<Job>
+  /** Decides one `pending` action; a second decision on the same action is refused with 409. */
   decideAction: (id: string, decision: 'approved' | 'rejected', reason?: string) => Promise<PendingAction>
 }
 
 type AppConfig = {
+  /** The full `API_TOKEN` (at least 32 characters) a request must carry as its bearer token. */
   apiToken: string
+  /** `API_PORT` (default 3000). The server binds `127.0.0.1` only, and the Host check compares against this port. */
   port: number
+  /** Exact browser origins allowed by `ALLOWED_ORIGINS`; empty by default, which rejects every cross-origin call. */
   allowedOrigins: string[]
+  /** Extra exact Host values a proxy or tunnel forwards, from `ALLOWED_HOSTS`; empty by default. */
   allowedHosts: string[]
 }
 
 export type AppDeps = {
+  /** Read side, wired to `src/jobs-queries.ts` over the Postgres store in `src/composition/api.ts`. */
   reads: ApiReads
+  /** Write side, wired to `src/jobs-commands.ts`; the route only validates input and maps errors. */
   commands: ApiCommands
+  /** Transcript envelopes with `seq > afterSeq`; production reads `transcript.jsonl`, tests return arrays. */
   readLog(jobId: string, afterSeq: number): Promise<Envelope[]>
+  /** Token, port and allow-lists copied from `Config` by `src/composition/api.ts`. */
   config: AppConfig
+  /** Milliseconds between log polls (`LOG_POLL_MS`); production is `platform/delay`, tests pass a stub. */
   sleep: (ms: number) => Promise<void>
 }
 
@@ -67,7 +85,10 @@ const listQuerySchema = z.object({
 const logQuerySchema = z.object({ after: z.coerce.number().int().min(0).optional() })
 const actionFilterSchema = z.object({ status: z.enum(ACTION_STATUSES).optional() })
 
-type ValidationOutcome = { success: boolean }
+type ValidationOutcome = {
+  /** False when the zod schema rejected the input; the route then answers 400 `invalid request`. */
+  success: boolean
+}
 
 function rejectInvalid(result: ValidationOutcome, c: Context): Response | undefined {
   if (!result.success) return c.json({ error: 'invalid request' }, 400)
