@@ -3,14 +3,20 @@ const CIRCULAR = '[Circular]'
 const SENSITIVE_KEYS: ReadonlySet<string> = new Set(['authorization', 'api_key', 'apikey', 'token', 'password'])
 
 export type Logger = {
+  /** One JSON line: `ts`, `level`, `msg`, then the redacted fields. A field named `msg` overrides it. */
   info(msg: string, fields?: Record<string, unknown>): void
+  /** Level `warn`, used for a recovered problem such as a retried Linear request. Same shape as `info`. */
   warn(msg: string, fields?: Record<string, unknown>): void
+  /** Level `error`, used for a failed intake poll. Same shape as `info`; no stack trace is added. */
   error(msg: string, fields?: Record<string, unknown>): void
 }
 
 export type LoggerOptions = {
+  /** Receives each finished line without a newline; production writes it to stdout with one added. */
   write: (line: string) => void
+  /** Source of `ts`, through `toISOString()`. Production passes `() => new Date()`; tests a fixed date. */
   clock: () => Date
+  /** Values replaced by `[REDACTED]` wherever they appear; empty strings are ignored. */
   secrets?: readonly string[]
 }
 

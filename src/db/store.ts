@@ -12,7 +12,12 @@ import { jobEvents, jobs, pendingActions, slots } from './schema'
 
 type JobRow = typeof jobs.$inferSelect
 type PendingActionRow = typeof pendingActions.$inferSelect
-type JobWithSlot = { job: JobRow; slot: number | null }
+type JobWithSlot = {
+  /** The job row as the query returned it; `toJob` maps it to the domain `Job`. */
+  job: JobRow
+  /** Slot number from a left join with `slots`, in 0..slotCount-1; null when the job holds none. */
+  slot: number | null
+}
 
 function toJob(row: JobWithSlot): Job {
   return {

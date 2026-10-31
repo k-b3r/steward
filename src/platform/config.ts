@@ -15,36 +15,60 @@ const SECRET_KEY_SET: ReadonlySet<string> = new Set(SECRET_KEYS)
 const REDACTED = '[REDACTED]'
 
 export type Config = {
+  /** Required. Lowercase, letter first, up to 31 chars: `^[a-z][a-z0-9-]{0,30}$`. Names the BullMQ queue. */
   INSTANCE: string
+  /** Secret. Required Postgres URL; the pool in `src/bootstrap.ts` connects with it. */
   DATABASE_URL: string
+  /** Secret. Optional Postgres URL for integration tests only; an empty string counts as unset. */
   TEST_DATABASE_URL?: string
+  /** Secret. Required Redis URL for BullMQ; must differ from `REDIS_SLOT_URL` or loading throws. */
   REDIS_QUEUE_URL: string
+  /** Secret. Required Redis URL for slot state; validated and redacted, but no code connects to it yet. */
   REDIS_SLOT_URL: string
+  /** Secret. Required Linear API key sent by the worker's feed client. */
   LINEAR_API_KEY: string
+  /** Required Linear team key the feed filters tickets by; not a secret. */
   LINEAR_TEAM_KEY: string
   /** The GitHub account this instance pushes as. Never a token; the token is read at push time. */
   GH_ACCOUNT: string
   /** The author identity the agent commits with inside the container. */
   GIT_USER_NAME: string
+  /** Required email; only `scripts/setup-repo.sh` reads it, to pin the clone's git identity. */
   GIT_USER_EMAIL: string
+  /** Secret. Bearer token of at least 32 characters that every `/v1` request must send. */
   API_TOKEN: string
+  /** Port the API binds on `127.0.0.1`; integer 1024..65535, default 3000. The Host check expects it too. */
   API_PORT: number
+  /** Comma-separated URL origins the Origin check accepts; empty or absent lets in only requests with no Origin. */
   ALLOWED_ORIGINS: string[]
+  /** Comma-separated extra Host values, for example `example.com:8443`; lowercased, empty by default. */
   ALLOWED_HOSTS: string[]
+  /** Most jobs that may run at once; integer 1..16, default 3. Slot numbers run from 0 to `SLOT_COUNT - 1`. */
   SLOT_COUNT: number
+  /** Milliseconds between intake polls; integer of at least 1000, default 30000. */
   POLL_INTERVAL_MS: number
+  /** Most new `In Progress` tickets one poll may queue; the rest become proposals. Integer, min 0, default 2. */
   MAX_ENQUEUE_PER_POLL: number
+  /** Most proposals that may wait for a decision at once, min 1, default 20; at the cap new ones are skipped. */
   MAX_OPEN_PROPOSALS: number
+  /** Age in days for a run-folder sweep; integer of at least 1, default 30. Parsed only: nothing reads it yet. */
   RUN_RETENTION_DAYS: number
+  /** Attempts a new job row starts with, min 1, default 3; copied into each row and used by the retry policy. */
   MAX_ATTEMPTS: number
+  /**
+   * Boolean, default true. The intake poll then logs each decision and writes no job row,
+   * proposal or queue entry. Only while true is the raw Linear response logged.
+   */
   DRY_RUN: boolean
+  /** Absolute path of the git clone the worker creates worktrees from. */
   REPO_PATH: string
   /** Branch a new `agent/*` branch starts from. */
   BASE_BRANCH: string
   /** Built dashboard to serve from the API's origin; unset serves only /v1. */
   DASHBOARD_DIR?: string
-  /** Tracker statuses the orchestrator may move a ticket into. */
+  /** Tracker statuses the orchestrator may move a ticket into. Parsed only: nothing reads it until phase 4. */
   ALLOWED_STATUSES: string[]
+  /** Root of the per-job output folders; default `$HOME/steward-instances/$INSTANCE/runs`, required without HOME. */
   RUNS_DIR: string
 }
 

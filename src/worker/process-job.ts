@@ -18,27 +18,45 @@ import { decideAfterFailure, type BackoffOptions } from '../retry-policy'
 import type { AgentRunner, FailureKind, Job } from '../types'
 
 export type ProcessJobDeps = {
+  /** The Postgres store: every read and state write goes through `src/db/store.ts`. */
   db: Db
+  /** Runs the agent; production uses `createEchoRunner` until phase 2. `transcriptDir` is its output folder. */
   runner: AgentRunner & { transcriptDir(jobId: string): string }
+  /** Current time for timestamps and backoff. Production passes `() => new Date()`; tests a fixed date. */
   clock: () => Date
+  /** One number in [0, 1) for infra backoff jitter. Production passes `Math.random`; tests a constant. */
   rand: () => number
+  /** Settings copied from `Config`, plus the backoff limits from `src/bootstrap.ts`. */
   config: {
+    /** Most jobs that may run at once; `acquireSlot` hands out 0 to `slotCount - 1`. */
     slotCount: number
+    /** The clone the worktrees are added to, from `REPO_PATH`. */
     repoPath: string
+    /** Parent of each job folder, so the worktree sits at `<runsDir>/<jobId>/worktree`. */
     runsDir: string
+    /** Delays for a retry; production passes `BACKOFF`, which starts at 30 s and doubles to 10 min. */
     backoff: BackoffOptions
   }
+  /** Delivery only: puts the job id back on the queue with an optional delay. Production is BullMQ. */
   queue: { enqueue(jobId: string, delayMs?: number): Promise<void> }
+  /** The helpers in `src/platform/git.ts`; tests pass fakes that record calls instead of running git. */
   git: {
+    /** `git worktree add`, creating the branch from `baseRef`, or reusing an existing branch as it is. */
     createWorktree: typeof createWorktree
+    /** Adds a worktree for an existing branch, so a retry continues the commits already on it. */
     attachWorktree: typeof attachWorktree
+    /** True when the local branch exists; this decides between attach and create. */
     branchExists: typeof branchExists
+    /** Fetches the base branch from `origin` first, so a new branch starts from what is there now. */
     fetchBase: typeof fetchBase
+    /** Merges `origin/<base>` in and returns `conflict` rather than throwing, leaving the markers. */
     mergeIntoWorktree: typeof mergeIntoWorktree
+    /** Removes the worktree and is a no-op when it is gone, so cleanup is safe on every path. */
     removeWorktree: typeof removeWorktree
   }
   /** Base branch a new `agent/*` branch starts from. Defaults to main. */
   baseBranch?: string
+  /** One line per outcome; production passes the JSON logger's `info`, tests a collector. */
   log?: (msg: string) => void
 }
 

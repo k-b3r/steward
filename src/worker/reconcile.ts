@@ -9,27 +9,40 @@ import type { BackoffOptions } from '../retry-policy'
 import type { Job } from '../types'
 
 export type ReconcileQueue = {
+  /** True while a waiting, delayed, prioritized or active record exists for the job. */
   hasJob(jobId: string): Promise<boolean>
+  /** Adds the job with an optional delay; a no-op when a pending record already exists for it. */
   enqueue(jobId: string, delayMs?: number): Promise<void>
 }
 
 export type ReconcileDeps = {
+  /** The Postgres store the reconciler reads jobs from and writes states to. */
   db: Db
+  /** The job queue; production passes the BullMQ queue, tests a fake that records enqueues. */
   queue: ReconcileQueue
+  /** Whether a live worker still owns the job; production passes `() => false`, as the worker just restarted. */
   isWorkerAlive(jobId: string): Promise<boolean>
 }
 
 export type ReconcileOptions = {
+  /** The restart time, used for every transition and backoff delay in this run. */
   now: Date
+  /** Number in [0, 1) for backoff jitter; production passes `Math.random`, tests a constant. */
   rand: () => number
+  /** Retry delays; production passes `BACKOFF` from `src/bootstrap.ts`, tests shorter values. */
   backoff: BackoffOptions
+  /** Total slots, checked by `assertSlotCount`: an integer in 1..16. Must match `SLOT_COUNT`. */
   slotCount: number
 }
 
 export type ReconcileReport = {
+  /** Job ids that were `queued` in Postgres but missing from the queue, and are now enqueued. */
   requeued: string[]
+  /** Job ids that a dead worker left in a slot-holding state, now `queued` with a backoff delay. */
   retried: string[]
+  /** Job ids a dead worker left behind with no attempt left, now `failed` with kind `infra`. */
   failed: string[]
+  /** Slot numbers (0 to `slotCount - 1`) whose rows were deleted because no job holds them. */
   slotsFreed: number[]
 }
 

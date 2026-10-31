@@ -5,7 +5,10 @@ import { randomUUID } from 'node:crypto'
 
 import { Queue, Worker } from 'bullmq'
 
-type JobData = { id: string }
+type JobData = {
+  /** The steward job id, a `jobs` row id. The BullMQ job id is this value plus a UUID suffix. */
+  id: string
+}
 
 const JOB_NAME = 'job'
 const KEEP_COMPLETED = { age: 60 * 60, count: 100 }
@@ -14,9 +17,13 @@ const PENDING_STATES = ['waiting', 'delayed', 'prioritized'] as const
 const PRESENT_STATES = [...PENDING_STATES, 'active'] as const
 
 type JobQueue = {
+  /** Adds the id with an optional delay; a no-op when a waiting, delayed or prioritized record exists. */
   enqueue(jobId: string, delayMs?: number): Promise<void>
+  /** True while a record exists in waiting, delayed, prioritized or active, so a running job counts. */
   hasJob(jobId: string): Promise<boolean>
+  /** Registers the handler and waits until the worker is ready; throws on a second call or after close. */
   startWorker(handler: (jobId: string) => Promise<void>): Promise<void>
+  /** Closes the worker, then the queue. A second call is a no-op. */
   close(): Promise<void>
 }
 

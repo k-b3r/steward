@@ -33,7 +33,12 @@ export function resolveAssetPath(root: string, requestPath: string): string | nu
   return resolved
 }
 
-export type StaticFile = { body: ArrayBuffer; contentType: string }
+export type StaticFile = {
+  /** The file's bytes as a standalone ArrayBuffer, which `Response` accepts as a body. */
+  body: ArrayBuffer
+  /** Value for the `Content-Type` header, from the extension; unknown ones become `application/octet-stream`. */
+  contentType: string
+}
 
 /** Reads a file under `root`; null when it is missing, a directory, or outside the root. */
 export function readStaticFile(root: string, requestPath: string): StaticFile | null {
