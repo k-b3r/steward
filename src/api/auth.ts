@@ -4,6 +4,15 @@ import { timingSafeEqual } from 'node:crypto'
 
 import type { MiddlewareHandler } from 'hono'
 
+/**
+ * What the local guard needs to refuse a request before any route runs. All four fields come from
+ * the validated `Config` (`API_TOKEN`, `API_PORT`, `ALLOWED_ORIGINS`, `ALLOWED_HOSTS`), copied by
+ * `src/composition/api.ts`; `src/entries/api.ts` binds the server to `127.0.0.1` on that port. A Host
+ * other than `127.0.0.1:<port>`, `localhost:<port>` or one of the extra values is refused with 403,
+ * and so is an unlisted Origin; a missing or wrong bearer token is refused with 401.
+ * Exported, but `createAuthMiddleware` is the only consumer: `src/api/app.ts` passes its own
+ * `AppConfig`, which carries the same four fields.
+ */
 export type AuthConfig = {
   /** The full `API_TOKEN` value (32+ characters); compared with the bearer token in constant time. */
   apiToken: string

@@ -37,6 +37,13 @@ export type ApiReads = {
   listActions(filter?: { status?: string; limit?: number }): Promise<ActionSummary[]>
 }
 
+/**
+ * The write side of the HTTP API: one function per person-facing command, each returning the row it
+ * changed (a job, except `decideAction`, which returns the action). The routes below validate the
+ * request, call one of these and turn the thrown errors into status codes. `src/composition/api.ts`
+ * backs the port with `src/jobs-commands.ts` over Postgres, the queue and the runner; the app itself
+ * opens no database and no queue, and `src/api/app.test.ts` passes fakes with a fixed clock.
+ */
 export type ApiCommands = {
   /** `proposed` to `queued`, then the job id goes on the queue; any other state is refused with 409. */
   confirm: (id: string) => Promise<Job>
@@ -52,6 +59,12 @@ export type ApiCommands = {
   decideAction: (id: string, decision: 'approved' | 'rejected', reason?: string) => Promise<PendingAction>
 }
 
+/**
+ * The slice of `Config` (`src/platform/config.ts`) the HTTP app needs, renamed to camelCase: the
+ * token, the port and the two allow-lists, nothing else. `src/composition/api.ts` copies those four
+ * fields out of the validated config, so the rest of it (database URL, tracker key, repo paths)
+ * never reaches this layer. Local to this file: only `AppDeps.config` mentions it.
+ */
 type AppConfig = {
   /** The full `API_TOKEN` (at least 32 characters) a request must carry as its bearer token. */
   apiToken: string
@@ -63,6 +76,12 @@ type AppConfig = {
   allowedHosts: string[]
 }
 
+/**
+ * Everything `createApp` needs from the outside world: the read port, the write port, a transcript
+ * reader, four config fields and a sleep. Nothing here opens Postgres, Redis, a queue or a job
+ * folder, which is why the routes can be tested without them: `src/composition/api.ts` passes the
+ * real implementations, `src/api/app.test.ts` passes fakes, a fixed date and a no-op sleep.
+ */
 export type AppDeps = {
   /** Read side, wired to `src/jobs-queries.ts` over the Postgres store in `src/composition/api.ts`. */
   reads: ApiReads
@@ -85,6 +104,12 @@ const listQuerySchema = z.object({
 const logQuerySchema = z.object({ after: z.coerce.number().int().min(0).optional() })
 const actionFilterSchema = z.object({ status: z.enum(ACTION_STATUSES).optional() })
 
+/**
+ * The one bit of a `@hono/zod-validator` result this file reads: whether the schema accepted the
+ * path, query or body. The library's hook also hands over `data`, `error` and `target`; `rejectInvalid`
+ * looks only at `success`, and on false answers 400 `invalid request`, so the zod issue list is never
+ * echoed. Local to this file: `rejectInvalid` is its only user.
+ */
 type ValidationOutcome = {
   /** False when the zod schema rejected the input; the route then answers 400 `invalid request`. */
   success: boolean

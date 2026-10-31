@@ -3,6 +3,14 @@
 import { allowedActionsFor, type JobAction } from './jobs-commands'
 import type { ActionStatus, FailureKind, Job, JobState, PendingAction } from './types'
 
+/**
+ * The read port the HTTP layer sits on: raw job and action rows with their `Date` fields intact, as
+ * the store returns them. `src/composition/api.ts` binds it to `src/db/store.ts` over the Postgres
+ * pool, and the functions in this file turn its rows into `JobSummary` and `ActionSummary`, so the
+ * app never sees a database and tests pass an in-memory fake. Both list methods return newest first;
+ * an unknown `status` yields an empty list instead of an error. `limit` is part of this port and is
+ * checked in this file, but `src/db/store.ts` ignores it today, so a small limit returns every row.
+ */
 export type QueryStore = {
   /** Raw job row, `Date` fields intact, or null; production is `src/db/store.ts` getJob. */
   getJob(id: string): Promise<Job | null>

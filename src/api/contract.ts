@@ -115,6 +115,14 @@ export const rejectBodySchema = z.object({
   reason: z.string().trim().min(1).optional(),
 })
 
+/**
+ * One job as it crosses the wire: the body of every job response, parsed by `dashboard/src/api.ts`
+ * with `jobResponseSchema`. Dates are ISO strings (`nextRunAt`), and `allowedActions` follows from
+ * the state, so a client never offers a button the command would refuse. Deliberately absent: the
+ * tracker source id, the stored item (title, body, url) and the created and updated times. Below,
+ * `_jobResponseMatchesReadLayer` assigns `jobResponseSchema` to `z.ZodType<JobSummary>`, so `tsc`
+ * fails if the schema's output stops covering a field of the read layer's `JobSummary`.
+ */
 export type JobResponse = z.infer<typeof jobResponseSchema>
 
 // A mismatch here is a type error: change both together.
@@ -122,6 +130,14 @@ const _jobResponseMatchesReadLayer: z.ZodType<JobSummary> = jobResponseSchema
 const _actionResponseMatchesReadLayer: z.ZodType<ActionSummary> = actionResponseSchema
 void _jobResponseMatchesReadLayer
 void _actionResponseMatchesReadLayer
+/**
+ * One outside write as it crosses the wire: the body of `/v1/actions` and of the approve and reject
+ * routes, parsed by `dashboard/src/api.ts` with `actionResponseSchema`. Dates are ISO strings and
+ * `payload` stays untyped JSON, since its shape depends on `kind`. Nothing names who decided (the
+ * table has no such column) and nothing carries the job's ticket key; the client gets `jobId` only.
+ * `_actionResponseMatchesReadLayer` assigns the schema to `z.ZodType<ActionSummary>`, so `tsc` fails
+ * if the output stops covering a field of `ActionSummary`.
+ */
 export type ActionResponse = z.infer<typeof actionResponseSchema>
 
 // `Envelope` is structurally the same as `TranscriptEnvelope`.

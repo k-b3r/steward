@@ -5,6 +5,13 @@ import type { PendingAction } from './types'
 import { canTransition, IllegalTransitionError } from './transitions'
 import type { FailureKind, Job, JobState } from './types'
 
+/**
+ * The write port the commands below sit on: load a job or an action, then change it. Which move a
+ * person may ask for is decided in this file; the store applies the write in one transaction, checks
+ * the state machine edge again and derives `attempt`, `failureKind`, `nextRunAt` and the slot.
+ * `src/composition/api.ts` binds it, like `QueryStore`, to `src/db/store.ts` over the Postgres pool.
+ * Every method takes `now` as an argument, so the store never reads a clock.
+ */
 export type CommandStore = {
   /** Raw job row, or null when the id is unknown; each command turns null into `JobNotFoundError`. */
   getJob(id: string): Promise<Job | null>
@@ -24,6 +31,13 @@ export type CommandStore = {
   ): Promise<PendingAction>
 }
 
+/**
+ * What every command in this file needs from outside: the store, the clock, the queue and the
+ * runner. The three side effects are injected so a command decides when to enqueue and when to stop
+ * a run, and so nothing here imports BullMQ, a runner or a real clock. `src/composition/api.ts`
+ * passes `ctx.clock`, `queue.enqueue` and `runner.cancel`; the tests pass a fixed date and record
+ * the calls.
+ */
 export type CommandDeps = {
   /** Production is `src/db/store.ts` via `src/composition/api.ts`; tests pass an in-memory fake. */
   store: CommandStore
