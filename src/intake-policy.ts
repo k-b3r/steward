@@ -6,28 +6,40 @@ import type { WorkItem } from './types'
 type IntakeAction = 'queue' | 'propose'
 
 type IntakeDecision = {
+  /** The feed item, unchanged. */
   item: WorkItem
+  /** `queue` creates a queued job and enqueues it; `propose` waits for a human confirm first. */
   action: IntakeAction
+  /** Short tag the caller logs: the item's status name, `baseline` or `burst over cap`. */
   reason: string
 }
 
 type IntakeSkip = {
+  /** The item that gets no job this poll. */
   item: WorkItem
+  /** Short tag the caller logs: `already has a job`, `proposal limit` or `unknown status`. */
   reason: string
 }
 
 export type IntakeResult = {
+  /** Items to act on, in feed order. */
   decisions: IntakeDecision[]
+  /** Items that get no job, also in feed order. */
   skipped: IntakeSkip[]
 }
 
 export type IntakeInput = {
+  /** One poll's items, in feed order; both output lists keep that order. */
   items: WorkItem[]
+  /** External ids that already have a job for this source, from `knownExternalIds`. */
   knownExternalIds: ReadonlySet<string>
   /** False on the first poll for a source, which turns In Progress items into the baseline. */
   sourceHasJobs: boolean
+  /** Existing `proposed` jobs across all sources, from `countOpenProposals`. */
   openProposals: number
+  /** Cap on open proposals; proposals made earlier in this poll count towards it too. */
   maxOpenProposals: number
+  /** Above this many new In Progress items, every one of them becomes a proposal. */
   maxEnqueuePerPoll: number
 }
 

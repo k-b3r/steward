@@ -50,13 +50,19 @@ const BASE_RETRY_DELAY_MS = 1000
 const RETRY_FACTOR = 2
 
 export type LinearClientOptions = {
+  /** Personal Linear API key. Sent raw in the Authorization header and never put in a log field. */
   apiKey: string
+  /** Team key the query filters on, e.g. `TST`. Sent as the `$teamKey` variable. */
   teamKey: string
+  /** Injected `fetch`. Production passes the global one; tests pass a fake with canned responses. */
   fetch: typeof fetch
+  /** Gets the first page's raw response at info, and each retry or skipped malformed node at warn. */
   logger: Logger
+  /** Awaited between retries with the computed delay. Tests pass a recorder to inspect the delays. */
   sleep: (ms: number) => Promise<void>
+  /** Declared but never read: the retry delay has no jitter, only `retry-after` or a fixed step. */
   rand: () => number
-  /** Defaults to "linear". */
+  /** Name written into `WorkItem.source` and every log field. Defaults to "linear". */
   source?: string
 }
 
@@ -67,7 +73,9 @@ export type LinearClient = WorkFeed & {
 type JsonObject = Record<string, unknown>
 
 type IssuesPage = {
+  /** Raw issue nodes of one page. They are mapped one at a time, so a bad node is skipped, not fatal. */
   nodes: unknown[]
+  /** `endCursor` while `hasNextPage` is true; null ends the paging loop. */
   nextCursor: string | null
 }
 

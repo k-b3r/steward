@@ -4,7 +4,9 @@
 import type { FailureKind } from './types'
 
 export type BackoffOptions = {
+  /** Delay before the first retry, in milliseconds; must be >= 0. Production starts at 30 s. */
   baseMs: number
+  /** Ceiling on any delay, in milliseconds, applied after jitter; must be >= `baseMs`. Production: 10 min. */
   maxMs: number
   /** Multiplier per attempt. Defaults to 2. */
   factor?: number
@@ -18,13 +20,17 @@ const DEFAULT_JITTER_RATIO = 0.2
 export type FailureDecision = { action: 'retry'; nextRunAt: Date } | { action: 'fail' }
 
 type FailureInput = {
+  /** Routes the decision: `infra` retries with backoff; `agent` and `setup` fail at once. */
   kind: FailureKind
   /** Attempts made so far, including the one that just failed. */
   attempt: number
+  /** Retries stop once `attempt` reaches this. Must be an integer >= 1, and is per job, not global. */
   maxAttempts: number
+  /** Clock reading the caller supplies; `nextRunAt` is computed from it. */
   now: Date
   /** Uniform random in [0, 1), supplied by the caller. */
   rand: number
+  /** Delays and cap passed on to `backoffDelayMs`; production passes `BACKOFF` from bootstrap. */
   backoff: BackoffOptions
 }
 

@@ -11,36 +11,56 @@ const MAX_POLL_DELAY_MS = 10 * 60_000
 const JITTER_RATIO = 0.1
 
 export type IntakeStore = {
+  /**
+   * Inserts the job row and its first `job_events` row in one transaction. `created` is false when a
+   * job for this source and external id already exists; the existing row comes back instead.
+   */
   insertJob(
     db: Db,
     input: { item: WorkItem; state: 'proposed' | 'queued'; maxAttempts: number; now: Date },
   ): Promise<{ job: Job; created: boolean }>
+  /** External ids that already have a job for this source; the policy skips those items. */
   knownExternalIds(db: Db, source: string): Promise<Set<string>>
+  /** Number of job rows for this source. 0 tells the policy that this poll is the baseline. */
   countJobsForSource(db: Db, source: string): Promise<number>
+  /** Count of `proposed` jobs across every source, not just this one, for the proposal cap. */
   countOpenProposals(db: Db): Promise<number>
 }
 
 type IntakeConfig = {
+  /** When true, log the decisions and counts but insert no job and enqueue nothing. Defaults to true. */
   dryRun: boolean
+  /** `MAX_ENQUEUE_PER_POLL`, default 2. More new In Progress items than this turns them all into proposals. */
   maxEnqueuePerPoll: number
+  /** `MAX_OPEN_PROPOSALS`, default 20 and at least 1; proposals made in this poll count too. */
   maxOpenProposals: number
+  /** `MAX_ATTEMPTS`, default 3 and at least 1; copied into each new job row. */
   maxAttempts: number
 }
 
 export type IntakeDeps = {
+  /** The tracker feed. `poll()` is called once and drained fully. */
   feed: WorkFeed
+  /** Drizzle handle, passed unchanged to every store call. */
   db: Db
+  /** Gets one info line per decision and per skip, plus a finished line with the counts. */
   logger: Logger
+  /** Only `enqueue` is used, once per newly created `queued` job. Dry runs never call it. */
   queue: { enqueue(jobId: string): Promise<void> }
+  /** Parsed worker config: the caps and the dry-run flag, as validated by platform/config. */
   config: IntakeConfig
+  /** One clock reading for the whole poll; it becomes each new row's `created_at` and event time. */
   now: Date
   /** The real functions come from db/store and db/intake-queries; unit tests pass fakes. */
   store: IntakeStore
 }
 
 export type IntakeCounts = {
+  /** Jobs created as `queued` and enqueued; in a dry run, the number that would have been. */
   queued: number
+  /** Jobs created as `proposed`; in a dry run, the number that would have been. */
   proposed: number
+  /** Skipped items; outside a dry run it also counts inserts that lost the race for the same issue. */
   skipped: number
 }
 
