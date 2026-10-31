@@ -33,6 +33,11 @@ export function resolveAssetPath(root: string, requestPath: string): string | nu
   return resolved
 }
 
+/**
+ * One dashboard file read from disk and ready to be a `Response` body: `readStaticFile` builds it and
+ * `staticResponse` serves it. Exported, but nothing outside this file names the type yet; the API
+ * calls `staticResponse` directly.
+ */
 export type StaticFile = {
   /** The file's bytes as a standalone ArrayBuffer, which `Response` accepts as a body. */
   body: ArrayBuffer

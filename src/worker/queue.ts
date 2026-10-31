@@ -5,6 +5,12 @@ import { randomUUID } from 'node:crypto'
 
 import { Queue, Worker } from 'bullmq'
 
+/**
+ * The BullMQ payload for one delivery: the steward job id, a `jobs` row id, and nothing else, because
+ * Postgres holds the state. The BullMQ job id is `${id}_${uuid}` rather than this value, since BullMQ
+ * drops an add whose id already exists and a retry is enqueued from inside the handler of the job it
+ * retries.
+ */
 type JobData = {
   /** The steward job id, a `jobs` row id. The BullMQ job id is this value plus a UUID suffix. */
   id: string
@@ -16,6 +22,12 @@ const KEEP_FAILED = { age: 24 * 60 * 60, count: 100 }
 const PENDING_STATES = ['waiting', 'delayed', 'prioritized'] as const
 const PRESENT_STATES = [...PENDING_STATES, 'active'] as const
 
+/**
+ * The queue the worker process uses end to end, built by `createJobQueue` and handed to the
+ * composition roots: deliver an id, look one up, start the consumer, close. Local to this file, and
+ * deliberately wider than the shapes `src/worker/reconcile.ts` and `src/worker/process-job.ts`
+ * accept, so only the composition root can start a worker or close the queue.
+ */
 type JobQueue = {
   /** Adds the id with an optional delay; a no-op when a waiting, delayed or prioritized record exists. */
   enqueue(jobId: string, delayMs?: number): Promise<void>

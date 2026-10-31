@@ -114,6 +114,12 @@ export async function attachWorktree(opts: { repoPath: string; worktreePath: str
   await runGit(['-C', opts.repoPath, 'worktree', 'add', opts.worktreePath, opts.branch])
 }
 
+/**
+ * What `mergeIntoWorktree` did: `merged` when it made a merge commit, `up-to-date` when `ref` was
+ * already an ancestor, and `conflict` when git stopped with markers left in the working tree.
+ * `src/worker/process-job.ts` is the only caller. It turns `conflict` into an `agent` failure, and
+ * because the worktree is removed on every path the markers do not reach the runner yet.
+ */
 export type MergeOutcome = 'merged' | 'up-to-date' | 'conflict'
 
 /**

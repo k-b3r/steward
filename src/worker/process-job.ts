@@ -17,6 +17,12 @@ import type {
 import { decideAfterFailure, type BackoffOptions } from '../retry-policy'
 import type { AgentRunner, FailureKind, Job } from '../types'
 
+/**
+ * Everything `processJob` needs from the outside world, assembled once by the composition root
+ * (`src/composition/worker.ts`). The git helpers, the queue, the clock and `rand` are ports: tests
+ * pass fakes that record calls, so a run touches neither git nor Redis and is deterministic.
+ * `config` carries only the settings one run needs, copied from `Config`.
+ */
 export type ProcessJobDeps = {
   /** The Postgres store: every read and state write goes through `src/db/store.ts`. */
   db: Db

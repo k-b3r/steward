@@ -10,8 +10,23 @@ import { ACTION_STATUSES } from '../types'
 import type { ActionStatus } from '../types'
 import { jobEvents, jobs, pendingActions, slots } from './schema'
 
+/**
+ * The `jobs` row as drizzle returns it, a `$inferSelect` result that still carries the stored `item`
+ * JSON and the `createdAt`/`updatedAt` timestamps. It is not the public `Job`: only `toJob` maps it,
+ * and no exported function here hands a row out.
+ */
 type JobRow = typeof jobs.$inferSelect
+/**
+ * The `pending_actions` row as drizzle returns it, a `$inferSelect` result with `payload` and the
+ * decision timestamps as stored. Only `toPendingAction` maps it to the public `PendingAction`, and no
+ * exported function here hands a row out.
+ */
 type PendingActionRow = typeof pendingActions.$inferSelect
+/**
+ * A job row paired with its slot number from a left join with `slots`, the shape every read here
+ * selects: the slot is no column on `jobs`. `slot` is null when the job holds none, and `toJob`
+ * copies it to `Job.slot`.
+ */
 type JobWithSlot = {
   /** The job row as the query returned it; `toJob` maps it to the domain `Job`. */
   job: JobRow

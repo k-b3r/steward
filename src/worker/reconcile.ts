@@ -8,6 +8,12 @@ import { decideAfterFailure } from '../retry-policy'
 import type { BackoffOptions } from '../retry-policy'
 import type { Job } from '../types'
 
+/**
+ * The two queue operations a reconcile pass needs, and no more. Production passes the `JobQueue` that
+ * `createJobQueue` returns, which satisfies this structurally; the integration tests pass a
+ * set-backed fake. Narrower than `JobQueue` on purpose: a pass may deliver and look up, but only the
+ * composition root starts the consumer or closes the queue.
+ */
 export type ReconcileQueue = {
   /** True while a waiting, delayed, prioritized or active record exists for the job. */
   hasJob(jobId: string): Promise<boolean>
@@ -15,6 +21,12 @@ export type ReconcileQueue = {
   enqueue(jobId: string, delayMs?: number): Promise<void>
 }
 
+/**
+ * The outside world one pass reads and writes: the store, the queue and the liveness probe, all
+ * supplied by the composition root. `isWorkerAlive` is a function rather than a flag because a later
+ * multi-worker deployment could ask for real; production answers `false` today, since this process
+ * is the only worker on the instance.
+ */
 export type ReconcileDeps = {
   /** The Postgres store the reconciler reads jobs from and writes states to. */
   db: Db
@@ -24,6 +36,12 @@ export type ReconcileDeps = {
   isWorkerAlive(jobId: string): Promise<boolean>
 }
 
+/**
+ * The run-wide inputs of one pass: a single clock reading for every transition and delay, one jitter
+ * value per retried job, the backoff limits, and the slot count. That count must equal `SLOT_COUNT`:
+ * `assertSlotCount` rejects anything outside 1..16 before the pass writes. Tests pass a constant
+ * `rand` and shorter backoff limits.
+ */
 export type ReconcileOptions = {
   /** The restart time, used for every transition and backoff delay in this run. */
   now: Date
@@ -35,6 +53,12 @@ export type ReconcileOptions = {
   slotCount: number
 }
 
+/**
+ * What one pass changed, returned by `reconcile`. The composition root logs it as the fields of its
+ * `Reconciled on startup` line and the integration tests assert on it; nothing else reads these
+ * arrays. A job id appears in at most one of the three id lists. If any step fails, the pass throws
+ * one `AggregateError` instead, so a partial report is never returned.
+ */
 export type ReconcileReport = {
   /** Job ids that were `queued` in Postgres but missing from the queue, and are now enqueued. */
   requeued: string[]

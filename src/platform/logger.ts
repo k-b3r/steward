@@ -2,6 +2,12 @@ const REDACTED = '[REDACTED]'
 const CIRCULAR = '[Circular]'
 const SENSITIVE_KEYS: ReadonlySet<string> = new Set(['authorization', 'api_key', 'apikey', 'token', 'password'])
 
+/**
+ * The logging interface the rest of `src/` takes, built by `createLogger` and passed down from the
+ * composition roots. Each call writes one JSON line whose message and string fields are redacted
+ * against the secrets the logger was given, and whose credential-named keys are always `[REDACTED]`.
+ * Nothing filters by level: every call writes.
+ */
 export type Logger = {
   /** One JSON line: `ts`, `level`, `msg`, then the redacted fields. A field named `msg` overrides it. */
   info(msg: string, fields?: Record<string, unknown>): void
@@ -11,6 +17,11 @@ export type Logger = {
   error(msg: string, fields?: Record<string, unknown>): void
 }
 
+/**
+ * What `createLogger` cannot read for itself: the sink, the clock and the secret values. All three are
+ * injected, which is why a test captures lines in an array and stamps them with a fixed date, while
+ * production writes each line to stdout with `() => new Date()`.
+ */
 export type LoggerOptions = {
   /** Receives each finished line without a newline; production writes it to stdout with one added. */
   write: (line: string) => void
@@ -20,6 +31,10 @@ export type LoggerOptions = {
   secrets?: readonly string[]
 }
 
+/**
+ * The severity a line can carry, from least to most serious, written as its `level` field. Local to
+ * this file: `Logger` exposes one method per value, so a caller cannot invent another level.
+ */
 type LogLevel = 'info' | 'warn' | 'error'
 
 function redactText(value: string, secrets: readonly string[]): string {

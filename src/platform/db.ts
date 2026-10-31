@@ -6,6 +6,12 @@ import pg from 'pg'
 
 import * as schema from '../db/schema'
 
+/**
+ * The drizzle handle over the `pg` pool, bound to the schema in `src/db/schema.ts`. `createDb` builds
+ * it, and callers pass it unchanged into `src/db/store.ts` or `src/db/intake-queries.ts` instead of
+ * running their own queries. The pool behind it is closed by the composition root with `closePool`.
+ * No test fakes this handle: the integration suites open a real Postgres.
+ */
 export type Db = NodePgDatabase<typeof schema>
 
 export function createPool(url: string): pg.Pool {

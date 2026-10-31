@@ -14,6 +14,13 @@ const SECRET_KEYS = [
 const SECRET_KEY_SET: ReadonlySet<string> = new Set(SECRET_KEYS)
 const REDACTED = '[REDACTED]'
 
+/**
+ * The parsed instance settings: the value `loadConfig` returns, never the raw environment. Every value
+ * is checked, coerced and defaulted in that loader, so an integer field is already a number and a list
+ * field is already an array. Secrets are accepted only from the environment, and a secret key in the
+ * JSON config file throws; the loader also refuses a `REDIS_QUEUE_URL` equal to `REDIS_SLOT_URL`.
+ * Pass it to a composition root, and print it through `redactConfig` rather than raw.
+ */
 export type Config = {
   /** Required. Lowercase, letter first, up to 31 chars: `^[a-z][a-z0-9-]{0,30}$`. Names the BullMQ queue. */
   INSTANCE: string
