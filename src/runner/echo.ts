@@ -5,6 +5,13 @@ import { createTranscriptWriter } from './transcript'
 
 const SESSION_PREFIX = 'echo-'
 
+/**
+ * The shape the echo runner fakes so the transcript has agent lines before a real agent exists: it
+ * writes one `system`, one `assistant` and one `result` event when a run starts, and one `assistant`
+ * event on resume, enough to exercise the writer, the SSE tail and the dashboard log. `type` mirrors
+ * the kind the runner passes to `writeAgent` as a separate argument; every other field goes to the
+ * envelope `data` unread. Phase 2 replaces it.
+ */
 type AgentEvent = {
   /** Type of agent event; the echo runner emits only these three, as init, message and success. */
   type: 'system' | 'assistant' | 'result'

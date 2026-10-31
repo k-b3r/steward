@@ -5,6 +5,14 @@ import { actionResponseSchema, jobResponseSchema, transcriptEnvelopeSchema } fro
 import type { ActionResponse, JobResponse } from '../../src/api/contract'
 
 export type { ActionResponse, JobResponse }
+
+/**
+ * One transcript line as the log stream delivers it, parsed by `transcriptEnvelopeSchema`; the server
+ * builds the same shape in `src/runner/transcript.ts` and `src/api/contract.ts` asserts the two match.
+ * `followLog` passes these to `job-detail.tsx`, which appends them to the log pane and keeps `seq` as
+ * its resume cursor. There is no job id in it, because the stream is per job, and `data` stays
+ * `unknown` for the caller to read.
+ */
 export type Envelope = z.infer<typeof transcriptEnvelopeSchema>
 
 const TOKEN_KEY = 'steward.token'

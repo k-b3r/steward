@@ -2,8 +2,26 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 export const TRANSCRIPT_KINDS = ['system', 'assistant', 'tool', 'result', 'error', 'orchestrator'] as const
+
+/**
+ * One kind of transcript line: `system`, `assistant`, `tool`, `result`, `error` or `orchestrator`.
+ * `TRANSCRIPT_KINDS` is the source of truth, and `src/api/contract.ts` `transcriptKindSchema` repeats the
+ * list and fails to compile when the two drift. The lines live in files, so no database `CHECK` covers
+ * them, and nothing writes a `tool` or `error` line today: the echo runner emits only `system`,
+ * `assistant` and `result` events.
+ */
 export type TranscriptKind = (typeof TRANSCRIPT_KINDS)[number]
 
+/**
+ * One line of a job's transcript: the unit `createTranscriptWriter` appends to
+ * `<RUNS_DIR>/<job-id>/transcript.jsonl`, `readTranscript` returns by `seq`, and the
+ * `GET /v1/jobs/:id/log` route in `src/api/app.ts` streams as the `data` of one SSE frame.
+ *
+ * `seq` is 1-based and monotonic per job and doubles as the frame id, so `Last-Event-ID` (or the
+ * dashboard's `?after=`) resumes after it. A writer opened later continues from the file's highest
+ * `seq`, so lines are only ever appended. Orchestrator lines are redacted and agent lines are not;
+ * only agent lines also copy their raw line to `raw.jsonl`, which no route serves.
+ */
 export type Envelope = {
   /** 1-based line number in the job's transcript, monotonic. Also the SSE `id`, so `Last-Event-ID` resumes after it. */
   seq: number
@@ -21,6 +39,13 @@ export type Envelope = {
   data: unknown
 }
 
+/**
+ * What `createTranscriptWriter` returns: the two append paths a runner writes transcript lines through.
+ * `src/runner/echo.ts` builds one per job today and the real Claude Code runner will in phase 2; no
+ * module outside `src/runner/transcript.ts` imports this type by name, and the tests use the real writer
+ * against a temp directory rather than a fake. `src/api/app.ts` serves the appends through
+ * `src/composition/api.ts` `readLog`, which calls `readTranscript`.
+ */
 export interface TranscriptWriter {
   /** Appends one `orchestrator` line whose `data` is `{ msg, ...data }` with secrets and `authorization` redacted. */
   writeOrchestrator(msg: string, data?: Record<string, unknown>): Envelope

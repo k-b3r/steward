@@ -10,7 +10,20 @@ const POLL_MS = 5000
 const TOAST_MS = 5000
 const STALE_AFTER_MS = 20_000
 
+/**
+ * Poll health for the header badge and the disconnect banner. Derived on each render from `failing`,
+ * `now` and `lastOk`: `live` while refreshes succeed, `reconnecting` after a failure, `stale` once 20s
+ * pass with no success. `lastOk` starts at 0, so a failure before the first success reads `stale` at
+ * once; before the first refresh settles nothing has failed, so it reads `live`. The job page's log
+ * stream tracks its own status and does not use this.
+ */
 type Connection = 'live' | 'reconnecting' | 'stale'
+
+/**
+ * One transient notification from `run`, rendered in the toast stack the `App` shell keeps in the
+ * corner and removed after 5s or by its close button. `tone` only picks the icon: `bad` means the API
+ * call threw, and its message is already in `text`.
+ */
 export type Toast = {
   /** Counter from `nextToast`, unique per toast. Used as the React key and passed back to `dismiss`. */
   id: number
@@ -20,6 +33,15 @@ export type Toast = {
   text: string
 }
 
+/**
+ * The value `DataProvider` publishes on `StoreContext`, which `useStore` hands to every page: the two
+ * polled lists, poll health, the second tick that re-renders relative times, `refresh` and `run`, and
+ * the toast queue. One provider wraps the signed-in shell, so all pages read the same snapshot and a
+ * successful action refreshes it for all of them.
+ *
+ * Pages never fetch on their own: writes go through `run`, and the only direct call is `followLog` in
+ * `job-detail.tsx`.
+ */
 type Store = {
   /** Latest `/v1/jobs` response, replaced whole on every refresh. The only job list the pages read. */
   jobs: JobResponse[]

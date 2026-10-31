@@ -5,6 +5,11 @@ import type { JobResponse } from './api'
 import { useStore } from './data'
 import { Icon } from './ui'
 
+/**
+ * Which dialog `JobActions` has open, or null for none. Only `decline` (a reason is required) and
+ * `cancel` ask first; `confirm`, `reconsider` and `retry` call the API as soon as they are clicked.
+ * The typed reason is separate `reason` state and is cleared with `pending` once the call succeeds.
+ */
 type Pending = {
   /** Which dialog is open: `decline` collects a required reason, `cancel` only asks to confirm. */
   kind: 'decline' | 'cancel'

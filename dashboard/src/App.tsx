@@ -9,7 +9,19 @@ import { Approvals, Overview, Slots } from './pages'
 import { SPRITE } from './sprite'
 import { Icon } from './ui'
 
+/**
+ * The palette the whole app renders in, applied as `data-theme` on the root element and kept in
+ * `localStorage` under `steward.theme`; anything but `light` reads as `dark`. `App` holds it and the
+ * header button toggles it between the two.
+ */
 type Theme = 'dark' | 'light'
+
+/**
+ * The screen the hash asks for, from `#/jobs`, `#/slots`, `#/approvals` and `#/jobs/<id>`; every other
+ * hash is `overview`. `parseRoute` builds it on `hashchange`, and `Shell` renders the matching page and
+ * marks the nav item current. A `job` route only checks that the id looks like a UUID, so an unknown id
+ * renders `JobDetail`'s "not found" panel.
+ */
 type Route = { page: 'overview' | 'jobs' | 'slots' | 'approvals' } | { page: 'job'; id: string }
 
 function parseRoute(hash: string): Route {
