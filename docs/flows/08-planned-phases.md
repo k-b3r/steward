@@ -38,24 +38,17 @@ On the happy path this phase changes step 4 of `docs/flows/01-happy-path.md`, "T
 
 1. **The runner is swapped at composition.** `createContext` builds one runner for the worker, and `processJob` calls `deps.runner.start(current)` right after the move to `running`. Phase 2 replaces the echo factory with the Claude Code runner and keeps the interface.
 
-   Source: `src/bootstrap.ts` (`createContext`, runner choice)
-
-   ```ts
    const queue = createJobQueue({ redisUrl: config.REDIS_QUEUE_URL, queueName: `steward-${config.INSTANCE}` })
    // TODO(phase-2): replace the echo runner with the Claude Code runner.
    const runner = createEchoRunner({ runsDir: config.RUNS_DIR, clock })
+
    ```
 
-   The interface is already the contract the real runner must meet: start, feedback and cancel.
-
-   Source: `src/types.ts` (`AgentRunner`)
-
-   ```ts
    export interface AgentRunner {
+     /** Called after the job reaches `running`. The returned session id is not stored yet. */
      start(job: Job): Promise<{ sessionId: string }>
+     /** Reopens the run behind `sessionId` with the reviewer's feedback. Nothing in src/ calls it yet. */
      resume(sessionId: string, feedback: string): Promise<void>
-     cancel(jobId: string): Promise<void>
-   }
    ```
 
    What changes on the happy path: the echo implementation and its `TODO(phase-2)` marker go. The steps before `runner.start` (slot, fetch, worktree, `running`) stay exactly as they are.
@@ -77,46 +70,28 @@ On the happy path this phase changes step 4 of `docs/flows/01-happy-path.md`, "T
    Source: `src/db/schema.ts` (`pendingActions`)
 
    ```ts
-   /** Every outside write that needs a human decision before it is sent. */
-   export const pendingActions = pgTable(
-     'pending_actions',
-     {
-       id: uuid('id').primaryKey().defaultRandom(),
-       jobId: uuid('job_id')
-         .notNull()
-         .references(() => jobs.id),
-       kind: text('kind').notNull(),
-       payload: jsonb('payload').$type<unknown>().notNull(),
-       status: text('status').$type<ActionStatus>().notNull().default('pending'),
-       reason: text('reason'),
-       createdAt: timestamptz('created_at').notNull(),
-       decidedAt: timestamptz('decided_at'),
-     },
-     (table) => [check('pending_actions_status_check', sql`${table.status} in (${sql.raw(quotedList(ACTION_STATUSES))})`)],
-   )
+
    ```
 
    The transport under probe is a unix socket inside the rootless container (status, "Phase 2 (real agent)", first bullet; status, "Not yet checked"). Not stated: the payload of `get_task`, the payload of `post_progress`, the result shape of `finish`, and what happens when a tool call names another job.
 
 7. **The operator MCP is for the person, and the agent never gets `/v1`.** Status puts the operator MCP next: build it over stdio, with adapters over the commands and queries. It gives the reason the agent must not hold the API: "Agents must never be given the `/v1` API, because they could approve their own actions" (status, "Next"). The design's gate is a person: every outside write waits for approval (brief, "Writes to outside systems"). The same status line says to write a document for the operator MCP, the per-job tool contract and the probes; status lists it as not written and gives it no phase (status, "What does not exist yet"; status, "Next").
 
-8. **A merge conflict goes to the agent, with a two-strike guard.** When the branch already exists, the worktree is attached and `origin/<base>` is merged in. A conflict leaves the markers in the tree, and phase 2 hands that tree to the runner (decisions, "Worktree and branch rule").
+         if (outcome === 'conflict') {
+           // TODO(phase-2): hand the conflicted tree to the runner to resolve. The echo stub cannot, and
+           // finishing as `done` would report success and then throw the tree away.
+           throw new AgentError(`merge conflict with origin/${baseBranch}; the echo runner cannot resolve it`)
+         }
 
-   Source: `src/worker/process-job.ts` (`processJob`, the conflict branch)
-
-   ```ts
-      if (outcome === 'conflict') {
-        // TODO(phase-2): hand the conflicted tree to the runner to resolve. The echo stub cannot, and
-        // finishing as `done` would report success and then throw the tree away.
-        throw new AgentError(`merge conflict with origin/${baseBranch}; the echo runner cannot resolve it`)
-      }
    ```
 
    The guard is not built: the same decision log says a second conflict for the same job, or a large `origin/<base>..branch` diff, fails the job as `agent`, and `abortMerge` exists for that path (decisions, "Worktree and branch rule"). Status asks the same question in "Not yet answered", item 4.
 
    What changes on the happy path: the paragraph in step 4 that says a conflict fails as `agent` and the branch table row "The branch exists, a worktree was left behind, or the base merge conflicts" both become the handoff instead of the failure (happy path document).
 
-9. **The job still ends at `done`.** `pr_open` is phase 4. The `TODO(phase-4)` line in `processJob` and the `running -> done` edge stay until then, so the last move on the happy path does not change in phase 2.
+   ```
+
+8. **The job still ends at `done`.** `pr_open` is phase 4. The `TODO(phase-4)` line in `processJob` and the `running -> done` edge stay until then, so the last move on the happy path does not change in phase 2.
 
 ### Failure branches the design names
 
@@ -158,15 +133,15 @@ On the happy path this phase inserts itself between `deps.runner.start(current)`
 2. **The diff policy is a rule the documents do not state.** The brief and the architecture both name it (brief, "Phase roadmap", item 3; architecture, "Phase boundaries", item 3). The only size limit in the brief is a standards rule, "PRs stay under 800 lines" (brief, "Standards"), and the documents do not say that the validator enforces it. Not stated: what the diff policy rejects, and in which units the 800-line rule is measured.
 3. **A validation failure goes to the agent, not to the backoff.** The retry policy already has the branch point, and the `agent` case is where the loop attaches.
 
-   Source: `src/retry-policy.ts` (`decideAfterFailure`, the `agent` case)
+       case 'agent':
+         // TODO(phase-3): agent failures go to the validation feedback loop, not generic backoff
+         return { action: 'fail' }
 
-   ```ts
-     case 'agent':
-       // TODO(phase-3): agent failures go to the validation feedback loop, not generic backoff
-       return { action: 'fail' }
    ```
 
    The loop feeds the failure back through `AgentRunner.resume(sessionId, feedback)`, the second method of the runner interface (architecture, "Interfaces"). Today the `agent` case returns `fail` at once (happy path document, branch table: "A step after the slot is taken throws").
+
+   ```
 
 4. **The loop is capped at 2, then the job fails.** The brief gives the number: "retries ≤2" (brief, "Phase roadmap", item 3). After that the job is a dead letter: `failed` means retries are exhausted (brief, "Job lifecycle"; architecture, "Failure kinds and retry rules"). No marker marks the loop; the grep in the hooks section below finds only the `TODO(phase-3)` in the retry policy, so the loop is new code rather than a stub to fill.
 5. **Nothing is pushed and the draft stays empty.** That sentence describes the phase 4 order, where the claim (step 1 of the job flow) comes before validation (step 3). The build order in the roadmap puts validation (phase 3) before the claim (phase 4), so between the two phases there is no draft to stay empty (brief, "Flow per job (phases 3-4)"; brief, "Phase roadmap", items 3 and 4).
@@ -224,10 +199,7 @@ On the happy path this phase changes step 3 (confirm), step 4 (the claim and the
    Source: `src/worker/process-job.ts` (`processJob`, run and finish)
 
    ```ts
-       current = await transitionJob(deps.db, jobId, 'running', { now: deps.clock() })
-       await deps.runner.start(current)
-       // TODO(phase-4): go to pr_open after validation and the draft pull request.
-       await transitionJob(deps.db, jobId, 'done', { now: deps.clock() })
+
    ```
 
    The same phase removes the stub edge, because `done` would then be reached only through a merge.
@@ -235,12 +207,7 @@ On the happy path this phase changes step 3 (confirm), step 4 (the claim and the
    Source: `src/transitions.ts` (the allowed-moves table)
 
    ```ts
-     // TODO(phase-4): remove running -> done. It exists only for the phase-1 echo worker stub.
-     running: ['pr_open', 'done', 'queued', 'failed', 'cancelled'],
-     pr_open: ['in_review', 'failed', 'cancelled'],
-     in_review: ['changes_requested', 'merged', 'failed', 'cancelled'],
-     changes_requested: ['in_review', 'running', 'failed', 'cancelled'],
-     merged: ['done'],
+
    ```
 
    What changes on the happy path: the last move is `running -> pr_open`, the slot is freed there (a `pr_open` job holds none; decisions, entry 4), and the job waits for a person instead of finishing.
