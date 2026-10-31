@@ -48,7 +48,7 @@ work. A person confirms each proposal.
 
 ### 7. A draft pull request is the visible claim
 
-Phase 4 claim: the orchestrator pushes an empty commit to `agent/<identifier>` and opens a
+Phase 4 claim: the orchestrator pushes an empty commit to `agent/<ticketKey>` and opens a
 draft PR, before the agent starts. The PR is the lock a person can see. If validation fails,
 nothing is pushed and the draft stays empty. `UNVERIFIED:` GitHub's acceptance of a
 pull request from an empty commit is not tested yet; see open items.
@@ -380,7 +380,7 @@ Consequences:
   `.js` to every relative import, or emit with esbuild (`--packages=external`) and copy the
   migrations next to the output.
 - **The systemd units stay user units**, and the phase 2 container is the isolation boundary, since the filesystem sandbox is not enforced for user units on this box.
-- **ntfy is self-hosted**, and carries the identifier and title only, never ticket bodies (phase 4).
+- **ntfy is self-hosted**, and carries the ticket key and title only, never ticket bodies (phase 4).
 
 ## Worktree and branch rule (2026-10-28)
 
@@ -388,10 +388,10 @@ How a job gets the code it works on. Decided for phase 2; the git primitives lan
 
 - The orchestrator never clones per job. `REPO_PATH` is one clone on the host, per instance, and each job gets a **git worktree** cut from it (`<runsDir>/<jobId>/worktree`). A worktree shares the clone's objects, so six slots cost kilobytes, not six copies of history, and the container needs no git credentials at all.
 - Before cutting, every run runs `git fetch --prune origin <base>` and starts from `origin/<base>`, never from the clone's `HEAD`. `HEAD` may be stale or checked out on some other branch, which was a real bug until this change.
-- **No pull request yet:** create `agent/<identifier-slug>` from `origin/<base>`.
+- **No pull request yet:** create `agent/<ticketKey-slug>` from `origin/<base>`.
 - **A pull request already exists:** attach the **existing PR head branch** into the worktree and **merge `origin/<base>` into it**, so the agent continues the same PR instead of opening a second one. Merge, never rebase: a rebase would rewrite the PR branch and need a force-push.
 - **A conflict is for the agent to resolve.** `mergeIntoWorktree` returns `'conflict'` and leaves the markers in the worktree, because resolving a merge is coding work. Phase 2 hands that tree to the runner. **Not built yet:** the runner handoff, and a guard that fails the job as `agent` when the same job conflicts a second time or the `origin/<base>..branch` diff is large (`abortMerge` exists for that path and is only exercised by its own test). Until then the phase 1 stub has no agent to give the tree to, so it fails the job as `agent` with the reason `merge conflict with origin/<base>`, leaves the branch as it was, and removes the worktree. A job that reports `done` after discarding a conflict would be wrong.
-- `jobs.branch` will store the branch actually used, set at claim time (phase 4). It is never recomputed from the identifier afterwards, because a PR's head branch can differ (Linear suggests `branchName`, which is a suggestion, not the PR branch). Phase 1/2 use the rule "attach if the branch exists, else create from the base".
+- `jobs.branch` will store the branch actually used, set at claim time (phase 4). It is never recomputed from the ticket key afterwards, because a PR's head branch can differ (Linear suggests `branchName`, which is a suggestion, not the PR branch). Phase 1/2 use the rule "attach if the branch exists, else create from the base".
 - The agent commits locally in the worktree. The orchestrator pushes, opens the PR and updates the tracker, from the host, with the instance's git identity checked first.
 - A failed fetch is classified at the fetch call. A permanent cause (no such remote, a missing base branch, `Repository not found`) fails as `setup` at once. A transient one (a network blip, a timeout) is `infra`: retried with backoff up to `MAX_ATTEMPTS`, then it lands in `failed`, the dead-letter, where you retry or cancel it.
 - Cleanup: the worktree is removed after the run; the branch stays (retries reuse it). Phase 5 deletes `agent/*` branches once merged and prunes dead worktrees.

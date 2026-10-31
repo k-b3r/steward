@@ -32,8 +32,8 @@ One instance per context (work, personal). Nothing is a global singleton.
 ```ts
 type WorkItem = {
   source: string
-  externalId: string
-  identifier: string
+  sourceId: string
+  ticketKey: string
   title: string
   body: string
   branch?: string
@@ -70,11 +70,11 @@ Linear is the trigger only. After a job row exists the orchestrator ignores the 
 
 Filter: team key from config, assignee `isMe`, status in `Todo`, `Backlog`, `In Progress`. No labels on tickets.
 
-- `Todo` / `Backlog`: becomes `proposed`. You get a plain summary (identifier, title, first 300 characters of the body, labels, URL; no model). Confirm moves the ticket to `In Progress` in Linear and queues the job. Decline needs a reason and parks the job as `declined` (never processed; can be reconsidered).
+- `Todo` / `Backlog`: becomes `proposed`. You get a plain summary (ticket key, title, first 300 characters of the body, labels, URL; no model). Confirm moves the ticket to `In Progress` in Linear and queues the job. Decline needs a reason and parks the job as `declined` (never processed; can be reconsidered).
 - `In Progress`: queued without asking, except the baseline rule below.
 - Baseline (B): tickets already `In Progress` on the first poll for a source are `proposed`, not run. A burst above `MAX_ENQUEUE_PER_POLL` also becomes proposals. Cap on open proposals.
-- Before claiming, check for an existing open PR (draft or not) whose branch or title has the ticket identifier, not made by this instance. If one exists, skip the ticket: log it, create no job and no proposal.
-- Dedupe: unique `source + externalId`. A job row is never recreated.
+- Before claiming, check for an existing open PR (draft or not) whose branch or title has the ticket key, not made by this instance. If one exists, skip the ticket: log it, create no job and no proposal.
+- Dedupe: unique `source + sourceId`. A job row is never recreated.
 - Polling: every 30 s with jitter, exponential backoff on 429/5xx.
 - Dry-run (default on): log matches and raw JSON, create nothing. With it off, matches become jobs or proposals as above. Do not assume field names; log first, then map.
 - API: POST `https://api.linear.app/graphql`, header `Authorization: <key>` (no `Bearer`).
@@ -97,7 +97,7 @@ Failure kinds (stored with a free-text `reason` on the `job_events` row):
 
 ## Flow per job (phases 3-4)
 
-1. **Claim**: orchestrator pushes an empty commit to `agent/<identifier>` and opens a **draft PR**. The PR is the visible lock. Verify in a scratch repo that GitHub accepts it. Record in `docs/decisions.md`.
+1. **Claim**: orchestrator pushes an empty commit to `agent/<ticketKey>` and opens a **draft PR**. The PR is the visible lock. Verify in a scratch repo that GitHub accepts it. Record in `docs/decisions.md`.
 2. **Run**: the agent works in a local worktree and commits locally. No credentials in the container.
 3. **Validate** (typecheck, lint, tests, diff policy, retries ≤2). Fail: nothing is pushed and the draft stays empty.
 4. **Push** the agent's commits once, to the same branch, with the validation report in the PR body.
@@ -114,7 +114,7 @@ Failure kinds (stored with a free-text `reason` on the `job_events` row):
 
 ## Tables (Drizzle)
 
-`jobs` (unique `source + externalId`; `attempt`, `maxAttempts`, `nextRunAt`), `job_events` (append-only: state, failure kind, reason), `slots`. `pending_actions`.
+`jobs` (unique `source + sourceId`; `attempt`, `maxAttempts`, `nextRunAt`), `job_events` (append-only: state, failure kind, reason), `slots`. `pending_actions`.
 
 ## Slots
 

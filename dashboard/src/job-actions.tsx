@@ -20,7 +20,7 @@ export function JobActions({ job, size = 'sm' }: { job: JobResponse; size?: 'sm'
 
   const exec = async (label: string, call: () => Promise<unknown>): Promise<void> => {
     setBusy(true)
-    const ok = await run(`${job.identifier}: ${label}`, call)
+    const ok = await run(`${job.ticketKey}: ${label}`, call)
     setBusy(false)
     if (ok) {
       setPending(null)
@@ -70,9 +70,7 @@ export function JobActions({ job, size = 'sm' }: { job: JobResponse; size?: 'sm'
         <div className="scrim" style={{ position: 'fixed', inset: 0, zIndex: 20, borderRadius: 0 }} role="presentation">
           <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
             <div className="dialog-h">
-              <h3 id="dlg-t">
-                {pending.kind === 'cancel' ? `Cancel ${job.identifier}?` : `Decline ${job.identifier}?`}
-              </h3>
+              <h3 id="dlg-t">{pending.kind === 'cancel' ? `Cancel ${job.ticketKey}?` : `Decline ${job.ticketKey}?`}</h3>
             </div>
             <div className="dialog-b">
               {pending.kind === 'cancel' ? (

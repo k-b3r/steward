@@ -10,23 +10,33 @@ import type { Job, WorkFeed, WorkItem } from './types'
 const MAX_POLL_DELAY_MS = 10 * 60_000
 const JITTER_RATIO = 0.1
 
+/**
+ * The database side of one poll, behind an interface so `runIntakePoll` can be tested without Postgres.
+ * Production passes `insertJob` from src/db/store.ts plus the three reads from src/db/intake-queries.ts, all
+ * wired in src/composition/worker.ts; src/intake.test.ts passes an in-memory fake.
+ */
 export type IntakeStore = {
   /**
    * Inserts the job row and its first `job_events` row in one transaction. `created` is false when a
-   * job for this source and external id already exists; the existing row comes back instead.
+   * job for this source and source id already exists; the existing row comes back instead.
    */
   insertJob(
     db: Db,
     input: { item: WorkItem; state: 'proposed' | 'queued'; maxAttempts: number; now: Date },
   ): Promise<{ job: Job; created: boolean }>
-  /** External ids that already have a job for this source; the policy skips those items. */
-  knownExternalIds(db: Db, source: string): Promise<Set<string>>
+  /** Source ids that already have a job for this source; the policy skips those items. */
+  knownSourceIds(db: Db, source: string): Promise<Set<string>>
   /** Number of job rows for this source. 0 tells the policy that this poll is the baseline. */
   countJobsForSource(db: Db, source: string): Promise<number>
   /** Count of `proposed` jobs across every source, not just this one, for the proposal cap. */
   countOpenProposals(db: Db): Promise<number>
 }
 
+/**
+ * The four settings one poll needs, already validated and defaulted. src/composition/worker.ts builds it
+ * from the `Config` in src/platform/config.ts (`DRY_RUN`, `MAX_ENQUEUE_PER_POLL`, `MAX_OPEN_PROPOSALS`,
+ * `MAX_ATTEMPTS`); the defaults and bounds live in that zod schema, not in this file.
+ */
 type IntakeConfig = {
   /** When true, log the decisions and counts but insert no job and enqueue nothing. Defaults to true. */
   dryRun: boolean
@@ -88,14 +98,14 @@ export async function runIntakePoll(deps: IntakeDeps): Promise<IntakeCounts> {
   }
 
   const [known, jobsForSource, openProposals] = await Promise.all([
-    store.knownExternalIds(db, source),
+    store.knownSourceIds(db, source),
     store.countJobsForSource(db, source),
     store.countOpenProposals(db),
   ])
 
   const result = decideIntake({
     items,
-    knownExternalIds: known,
+    knownSourceIds: known,
     sourceHasJobs: jobsForSource > 0,
     openProposals,
     maxOpenProposals: config.maxOpenProposals,
@@ -105,8 +115,8 @@ export async function runIntakePoll(deps: IntakeDeps): Promise<IntakeCounts> {
   for (const decision of result.decisions) {
     logger.info('Intake decision', {
       source,
-      externalId: decision.item.externalId,
-      identifier: decision.item.identifier,
+      sourceId: decision.item.sourceId,
+      ticketKey: decision.item.ticketKey,
       action: decision.action,
       reason: decision.reason,
     })
@@ -114,8 +124,8 @@ export async function runIntakePoll(deps: IntakeDeps): Promise<IntakeCounts> {
   for (const skip of result.skipped) {
     logger.info('Intake skipped', {
       source,
-      externalId: skip.item.externalId,
-      identifier: skip.item.identifier,
+      sourceId: skip.item.sourceId,
+      ticketKey: skip.item.ticketKey,
       reason: skip.reason,
     })
   }
@@ -147,8 +157,8 @@ export async function runIntakePoll(deps: IntakeDeps): Promise<IntakeCounts> {
       duplicates += 1
       logger.info('Intake duplicate between decision and insert', {
         source,
-        externalId: decision.item.externalId,
-        identifier: decision.item.identifier,
+        sourceId: decision.item.sourceId,
+        ticketKey: decision.item.ticketKey,
       })
       continue
     }

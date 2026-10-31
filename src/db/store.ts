@@ -23,8 +23,8 @@ function toJob(row: JobWithSlot): Job {
   return {
     id: row.job.id,
     source: row.job.source,
-    externalId: row.job.externalId,
-    identifier: row.job.identifier,
+    sourceId: row.job.sourceId,
+    ticketKey: row.job.ticketKey,
     state: row.job.state,
     attempt: row.job.attempt,
     maxAttempts: row.job.maxAttempts,
@@ -89,8 +89,8 @@ export async function insertJob(
       .insert(jobs)
       .values({
         source: input.item.source,
-        externalId: input.item.externalId,
-        identifier: input.item.identifier,
+        sourceId: input.item.sourceId,
+        ticketKey: input.item.ticketKey,
         item: input.item,
         state: input.state,
         attempt: 0,
@@ -100,7 +100,7 @@ export async function insertJob(
         createdAt: input.now,
         updatedAt: input.now,
       })
-      .onConflictDoNothing({ target: [jobs.source, jobs.externalId] })
+      .onConflictDoNothing({ target: [jobs.source, jobs.sourceId] })
       .returning()
 
     if (inserted !== undefined) {
@@ -120,10 +120,10 @@ export async function insertJob(
       .select({ job: jobs, slot: slots.slot })
       .from(jobs)
       .leftJoin(slots, eq(slots.jobId, jobs.id))
-      .where(and(eq(jobs.source, input.item.source), eq(jobs.externalId, input.item.externalId)))
+      .where(and(eq(jobs.source, input.item.source), eq(jobs.sourceId, input.item.sourceId)))
       .limit(1)
     if (existing === undefined) {
-      throw new Error(`Could not read the existing job for ${input.item.source}/${input.item.externalId}`)
+      throw new Error(`Could not read the existing job for ${input.item.source}/${input.item.sourceId}`)
     }
     return { job: toJob(existing), created: false }
   })

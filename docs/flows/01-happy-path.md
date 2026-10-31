@@ -126,8 +126,8 @@ const ISSUES_QUERY = `query StewardIntake($teamKey: String!, $after: String, $fi
 ```
 
 Each node goes through `mapIssueToWorkItem`. A node that fails mapping is logged with its Linear
-id and skipped; the rest of the page is still used. `externalId` is the Linear issue id, not the
-human identifier, so tracker types never leave this adapter.
+id and skipped; the rest of the page is still used. `sourceId` is the Linear issue id, not the
+human ticket key, so tracker types never leave this adapter.
 
 Source: `src/linear-map.ts` (`mapIssueToWorkItem`)
 
@@ -142,8 +142,8 @@ export function mapIssueToWorkItem(node: unknown, source: string): WorkItem {
 
   const item: WorkItem = {
     source,
-    externalId: readNonEmptyString(issue.id, 'id', source),
-    identifier: readNonEmptyString(issue.identifier, 'identifier', source),
+    sourceId: readNonEmptyString(issue.id, 'id', source),
+    ticketKey: readNonEmptyString(issue.identifier, 'identifier', source),
     title: readNonEmptyString(issue.title, 'title', source),
     body: readNullableString(issue.description, 'description', source) ?? '',
     labels: readLabelNames(issue.labels, source),
@@ -164,8 +164,8 @@ TST-1 arrives as this item. There is no `branch` key, because Linear returned an
 ```json
 {
   "source": "linear",
-  "externalId": "lin-1",
-  "identifier": "TST-1",
+  "sourceId": "lin-1",
+  "ticketKey": "TST-1",
   "title": "Add a retry button",
   "body": "The jobs page has no retry button.",
   "labels": ["agent"],
@@ -182,7 +182,7 @@ The raw first page is logged only in dry run: `withoutRawResponses` drops that l
 
 `runIntakePoll` first collects the whole feed, then reads the source from the first item. An
 empty feed logs zero counts and stops there. Otherwise it reads three things in parallel (all in
-`src/db/intake-queries.ts`): the known `external_id` values for the source, the number of jobs
+`src/db/intake-queries.ts`): the known `source_id` values for the source, the number of jobs
 for the source, and the number of `proposed` jobs across all sources. Then `decideIntake` runs,
 with no clock and no I/O.
 
@@ -194,15 +194,15 @@ function isProposalStatus(status: string): boolean {
 }
 ```
 
-For TST-1 the rules apply in this order: it is not a known external id, its status is not
+For TST-1 the rules apply in this order: it is not a known source id, its status is not
 `In Progress`, it is a proposal status, and the open-proposal count is below
 `MAX_OPEN_PROPOSALS` (default 20). The reason stored on the decision is the status name itself
 (`Todo`). A proposal is skipped, not created, once `openProposals` plus the proposals already
-made in this poll reach that cap (reason `proposal limit`). A duplicate `source + externalId`
+made in this poll reach that cap (reason `proposal limit`). A duplicate `source + sourceId`
 is skipped too (reason `already has a job`).
 
 `runIntakePoll` inserts one job per decision. A proposal goes in state `proposed` and is not
-enqueued. The unique index on `(source, external_id)` is the dedupe: a lost race writes no
+enqueued. The unique index on `(source, source_id)` is the dedupe: a lost race writes no
 second row and no event, and is counted as skipped.
 
 Source: `src/db/store.ts` (`insertJob`)
@@ -217,8 +217,8 @@ export async function insertJob(
       .insert(jobs)
       .values({
         source: input.item.source,
-        externalId: input.item.externalId,
-        identifier: input.item.identifier,
+        sourceId: input.item.sourceId,
+        ticketKey: input.item.ticketKey,
         item: input.item,
         state: input.state,
         attempt: 0,
@@ -228,7 +228,7 @@ export async function insertJob(
         createdAt: input.now,
         updatedAt: input.now,
       })
-      .onConflictDoNothing({ target: [jobs.source, jobs.externalId] })
+      .onConflictDoNothing({ target: [jobs.source, jobs.sourceId] })
       .returning()
 ```
 
@@ -350,19 +350,19 @@ Source: `src/worker/process-job.ts` (`processJob`, claim and fetch)
     // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
     const baseBranch = deps.baseBranch ?? 'main'
     await fetchBaseClassified(deps, baseBranch)
-    const branch = branchName(current.identifier)
+    const branch = branchName(current.ticketKey)
     // A worker that died mid-run never ran its cleanup. Clear what it left, or `git worktree add`
     // refuses the path on every retry. The branch and its commits are not touched.
     await deps.git.removeWorktree(deps.config.repoPath, worktreePath)
 ```
 
-The branch name comes from the ticket identifier, not from Linear's `branchName`:
+The branch name comes from the ticket key, not from Linear's `branchName`:
 
 Source: `src/worker/process-job.ts` (`branchName`)
 
 ```ts
-function branchName(identifier: string): string {
-  return `agent/${identifier.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
+function branchName(ticketKey: string): string {
+  return `agent/${ticketKey.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
 }
 ```
 
@@ -498,7 +498,7 @@ All times are UTC on a made-up day. One worker, three slots, nothing else runnin
 
 ## What the API and dashboard show at each step
 
-`GET /v1/jobs/:id` returns a `JobSummary` from `src/jobs-queries.ts`: no tracker external id,
+`GET /v1/jobs/:id` returns a `JobSummary` from `src/jobs-queries.ts`: no tracker source id,
 dates as ISO strings, and the button list for the current state. `allowedActionsFor`
 (`src/jobs-commands.ts`) is the single source of that list, so a client never offers a button
 the command would reject. `GET /v1/jobs?state=proposed` lists only proposals.
@@ -506,7 +506,7 @@ the command would reject. `GET /v1/jobs?state=proposed` lists only proposals.
 ```json
 {
   "id": "6f1c0b5e-6a2e-4a5f-9d3c-1b2a3c4d5e6f",
-  "identifier": "TST-1",
+  "ticketKey": "TST-1",
   "source": "linear",
   "state": "proposed",
   "attempt": 0,
@@ -566,8 +566,8 @@ curl -s -X POST -H "Authorization: Bearer <API_TOKEN>" "http://127.0.0.1:3000/v1
 The rows, in order:
 
 ```sql
-select identifier, state, attempt, max_attempts, next_run_at, failure_kind
-from jobs where identifier = 'TST-1';
+select ticketKey, state, attempt, max_attempts, next_run_at, failure_kind
+from jobs where ticketKey = 'TST-1';
 
 select from_state, to_state, reason, failure_kind, at
 from job_events where job_id = '<job-id>' order by id;

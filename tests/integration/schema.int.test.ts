@@ -22,8 +22,8 @@ const db = createDb(pool)
 
 const item: WorkItem = {
   source: 'linear',
-  externalId: 'ext-1',
-  identifier: 'TST-1',
+  sourceId: 'ext-1',
+  ticketKey: 'TST-1',
   title: 'A job',
   body: '',
   labels: [],
@@ -35,8 +35,8 @@ function row(overrides: Partial<typeof jobs.$inferInsert> = {}): typeof jobs.$in
   const now = new Date('2025-01-01T00:00:00.000Z')
   return {
     source: item.source,
-    externalId: item.externalId,
-    identifier: item.identifier,
+    sourceId: item.sourceId,
+    ticketKey: item.ticketKey,
     item,
     state: 'queued',
     maxAttempts: 3,
@@ -67,17 +67,17 @@ describe('schema', () => {
     expect(result.rows.map((r) => r.table_name)).toEqual(['job_events', 'jobs', 'pending_actions', 'slots'])
   })
 
-  it('allows one job per source and external id', async () => {
+  it('allows one job per source and source id', async () => {
     await db.insert(jobs).values(row())
 
     await expect(db.insert(jobs).values(row())).rejects.toThrow()
   })
 
   it('rejects a state outside the state machine', async () => {
-    await expect(db.insert(jobs).values(row({ externalId: 'ext-2', state: 'bogus' as never }))).rejects.toThrow()
+    await expect(db.insert(jobs).values(row({ sourceId: 'ext-2', state: 'bogus' as never }))).rejects.toThrow()
   })
 
   it('rejects an unknown failure kind', async () => {
-    await expect(db.insert(jobs).values(row({ externalId: 'ext-3', failureKind: 'bogus' as never }))).rejects.toThrow()
+    await expect(db.insert(jobs).values(row({ sourceId: 'ext-3', failureKind: 'bogus' as never }))).rejects.toThrow()
   })
 })

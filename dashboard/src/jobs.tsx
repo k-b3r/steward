@@ -7,13 +7,18 @@ import { Attempts, Empty, Icon, PageHead, Skeleton, StateChip } from './ui'
 
 const jobHref = (job: { id: string }): string => `#/jobs/${job.id}`
 
-type SortKey = 'identifier' | 'state' | 'attempt'
+/**
+ * The columns the jobs table sorts by: `ticketKey`, `state` and `attempt`. One state holds the key plus a
+ * `1 | -1` direction; clicking a header selects that key or flips the direction. All three compare with
+ * `<`, so `ticketKey` sorts as text and `TST-10` lands before `TST-2`.
+ */
+type SortKey = 'ticketKey' | 'state' | 'attempt'
 
 export function Jobs() {
   const { jobs, loaded, now } = useStore()
   const [filter, setFilter] = useState(0)
   const [query, setQuery] = useState('')
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'identifier', dir: 1 })
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'ticketKey', dir: 1 })
 
   const rows = useMemo(() => {
     const states = FILTERS[filter]?.states ?? []
@@ -22,7 +27,7 @@ export function Jobs() {
       .filter(
         (j) =>
           (states.length === 0 || states.includes(j.state)) &&
-          (q === '' || `${j.identifier} ${j.source}`.toLowerCase().includes(q)),
+          (q === '' || `${j.ticketKey} ${j.source}`.toLowerCase().includes(q)),
       )
       .sort((a, b) => {
         const left = a[sort.key]
@@ -77,7 +82,7 @@ export function Jobs() {
           <table className="tbl jobs-tbl">
             <thead>
               <tr>
-                {head('identifier', 'Job')}
+                {head('ticketKey', 'Job')}
                 {head('state', 'State')}
                 <th>Source</th>
                 {head('attempt', 'Attempt')}
@@ -92,7 +97,7 @@ export function Jobs() {
                 <tr key={job.id}>
                   <td>
                     <a className="jid link" href={jobHref(job)}>
-                      {job.identifier}
+                      {job.ticketKey}
                     </a>
                   </td>
                   <td>

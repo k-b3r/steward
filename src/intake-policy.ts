@@ -28,11 +28,16 @@ export type IntakeResult = {
   skipped: IntakeSkip[]
 }
 
+/**
+ * Everything `decideIntake` is allowed to know: the poll's items, the counts read before it and the caps to
+ * apply. `runIntakePoll` in src/intake.ts assembles it from `IntakeStore` and `IntakeConfig`, which is what
+ * keeps the policy free of clock, database and environment; the policy tests build it directly.
+ */
 export type IntakeInput = {
   /** One poll's items, in feed order; both output lists keep that order. */
   items: WorkItem[]
-  /** External ids that already have a job for this source, from `knownExternalIds`. */
-  knownExternalIds: ReadonlySet<string>
+  /** Source ids that already have a job for this source, from `knownSourceIds`. */
+  knownSourceIds: ReadonlySet<string>
   /** False on the first poll for a source, which turns In Progress items into the baseline. */
   sourceHasJobs: boolean
   /** Existing `proposed` jobs across all sources, from `countOpenProposals`. */
@@ -61,7 +66,7 @@ function isProposalStatus(status: string): boolean {
  */
 export function decideIntake(input: IntakeInput): IntakeResult {
   const newInProgress = input.items.filter(
-    (item) => !input.knownExternalIds.has(item.externalId) && item.status === IN_PROGRESS,
+    (item) => !input.knownSourceIds.has(item.sourceId) && item.status === IN_PROGRESS,
   ).length
   const baseline = !input.sourceHasJobs
   const burstOverCap = newInProgress > input.maxEnqueuePerPoll
@@ -80,7 +85,7 @@ export function decideIntake(input: IntakeInput): IntakeResult {
   }
 
   for (const item of input.items) {
-    if (input.knownExternalIds.has(item.externalId)) {
+    if (input.knownSourceIds.has(item.sourceId)) {
       skipped.push({ item, reason: ALREADY_HAS_JOB })
       continue
     }

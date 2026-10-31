@@ -357,7 +357,7 @@ What is lost and what is kept:
 - `git worktree remove --force` deletes the directory even with local modifications.
   Uncommitted edits and untracked files are lost.
 - Commits survive. The branch is a ref in the clone's `.git`, outside the worktree directory.
-  `branchExists` finds `agent/<identifier>` and `attachWorktree` continues on it.
+  `branchExists` finds `agent/<ticketKey>` and `attachWorktree` continues on it.
 - The transcript survives. It sits in `RUNS_DIR/<job-id>/`, beside `worktree`, not inside it.
   `createTranscriptWriter` appends to `transcript.jsonl` and repairs a last line left without
   its newline.
@@ -445,7 +445,7 @@ normal `queued → claiming → running → done` rows.
 event is the `running → queued` row.
 
 ```sql
-select state, attempt, next_run_at, failure_kind from jobs where identifier = 'TST-1';
+select state, attempt, next_run_at, failure_kind from jobs where ticketKey = 'TST-1';
 select slot, job_id from slots;
 select from_state, to_state, failure_kind, reason, at
 from job_events where job_id = '<job-id>' order by id;
@@ -468,7 +468,7 @@ when the attempt is spent. `transitionJob` has no slot row to delete, and
 before reaching it (scenario 7).
 
 ```sql
-select identifier, state, attempt from jobs where state = 'claiming';
+select ticketKey, state, attempt from jobs where state = 'claiming';
 ```
 
 ### 3. A `queued` job is missing from the queue
@@ -649,11 +649,11 @@ psql "$DATABASE_URL"
 ```
 
 ```sql
-select j.identifier, j.state, j.attempt, j.next_run_at, s.slot
+select j.ticketKey, j.state, j.attempt, j.next_run_at, s.slot
 from jobs j left join slots s on s.job_id = j.id
 where j.state in ('claiming', 'running');
 
-select s.slot, j.identifier, j.state from slots s
+select s.slot, j.ticketKey, j.state from slots s
 left join jobs j on j.id = s.job_id order by s.slot;
 
 select from_state, to_state, failure_kind, reason, at
@@ -679,7 +679,7 @@ TEST_DATABASE_URL=postgres://127.0.0.1:5432/steward_test \
 
 - The retention sweep of `RUNS_DIR` and the transcripts. `RUN_RETENTION_DAYS` (default 30) is
   parsed in `src/platform/config.ts` and never read. Phase 5, so a crashed run's folder stays.
-- Branch cleanup. A crash-retry continues `agent/<identifier>`, and no code deletes that branch,
+- Branch cleanup. A crash-retry continues `agent/<ticketKey>`, and no code deletes that branch,
   locally or on the remote. Phase 5.
 - Redis append-only-file durability after a hard kill was not tested (`docs/status.md`). If the
   queue loses its data, a `queued` job waits until the next worker start, because only the

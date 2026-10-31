@@ -44,7 +44,7 @@ function ActionRow({ action }: { action: ActionResponse }) {
       </span>
       <div style={{ minWidth: 0 }}>
         <div className="ttl">
-          <span className="jid">{job?.identifier ?? action.jobId.slice(0, 8)}</span>
+          <span className="jid">{job?.ticketKey ?? action.jobId.slice(0, 8)}</span>
           <span className="trunc">{action.kind}</span>
         </div>
         <div className="why">Nothing is sent until you approve.</div>
@@ -94,7 +94,7 @@ function Attention() {
           <div style={{ minWidth: 0 }}>
             <div className="ttl">
               <a className="jid link" href={jobHref(job)}>
-                {job.identifier}
+                {job.ticketKey}
               </a>
               <span className="trunc faint">{job.source}</span>
             </div>
@@ -152,7 +152,7 @@ function SlotGrid({ large }: { large?: boolean }) {
               <StateChip state={job.state} small />
             </div>
             <div>
-              <div className="slot-id">{job.identifier}</div>
+              <div className="slot-id">{job.ticketKey}</div>
               <div className="slot-t faint">{job.source}</div>
             </div>
             <div className="slot-f">
@@ -205,7 +205,7 @@ export function Overview() {
                     style={{ color: 'inherit', textDecoration: 'none' }}
                   >
                     <div className="r">
-                      <span className="jid">{job.identifier}</span>
+                      <span className="jid">{job.ticketKey}</span>
                       <StateChip state={job.state} small />
                     </div>
                     <div className="m">

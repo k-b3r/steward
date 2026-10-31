@@ -141,17 +141,17 @@ Source: `src/worker/process-job.ts` (in `processJob`)
 const worktreePath = join(deps.config.runsDir, jobId, 'worktree')
 ```
 
-### 3. The branch name is built from the ticket identifier
+### 3. The branch name is built from the ticket ticketKey
 
 Source: `src/worker/process-job.ts` (the slug function)
 
 ```ts
-function branchName(identifier: string): string {
-  return `agent/${identifier.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
+function branchName(ticketKey: string): string {
+  return `agent/${ticketKey.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
 }
 ```
 
-The identifier is lowercased, then every character outside `a-z` and `0-9` becomes one `-`. Two
+The ticketKey is lowercased, then every character outside `a-z` and `0-9` becomes one `-`. Two
 worked examples:
 
 | Identifier  | After `toLowerCase()` | After the replace | Branch            |
@@ -190,7 +190,7 @@ Source: `src/worker/process-job.ts` (in `processJob`)
     // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
     const baseBranch = deps.baseBranch ?? 'main'
     await fetchBaseClassified(deps, baseBranch)
-    const branch = branchName(current.identifier)
+    const branch = branchName(current.ticketKey)
 ```
 
 The worker always uses the remote named `origin`; the name is hard-coded in that call. `BASE_BRANCH`
@@ -622,9 +622,9 @@ ls -la ~/steward-instances/personal/runs/<job-id>/
 Read the job and its events, including the failure kind and the reason, from Postgres:
 
 ```sql
-select id, identifier, state, attempt, max_attempts, failure_kind, next_run_at
+select id, ticketKey, state, attempt, max_attempts, failure_kind, next_run_at
 from jobs
-where identifier = 'TST-1';
+where ticketKey = 'TST-1';
 ```
 
 ```sql

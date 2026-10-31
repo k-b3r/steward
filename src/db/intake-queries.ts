@@ -6,10 +6,10 @@ import { count, eq } from 'drizzle-orm'
 import type { Db } from '../platform/db'
 import { jobs } from './schema'
 
-/** External ids that already have a job row for this source. */
-export async function knownExternalIds(db: Db, source: string): Promise<Set<string>> {
-  const rows = await db.select({ externalId: jobs.externalId }).from(jobs).where(eq(jobs.source, source))
-  return new Set(rows.map((row) => row.externalId))
+/** Source ids that already have a job row for this source. */
+export async function knownSourceIds(db: Db, source: string): Promise<Set<string>> {
+  const rows = await db.select({ sourceId: jobs.sourceId }).from(jobs).where(eq(jobs.source, source))
+  return new Set(rows.map((row) => row.sourceId))
 }
 
 /** Whether this source has ever produced a job; false means the next poll is its baseline. */

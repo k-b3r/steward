@@ -73,8 +73,8 @@ function createRepo(root: string): string {
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
     source: 'linear',
-    externalId: 'ext-1',
-    identifier: 'TST-1',
+    sourceId: 'ext-1',
+    ticketKey: 'TST-1',
     title: 'A job',
     body: 'Do the thing',
     labels: ['agent'],
@@ -84,10 +84,10 @@ function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   }
 }
 
-async function createJob(overrides: { externalId?: string; maxAttempts?: number } = {}): Promise<Job> {
-  const externalId = overrides.externalId ?? 'ext-1'
+async function createJob(overrides: { sourceId?: string; maxAttempts?: number } = {}): Promise<Job> {
+  const sourceId = overrides.sourceId ?? 'ext-1'
   const { job } = await insertJob(db, {
-    item: makeItem({ externalId, identifier: `TST-${externalId}` }),
+    item: makeItem({ sourceId, ticketKey: `TST-${sourceId}` }),
     state: 'queued',
     maxAttempts: overrides.maxAttempts ?? 3,
     now: T0,
@@ -220,8 +220,8 @@ describe('processJob', () => {
   })
 
   it('re-enqueues with a delay when no slot is free and leaves the job queued', async () => {
-    const blocker = await createJob({ externalId: 'blocker' })
-    const job = await createJob({ externalId: 'waiting' })
+    const blocker = await createJob({ sourceId: 'blocker' })
+    const job = await createJob({ sourceId: 'waiting' })
     expect(await acquireSlot(db, blocker.id, 1, T0)).toBe(0)
     const runner = makeRunner()
     const enqueued = makeQueue()
@@ -293,7 +293,7 @@ describe('processJob', () => {
   })
 
   describe('base and branch', () => {
-    // The job for externalId 'ext-1' gets the identifier TST-ext-1 and so the branch agent/tst-ext-1.
+    // The job for sourceId 'ext-1' gets the ticketKey TST-ext-1 and so the branch agent/tst-ext-1.
     const BRANCH = 'agent/tst-ext-1'
 
     function pushToOrigin(file: string, body: string): string {

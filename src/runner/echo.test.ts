@@ -13,8 +13,8 @@ function makeJob(overrides: Partial<Job> = {}): Job {
   return {
     id: '11111111-1111-1111-1111-111111111111',
     source: 'linear',
-    externalId: 'ext-1',
-    identifier: 'TST-1',
+    sourceId: 'ext-1',
+    ticketKey: 'TST-1',
     state: 'running',
     attempt: 1,
     maxAttempts: 3,
@@ -102,8 +102,8 @@ describe('echo runner', () => {
 
   it('keeps jobs in separate transcript directories', async () => {
     const runner = createEchoRunner({ runsDir, clock })
-    const first = makeJob({ id: '11111111-1111-1111-1111-111111111111', identifier: 'TST-1' })
-    const second = makeJob({ id: '22222222-2222-2222-2222-222222222222', identifier: 'TST-2' })
+    const first = makeJob({ id: '11111111-1111-1111-1111-111111111111', ticketKey: 'TST-1' })
+    const second = makeJob({ id: '22222222-2222-2222-2222-222222222222', ticketKey: 'TST-2' })
 
     await runner.start(first)
     await runner.start(second)

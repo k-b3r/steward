@@ -112,12 +112,12 @@ export function JobDetail({ id }: { id: string }) {
       <div className="crumbs">
         <a href="#/jobs">Jobs</a>
         <Icon name="i-chev-r" size="xs" />
-        <span className="mono">{job.identifier}</span>
+        <span className="mono">{job.ticketKey}</span>
       </div>
       <section className="jh">
         <div className="jh-top">
           <div>
-            <h1 className="mono">{job.identifier}</h1>
+            <h1 className="mono">{job.ticketKey}</h1>
             <div className="jh-meta">
               <StateChip state={job.state} />
               <span className="it">Source {job.source}</span>

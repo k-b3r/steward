@@ -22,8 +22,8 @@ function makeJob(overrides: Partial<Job> = {}): Job {
   return {
     id: '11111111-1111-4111-8111-111111111111',
     source: 'linear',
-    externalId: 'ext-1',
-    identifier: 'TST-1',
+    sourceId: 'ext-1',
+    ticketKey: 'TST-1',
     state: 'proposed',
     attempt: 0,
     maxAttempts: 3,

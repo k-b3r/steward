@@ -136,7 +136,7 @@ Neither is fixed. Each needs a failing test first.
 | `docs/decisions.md`, item 23                               | A missing `ReadWritePaths=` path stops the unit.                                   | User units do not enforce it, as a later section says.                                   | [07](07-deploy-and-startup.md)   |
 | `docs/project-brief.md` and `architecture.md`              | The brief lists `StatusReporter` as a phase 1 stub. The architecture says phase 4. | It is not in `src/types.ts`.                                                             | [08](08-planned-phases.md)       |
 
-The ntfy content also differs: `docs/decisions.md` says "identifier and title only", and
+The ntfy content also differs: `docs/decisions.md` says "ticketKey and title only", and
 `docs/security.md` says "identifiers and states". Both are phase 4 and not built.
 
 ## Keeping this true

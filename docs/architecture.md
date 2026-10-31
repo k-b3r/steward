@@ -30,8 +30,8 @@ adapter; the state machine only knows `WorkItem`.
 ```ts
 type WorkItem = {
   source: string
-  externalId: string
-  identifier: string
+  sourceId: string
+  ticketKey: string
   title: string
   body: string
   branch?: string

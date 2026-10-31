@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'drizzle-orm'
 
 import { migrateDb } from '../../src/db/migrate'
-import { countJobsForSource, countOpenProposals, knownExternalIds } from '../../src/db/intake-queries'
+import { countJobsForSource, countOpenProposals, knownSourceIds } from '../../src/db/intake-queries'
 import { insertJob } from '../../src/db/store'
 import { closePool, createDb, createPool } from '../../src/platform/db'
 import type { WorkItem } from '../../src/types'
@@ -36,22 +36,22 @@ async function resetDatabase(): Promise<void> {
   await migrateDb(db)
 }
 
-function makeItem(source: string, externalId: string, status: string): WorkItem {
+function makeItem(source: string, sourceId: string, status: string): WorkItem {
   return {
     source,
-    externalId,
-    identifier: `TST-${externalId}`,
-    title: `Synthetic ${externalId}`,
+    sourceId,
+    ticketKey: `TST-${sourceId}`,
+    title: `Synthetic ${sourceId}`,
     body: 'Synthetic body',
     labels: [],
-    url: `https://example.com/tst/issues/${externalId}`,
+    url: `https://example.com/tst/issues/${sourceId}`,
     status,
   }
 }
 
-async function seed(source: string, externalId: string, state: 'proposed' | 'queued'): Promise<void> {
+async function seed(source: string, sourceId: string, state: 'proposed' | 'queued'): Promise<void> {
   await insertJob(db, {
-    item: makeItem(source, externalId, state === 'proposed' ? 'Todo' : 'In Progress'),
+    item: makeItem(source, sourceId, state === 'proposed' ? 'Todo' : 'In Progress'),
     state,
     maxAttempts: 3,
     now: T0,
@@ -66,18 +66,18 @@ afterAll(async () => {
   await closePool(pool)
 })
 
-describe('knownExternalIds', () => {
+describe('knownSourceIds', () => {
   it('returns an empty set when the source has no jobs', async () => {
-    await expect(knownExternalIds(db, 'linear')).resolves.toEqual(new Set())
+    await expect(knownSourceIds(db, 'linear')).resolves.toEqual(new Set())
   })
 
-  it('returns only external ids for the requested source', async () => {
+  it('returns only source ids for the requested source', async () => {
     await seed('linear', '1', 'proposed')
     await seed('linear', '2', 'queued')
     await seed('linear-work', '3', 'queued')
 
-    await expect(knownExternalIds(db, 'linear')).resolves.toEqual(new Set(['1', '2']))
-    await expect(knownExternalIds(db, 'linear-work')).resolves.toEqual(new Set(['3']))
+    await expect(knownSourceIds(db, 'linear')).resolves.toEqual(new Set(['1', '2']))
+    await expect(knownSourceIds(db, 'linear-work')).resolves.toEqual(new Set(['3']))
   })
 })
 

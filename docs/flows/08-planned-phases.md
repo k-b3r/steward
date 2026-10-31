@@ -174,7 +174,7 @@ Make the claim visible before the agent starts (an empty commit and a draft pull
 
 On the happy path this phase changes step 3 (confirm), step 4 (the claim and the last move) and the files on disk in step 5.
 
-1. **Intake skips a ticket that already has a pull request.** Before claiming, check for an open pull request, draft or not, whose branch or title carries the ticket identifier and that this instance did not make. If one exists, skip the ticket: log it, create no job and no proposal (brief, "Intake (Linear)"). The brief lists this rule among the decisions taken since the last draft (brief, "Decided since the last draft"). On the happy path nothing changes for TST-1, because it has no pull request.
+1. **Intake skips a ticket that already has a pull request.** Before claiming, check for an open pull request, draft or not, whose branch or title carries the ticket ticketKey and that this instance did not make. If one exists, skip the ticket: log it, create no job and no proposal (brief, "Intake (Linear)"). The brief lists this rule among the decisions taken since the last draft (brief, "Decided since the last draft"). On the happy path nothing changes for TST-1, because it has no pull request.
 
    Not stated: how the check tells a pull request made by this instance from one made by hand. The skip rule names the distinction; no document gives the test.
 
@@ -182,11 +182,11 @@ On the happy path this phase changes step 3 (confirm), step 4 (the claim and the
 
    What changes on the happy path: step 3 today writes only the local row and the queue, and the happy path document closes with a "Docs disagree" line saying so. Phase 4 makes that line false.
 
-3. **The claim happens at `claiming`.** The orchestrator pushes an empty commit to `agent/<identifier>` and opens a draft pull request before the agent starts; the pull request is the visible lock (brief, "Flow per job (phases 3-4)", step 1; decisions, entry 7). A claim failure means no agent started (brief, "Job lifecycle"), and `claiming` holds the slot (decisions, entry 4).
+3. **The claim happens at `claiming`.** The orchestrator pushes an empty commit to `agent/<ticketKey>` and opens a draft pull request before the agent starts; the pull request is the visible lock (brief, "Flow per job (phases 3-4)", step 1; decisions, entry 7). A claim failure means no agent started (brief, "Job lifecycle"), and `claiming` holds the slot (decisions, entry 4).
 
    Unverified: "GitHub's acceptance of a pull request from an empty commit is not tested yet" (decisions, entry 7; decisions, "Open items", item 2; status, "Not yet checked"). The brief tells you to verify it in a scratch repo and record the result in the decision log (brief, "Flow per job (phases 3-4)", step 1).
 
-4. **The branch used is recorded in `jobs.branch`.** The decision log puts the column in the row at claim time and says it is never recomputed from the identifier afterwards, because a pull request's head branch can differ from the tracker's suggested branch name (decisions, "Worktree and branch rule"). The decision log names the column in the future tense; `src/db/schema.ts` defines no such column today.
+4. **The branch used is recorded in `jobs.branch`.** The decision log puts the column in the row at claim time and says it is never recomputed from the ticketKey afterwards, because a pull request's head branch can differ from the tracker's suggested branch name (decisions, "Worktree and branch rule"). The decision log names the column in the future tense; `src/db/schema.ts` defines no such column today.
 
 5. **The agent runs and the validator runs, as in phases 2 and 3.** The claim sits first, so a failed run leaves the draft empty (brief, "Flow per job (phases 3-4)", steps 1 to 3).
 
@@ -214,9 +214,9 @@ On the happy path this phase changes step 3 (confirm), step 4 (the claim and the
 
 9. **The tracker gets a link, and comments wait for approval.** The pull request link goes on the ticket automatically if it is not already linked. Comments are drafted in full, shown to you, and sent only after approval, never `auto` (brief, "Writes to outside systems"). The draft is a `pending_actions` row, the table phase 1 already built with the approve/reject logic and the endpoints; nothing is sent before approval (brief, "Writes to outside systems"; brief, "Tables (Drizzle)"). The per-job `draft_comment` tool from phase 2 creates that row (status, "Phase 2 (real agent)").
 
-10. **ntfy says the draft is ready.** The brief's last flow step is a "draft ready" notification (brief, "Flow per job (phases 3-4)", step 5). The decision log says ntfy is self-hosted and carries "the identifier and title only, never ticket bodies" (decisions, "Decisions taken 2026-10-28"). A new failure is notified once plus a daily reminder (brief, "Job lifecycle"; architecture, "Failure kinds and retry rules").
+10. **ntfy says the draft is ready.** The brief's last flow step is a "draft ready" notification (brief, "Flow per job (phases 3-4)", step 5). The decision log says ntfy is self-hosted and carries "the ticketKey and title only, never ticket bodies" (decisions, "Decisions taken 2026-10-28"). A new failure is notified once plus a daily reminder (brief, "Job lifecycle"; architecture, "Failure kinds and retry rules").
 
-    Docs disagree: security says "send only identifiers and states, never ticket bodies" (security, "Notifications and tracker text"), while decisions says identifier and title. Both agree that the body never leaves the box.
+    Docs disagree: security says "send only identifiers and states, never ticket bodies" (security, "Notifications and tracker text"), while decisions says ticketKey and title. Both agree that the body never leaves the box.
 
 11. **The run stops at `pr_open`.** The person reviews and marks the pull request ready (brief, "Flow per job (phases 3-4)", step 5). `in_review` and the poller are phase 5.
 

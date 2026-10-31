@@ -159,7 +159,7 @@ What changes: nothing. A rejected request never touches the database.
 
 ### 5. Reads: the wire shape
 
-`src/jobs-queries.ts` decides what a caller may see. `toJobSummary` drops `externalId` (the tracker's own id), turns the two dates into ISO strings, and adds `allowedActions`. The compile-time assertion in `src/api/contract.ts` makes the schema and this projection fail together if either drifts.
+`src/jobs-queries.ts` decides what a caller may see. `toJobSummary` drops `sourceId` (the tracker's own id), turns the two dates into ISO strings, and adds `allowedActions`. The compile-time assertion in `src/api/contract.ts` makes the schema and this projection fail together if either drifts.
 
 Source: `src/jobs-queries.ts`
 
@@ -167,7 +167,7 @@ Source: `src/jobs-queries.ts`
 function toJobSummary(job: Job): JobSummary {
   return {
     id: job.id,
-    identifier: job.identifier,
+    ticketKey: job.ticketKey,
     source: job.source,
     state: job.state,
     attempt: job.attempt,
@@ -229,7 +229,7 @@ What changes: the `jobs` row, one `job_events` row, a queue entry for confirm an
 
 ### 7. A command's row is re-read before the answer
 
-A job command returns the domain row, which still has the tracker's `externalId` and `Date` objects. The route calls `reload`, which asks the read layer for the same id and answers with the wire shape. If the row vanished between the two calls, `reload` throws `JobNotFoundError`, which maps to `404`. An action decision skips `reload`: its answer is `toActionSummary` of the row the store returned.
+A job command returns the domain row, which still has the tracker's `sourceId` and `Date` objects. The route calls `reload`, which asks the read layer for the same id and answers with the wire shape. If the row vanished between the two calls, `reload` throws `JobNotFoundError`, which maps to `404`. An action decision skips `reload`: its answer is `toActionSummary` of the row the store returned.
 
 Source: `src/api/app.ts`
 

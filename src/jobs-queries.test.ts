@@ -10,8 +10,8 @@ function makeJob(overrides: Partial<Job> = {}): Job {
   return {
     id: '11111111-1111-4111-8111-111111111111',
     source: 'linear',
-    externalId: 'ext-1',
-    identifier: 'TST-1',
+    sourceId: 'ext-1',
+    ticketKey: 'TST-1',
     state: 'proposed',
     attempt: 0,
     maxAttempts: 3,
@@ -86,7 +86,7 @@ describe('job views', () => {
     expect(views).toEqual([
       {
         id: '11111111-1111-4111-8111-111111111111',
-        identifier: 'TST-1',
+        ticketKey: 'TST-1',
         source: 'linear',
         state: 'failed',
         attempt: 2,
@@ -107,8 +107,8 @@ describe('job views', () => {
     expect(view?.nextRunAt).toBeNull()
   })
 
-  it('does not expose the tracker external id, which the UI never shows', async () => {
-    const { deps } = setup([makeJob({ externalId: 'internal-id' })])
+  it('does not expose the tracker source id, which the UI never shows', async () => {
+    const { deps } = setup([makeJob({ sourceId: 'internal-id' })])
 
     const [view] = await listJobs(deps, {})
 
@@ -118,7 +118,7 @@ describe('job views', () => {
   it('returns one job by id, or null', async () => {
     const { deps } = setup([makeJob()])
 
-    expect(await getJob(deps, '11111111-1111-4111-8111-111111111111')).toMatchObject({ identifier: 'TST-1' })
+    expect(await getJob(deps, '11111111-1111-4111-8111-111111111111')).toMatchObject({ ticketKey: 'TST-1' })
     expect(await getJob(deps, 'missing')).toBeNull()
   })
 })

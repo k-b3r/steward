@@ -99,8 +99,8 @@ class AgentError extends Error {
   }
 }
 
-function branchName(identifier: string): string {
-  return `agent/${identifier.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
+function branchName(ticketKey: string): string {
+  return `agent/${ticketKey.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
 }
 
 function errorMessage(error: unknown): string {
@@ -201,7 +201,7 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
     // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
     const baseBranch = deps.baseBranch ?? 'main'
     await fetchBaseClassified(deps, baseBranch)
-    const branch = branchName(current.identifier)
+    const branch = branchName(current.ticketKey)
     // A worker that died mid-run never ran its cleanup. Clear what it left, or `git worktree add`
     // refuses the path on every retry. The branch and its commits are not touched.
     await deps.git.removeWorktree(deps.config.repoPath, worktreePath)

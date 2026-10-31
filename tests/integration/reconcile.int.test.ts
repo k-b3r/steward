@@ -46,8 +46,8 @@ async function resetDatabase(): Promise<void> {
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
     source: 'linear',
-    externalId: 'ext-1',
-    identifier: 'TST-1',
+    sourceId: 'ext-1',
+    ticketKey: 'TST-1',
     title: 'A job',
     body: 'Do the thing',
     labels: ['agent'],
@@ -57,9 +57,9 @@ function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   }
 }
 
-async function makeJob(externalId: string, state: 'proposed' | 'queued' = 'queued', maxAttempts = 3): Promise<Job> {
+async function makeJob(sourceId: string, state: 'proposed' | 'queued' = 'queued', maxAttempts = 3): Promise<Job> {
   const { job } = await insertJob(db, {
-    item: makeItem({ externalId, identifier: `TST-${externalId}` }),
+    item: makeItem({ sourceId, ticketKey: `TST-${sourceId}` }),
     state,
     maxAttempts,
     now: T0,
@@ -67,8 +67,8 @@ async function makeJob(externalId: string, state: 'proposed' | 'queued' = 'queue
   return job
 }
 
-async function makeQueuedJob(externalId: string, maxAttempts = 3): Promise<Job> {
-  return makeJob(externalId, 'queued', maxAttempts)
+async function makeQueuedJob(sourceId: string, maxAttempts = 3): Promise<Job> {
+  return makeJob(sourceId, 'queued', maxAttempts)
 }
 
 async function startJob(job: Job, when: Date = at(1)): Promise<Job> {

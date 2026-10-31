@@ -1,12 +1,18 @@
 // Shared domain types. Contract for every pure file; do not edit without the orchestrator.
 
+/**
+ * One tracker ticket as the orchestrator sees it: the feed has already dropped Linear's own field names and
+ * node shape, and nothing below this type knows which tracker it came from. Intake turns each item into a
+ * job row and stores a copy in `jobs.item`; `source` plus `sourceId` is the unique key. Linear is one
+ * possible source, not the only one: src/linear-map.ts `mapIssueToWorkItem` is the adapter that builds these.
+ */
 export type WorkItem = {
-  /** Feed name, `linear` today. With `externalId` it is the unique key of a job. */
+  /** Feed name, `linear` today. With `sourceId` it is the unique key of a job. */
   source: string
   /** The tracker's own issue id, not the human key. Intake dedupes on `source` plus this. */
-  externalId: string
+  sourceId: string
   /** Tracker key as people see it, e.g. `TST-1`. Names the `agent/*` branch and the transcript. */
-  identifier: string
+  ticketKey: string
   /** Issue title, verbatim. Stored with the job row; the API does not serve it yet. */
   title: string
   /** Issue description. An empty string when the tracker returns none. */
@@ -35,21 +41,41 @@ export const JOB_STATES = [
   'failed',
   'cancelled',
 ] as const
+
+/**
+ * The closed set of job states. `JOB_STATES` above is the source of truth; the legal moves between them are
+ * in src/transitions.ts, the database holds the column to the same list with the `jobs_state_check`
+ * constraint in src/db/schema.ts, and src/api/contract.ts repeats the list so a new member fails to compile
+ * until the wire schema knows it too.
+ */
 export type JobState = (typeof JOB_STATES)[number]
 
 /** infra: retried with backoff. agent: phase 3 loop. setup: never retried. */
 export const FAILURE_KINDS = ['infra', 'agent', 'setup'] as const
+
+/**
+ * Why a run stopped, which on its own decides whether it is retried: `infra` backs off and runs again,
+ * `agent` and `setup` fail the job at once (routing in src/retry-policy.ts `decideAfterFailure`).
+ * `FAILURE_KINDS` above is the source of truth, `jobs_failure_kind_check` in src/db/schema.ts enforces it,
+ * and the column stays null until a transition records the first failure.
+ */
 export type FailureKind = (typeof FAILURE_KINDS)[number]
 
+/**
+ * One unit of work for one tracker ticket: the `jobs` row the orchestrator owns, plus the slot it holds while
+ * it runs, which comes from a join with the `slots` table and not from a column here. Created by `insertJob`
+ * in src/db/store.ts and changed only through `transitionJob` there; src/jobs-commands.ts and src/worker
+ * return it, and src/jobs-queries.ts flattens it into the API response.
+ */
 export type Job = {
   /** Random UUID, the primary key. The queue and the API use it as the job id. */
   id: string
-  /** Feed name, `linear` today. With `externalId` it is unique among jobs. */
+  /** Feed name, `linear` today. With `sourceId` it is unique among jobs. */
   source: string
   /** Tracker issue id, not the human key. One job per `source` plus this. */
-  externalId: string
+  sourceId: string
   /** Tracker key as people see it, e.g. `TST-1`. Copied at insert and never recomputed since. */
-  identifier: string
+  ticketKey: string
   /** One of `JOB_STATES`. Moves only along the edges in src/transitions.ts. */
   state: JobState
   /** Attempts so far. Goes up by one on entering `claiming`; a manual retry sets it to 0. */

@@ -135,7 +135,7 @@ describe('createLinearClient', () => {
 
     const items = await collect(client.poll())
 
-    expect(items.map((item) => item.identifier)).toEqual(['TST-1'])
+    expect(items.map((item) => item.ticketKey)).toEqual(['TST-1'])
     expect(fake.calls).toHaveLength(1)
     const [call] = fake.calls
     expect(String(call?.input)).toBe('https://api.linear.app/graphql')
@@ -186,7 +186,7 @@ describe('createLinearClient', () => {
 
     const items = await collect(client.poll())
 
-    expect(items.map((item) => item.identifier)).toEqual(['TST-1', 'TST-2'])
+    expect(items.map((item) => item.ticketKey)).toEqual(['TST-1', 'TST-2'])
     expect(requestBody(fake.calls[0] as FetchCall).variables.after).toBeNull()
     expect(requestBody(fake.calls[1] as FetchCall).variables.after).toBe('cursor-page-1')
     const rawLines = lines.filter((line) => line.includes('Linear raw response'))
@@ -245,7 +245,7 @@ describe('createLinearClient', () => {
 
     const items = await collect(client.poll())
 
-    expect(items.map((item) => item.identifier)).toEqual(['TST-1', 'TST-3'])
+    expect(items.map((item) => item.ticketKey)).toEqual(['TST-1', 'TST-3'])
     const warning = lines
       .map((line) => JSON.parse(line) as Record<string, unknown>)
       .find((line) => line.level === 'warn')

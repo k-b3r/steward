@@ -12,21 +12,27 @@ export type QueryStore = {
   listActions(filter?: { status?: string; limit?: number }): Promise<PendingAction[]>
 }
 
+/**
+ * The arguments of the three query functions in this file, and nothing more than the store they read
+ * through. It exists so a caller binds one store once and passes the same object to `getJob`,
+ * `listJobs` and `listActions`. The 100 default and the 1..500 bound are module constants here, not
+ * part of the deps; `src/composition/api.ts` builds it, `src/jobs-queries.test.ts` passes a fake.
+ */
 export type QueryDeps = {
   /** The only dependency; production wraps `src/db/store.ts`, tests pass an in-memory fake. */
   store: QueryStore
 }
 
 /**
- * A job as the API returns it: dates as ISO strings and no tracker external id.
+ * A job as the API returns it: dates as ISO strings and no tracker source id.
  * `src/api/contract.ts` asserts this shape against `jobResponseSchema` at compile time.
  */
 export type JobSummary = {
   /** Job UUID, the primary key; the routes take it as the `:id` path parameter. */
   id: string
-  /** Tracker identifier as people see it, for example `TST-1`; dedupe uses source plus external id, not this. */
-  identifier: string
-  /** Tracker name, for example `linear`; intake dedupes on source plus external id, which this shape omits. */
+  /** Tracker ticketKey as people see it, for example `TST-1`; dedupe uses source plus source id, not this. */
+  ticketKey: string
+  /** Tracker name, for example `linear`; intake dedupes on source plus source id, which this shape omits. */
   source: string
   /** One of the twelve job states; `allowedActions` is derived from it. */
   state: JobState
@@ -76,7 +82,7 @@ function assertLimit(limit: number): void {
 function toJobSummary(job: Job): JobSummary {
   return {
     id: job.id,
-    identifier: job.identifier,
+    ticketKey: job.ticketKey,
     source: job.source,
     state: job.state,
     attempt: job.attempt,

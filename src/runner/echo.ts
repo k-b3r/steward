@@ -66,7 +66,7 @@ export function createEchoRunner(opts: {
       writer.writeOrchestrator('started', { jobId: job.id, sessionId })
       const system = systemEvent(sessionId)
       writer.writeAgent('system', system, JSON.stringify(system))
-      const assistant = assistantEvent(`echo ${job.identifier}`)
+      const assistant = assistantEvent(`echo ${job.ticketKey}`)
       writer.writeAgent('assistant', assistant, JSON.stringify(assistant))
       const result = resultEvent(sessionId)
       writer.writeAgent('result', result, JSON.stringify(result))

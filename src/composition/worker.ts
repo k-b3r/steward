@@ -88,7 +88,7 @@ export function composeWorker(config: Config, write: (line: string) => void) {
           now: clock(),
           store: {
             insertJob: store.insertJob,
-            knownExternalIds: intakeQueries.knownExternalIds,
+            knownSourceIds: intakeQueries.knownSourceIds,
             countJobsForSource: intakeQueries.countJobsForSource,
             countOpenProposals: intakeQueries.countOpenProposals,
           },

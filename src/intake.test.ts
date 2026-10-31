@@ -11,8 +11,8 @@ const CLOCK = NOW
 function item(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
     source: 'linear',
-    externalId: 'ext-1',
-    identifier: 'TST-1',
+    sourceId: 'ext-1',
+    ticketKey: 'TST-1',
     title: 'Synthetic ticket',
     body: 'Synthetic body',
     labels: [],
@@ -59,12 +59,12 @@ function fakeStore(
     async insertJob(_db, input) {
       inserts.push(input)
       sequence += 1
-      const created = !duplicates.has(input.item.externalId)
+      const created = !duplicates.has(input.item.sourceId)
       const job: Job = {
-        id: created ? `job-${String(sequence)}` : `existing-${input.item.externalId}`,
+        id: created ? `job-${String(sequence)}` : `existing-${input.item.sourceId}`,
         source: input.item.source,
-        externalId: input.item.externalId,
-        identifier: input.item.identifier,
+        sourceId: input.item.sourceId,
+        ticketKey: input.item.ticketKey,
         state: input.state,
         attempt: 0,
         maxAttempts: input.maxAttempts,
@@ -74,7 +74,7 @@ function fakeStore(
       }
       return { job, created }
     },
-    async knownExternalIds(_db, source) {
+    async knownSourceIds(_db, source) {
       knownCalls.push({ source })
       return new Set(options.known ?? [])
     },
@@ -141,10 +141,10 @@ function parsedLines(lines: string[]): Record<string, unknown>[] {
 
 describe('runIntakePoll', () => {
   it('inserts queued and proposed jobs and enqueues only newly created queued jobs', async () => {
-    const inProgress = item({ externalId: 'ext-a', identifier: 'TST-1', status: 'In Progress' })
-    const todo = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'Todo' })
-    const backlog = item({ externalId: 'ext-c', identifier: 'TST-3', status: 'Backlog' })
-    const done = item({ externalId: 'ext-d', identifier: 'TST-4', status: 'Done' })
+    const inProgress = item({ sourceId: 'ext-a', ticketKey: 'TST-1', status: 'In Progress' })
+    const todo = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'Todo' })
+    const backlog = item({ sourceId: 'ext-c', ticketKey: 'TST-3', status: 'Backlog' })
+    const done = item({ sourceId: 'ext-d', ticketKey: 'TST-4', status: 'Done' })
     const fake = fakeStore({ jobsForSource: 1 })
     const { deps, queue } = depsFor({
       items: [inProgress, todo, backlog, done],
@@ -162,8 +162,8 @@ describe('runIntakePoll', () => {
   })
 
   it('queries the store for the feed source and passes the policy inputs through', async () => {
-    const todo = item({ externalId: 'ext-a', status: 'Todo' })
-    const inProgress = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'In Progress' })
+    const todo = item({ sourceId: 'ext-a', status: 'Todo' })
+    const inProgress = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'In Progress' })
     const fake = fakeStore({ known: ['ext-known'], jobsForSource: 1, openProposals: 2 })
     const { deps } = depsFor({
       items: [todo, inProgress],
@@ -181,7 +181,7 @@ describe('runIntakePoll', () => {
   })
 
   it('proposes In Progress items on the first poll for a source', async () => {
-    const inProgress = item({ externalId: 'ext-a', status: 'In Progress' })
+    const inProgress = item({ sourceId: 'ext-a', status: 'In Progress' })
     const fake = fakeStore({ jobsForSource: 0 })
     const { deps, queue } = depsFor({ items: [inProgress], store: fake.store })
 
@@ -193,9 +193,9 @@ describe('runIntakePoll', () => {
   })
 
   it('creates nothing in dry-run mode and logs decisions and counts', async () => {
-    const inProgress = item({ externalId: 'ext-a', status: 'In Progress' })
-    const todo = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'Todo' })
-    const done = item({ externalId: 'ext-c', identifier: 'TST-3', status: 'Done' })
+    const inProgress = item({ sourceId: 'ext-a', status: 'In Progress' })
+    const todo = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'Todo' })
+    const done = item({ sourceId: 'ext-c', ticketKey: 'TST-3', status: 'Done' })
     const fake = fakeStore({ jobsForSource: 1 })
     const { deps, queue, lines } = depsFor({ items: [inProgress, todo, done], store: fake.store, dryRun: true })
 
@@ -217,7 +217,7 @@ describe('runIntakePoll', () => {
   })
 
   it('does not enqueue a duplicate that another poll inserted first', async () => {
-    const inProgress = item({ externalId: 'ext-a', status: 'In Progress' })
+    const inProgress = item({ sourceId: 'ext-a', status: 'In Progress' })
     const fake = fakeStore({ jobsForSource: 2, duplicates: ['ext-a'] })
     const { deps, queue } = depsFor({ items: [inProgress], store: fake.store })
 

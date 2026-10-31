@@ -6,7 +6,7 @@ import type { Envelope } from './api'
 const JOB = {
   id: '11111111-1111-4111-8111-111111111111',
   source: 'linear',
-  identifier: 'TST-1',
+  ticketKey: 'TST-1',
   state: 'queued',
   attempt: 0,
   maxAttempts: 3,

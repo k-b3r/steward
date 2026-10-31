@@ -66,8 +66,8 @@ describe('mapIssueToWorkItem', () => {
   it('maps a Todo issue with labels and a branch to a WorkItem', () => {
     expect(mapIssueToWorkItem(todoNode, SOURCE)).toEqual({
       source: SOURCE,
-      externalId: 'lin_synthetic_0001',
-      identifier: 'TST-1',
+      sourceId: 'lin_synthetic_0001',
+      ticketKey: 'TST-1',
       title: 'Synthetic todo ticket',
       body: 'Clicking the synthetic login button does nothing.',
       branch: 'tst-1-synthetic-login-button',
@@ -104,7 +104,7 @@ describe('mapIssueToWorkItem', () => {
 
     expect(item.body).toBe('')
     expect(item.status).toBe('Backlog')
-    expect(item.identifier).toBe('TST-3')
+    expect(item.ticketKey).toBe('TST-3')
   })
 
   it('leaves the branch key absent for an empty-string branchName', () => {
@@ -159,7 +159,7 @@ describe('parseIssuesPage', () => {
   it('maps every node of a page and keeps the cursor while more pages exist', () => {
     const page = parseIssuesPage(fixture.page, SOURCE)
 
-    expect(page.items.map((item) => item.identifier)).toEqual(['TST-1', 'TST-2', 'TST-3', 'TST-4'])
+    expect(page.items.map((item) => item.ticketKey)).toEqual(['TST-1', 'TST-2', 'TST-3', 'TST-4'])
     expect(page.nextCursor).toBe('cursor-page-1')
   })
 

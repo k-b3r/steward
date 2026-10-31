@@ -54,8 +54,8 @@ async function resetDatabase(): Promise<void> {
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
     source: 'linear',
-    externalId: 'ext-1',
-    identifier: 'TST-1',
+    sourceId: 'ext-1',
+    ticketKey: 'TST-1',
     title: 'A job',
     body: 'Do the thing',
     labels: ['agent'],
@@ -65,9 +65,9 @@ function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   }
 }
 
-async function createJob(externalId = 'ext-1', now: Date = T0): Promise<Job> {
+async function createJob(sourceId = 'ext-1', now: Date = T0): Promise<Job> {
   const { job } = await insertJob(db, {
-    item: makeItem({ externalId, identifier: `TST-${externalId}` }),
+    item: makeItem({ sourceId, ticketKey: `TST-${sourceId}` }),
     state: 'proposed',
     maxAttempts: 3,
     now,
@@ -107,8 +107,8 @@ describe('insertJob', () => {
     expect(created).toBe(true)
     expect(job).toMatchObject({
       source: 'linear',
-      externalId: 'ext-1',
-      identifier: 'TST-1',
+      sourceId: 'ext-1',
+      ticketKey: 'TST-1',
       state: 'proposed',
       attempt: 0,
       maxAttempts: 3,

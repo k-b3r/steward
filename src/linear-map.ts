@@ -66,8 +66,8 @@ export function mapIssueToWorkItem(node: unknown, source: string): WorkItem {
 
   const item: WorkItem = {
     source,
-    externalId: readNonEmptyString(issue.id, 'id', source),
-    identifier: readNonEmptyString(issue.identifier, 'identifier', source),
+    sourceId: readNonEmptyString(issue.id, 'id', source),
+    ticketKey: readNonEmptyString(issue.identifier, 'identifier', source),
     title: readNonEmptyString(issue.title, 'title', source),
     body: readNullableString(issue.description, 'description', source) ?? '',
     labels: readLabelNames(issue.labels, source),

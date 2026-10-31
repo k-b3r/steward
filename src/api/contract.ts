@@ -72,7 +72,7 @@ const jobActionSchema = z.enum(['confirm', 'decline', 'reconsider', 'retry', 'ca
 export const jobResponseSchema = z.object({
   id: z.uuid(),
   source: z.string(),
-  identifier: z.string(),
+  ticketKey: z.string(),
   state: jobStateSchema,
   attempt: z.number().int().nonnegative(),
   maxAttempts: z.number().int().positive(),

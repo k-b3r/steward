@@ -6,8 +6,8 @@ import type { WorkItem } from './types'
 function item(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
     source: 'linear',
-    externalId: 'ext-1',
-    identifier: 'TST-1',
+    sourceId: 'ext-1',
+    ticketKey: 'TST-1',
     title: 'Synthetic ticket',
     body: 'Synthetic body',
     labels: [],
@@ -20,7 +20,7 @@ function item(overrides: Partial<WorkItem> = {}): WorkItem {
 function baseInput(overrides: Partial<IntakeInput> = {}): IntakeInput {
   return {
     items: [],
-    knownExternalIds: new Set<string>(),
+    knownSourceIds: new Set<string>(),
     sourceHasJobs: true,
     openProposals: 0,
     maxOpenProposals: 5,
@@ -31,10 +31,10 @@ function baseInput(overrides: Partial<IntakeInput> = {}): IntakeInput {
 
 describe('decideIntake', () => {
   it('skips items that already have a job, before looking at their status', () => {
-    const known = item({ externalId: 'ext-known', status: 'In Progress' })
+    const known = item({ sourceId: 'ext-known', status: 'In Progress' })
 
     const result = decideIntake(
-      baseInput({ items: [known], knownExternalIds: new Set([known.externalId]), sourceHasJobs: true }),
+      baseInput({ items: [known], knownSourceIds: new Set([known.sourceId]), sourceHasJobs: true }),
     )
 
     expect(result.decisions).toEqual([])
@@ -42,7 +42,7 @@ describe('decideIntake', () => {
   })
 
   it('proposes Todo items', () => {
-    const todo = item({ externalId: 'ext-todo', status: 'Todo' })
+    const todo = item({ sourceId: 'ext-todo', status: 'Todo' })
 
     const result = decideIntake(baseInput({ items: [todo] }))
 
@@ -51,7 +51,7 @@ describe('decideIntake', () => {
   })
 
   it('proposes Backlog items', () => {
-    const backlog = item({ externalId: 'ext-backlog', status: 'Backlog' })
+    const backlog = item({ sourceId: 'ext-backlog', status: 'Backlog' })
 
     const result = decideIntake(baseInput({ items: [backlog] }))
 
@@ -60,7 +60,7 @@ describe('decideIntake', () => {
   })
 
   it('queues In Progress items after the source has jobs', () => {
-    const inProgress = item({ externalId: 'ext-progress', status: 'In Progress' })
+    const inProgress = item({ sourceId: 'ext-progress', status: 'In Progress' })
 
     const result = decideIntake(baseInput({ items: [inProgress], sourceHasJobs: true }))
 
@@ -69,8 +69,8 @@ describe('decideIntake', () => {
   })
 
   it('proposes every In Progress item on the first poll for a source', () => {
-    const first = item({ externalId: 'ext-a', identifier: 'TST-1', status: 'In Progress' })
-    const second = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'In Progress' })
+    const first = item({ sourceId: 'ext-a', ticketKey: 'TST-1', status: 'In Progress' })
+    const second = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'In Progress' })
 
     const result = decideIntake(baseInput({ items: [first, second], sourceHasJobs: false }))
 
@@ -82,9 +82,9 @@ describe('decideIntake', () => {
   })
 
   it('proposes all new In Progress items when the poll would exceed the enqueue cap', () => {
-    const first = item({ externalId: 'ext-a', identifier: 'TST-1', status: 'In Progress' })
-    const second = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'In Progress' })
-    const third = item({ externalId: 'ext-c', identifier: 'TST-3', status: 'In Progress' })
+    const first = item({ sourceId: 'ext-a', ticketKey: 'TST-1', status: 'In Progress' })
+    const second = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'In Progress' })
+    const third = item({ sourceId: 'ext-c', ticketKey: 'TST-3', status: 'In Progress' })
 
     const result = decideIntake(baseInput({ items: [first, second, third], sourceHasJobs: true, maxEnqueuePerPoll: 2 }))
 
@@ -97,8 +97,8 @@ describe('decideIntake', () => {
   })
 
   it('queues In Progress items exactly at the enqueue cap', () => {
-    const first = item({ externalId: 'ext-a', identifier: 'TST-1', status: 'In Progress' })
-    const second = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'In Progress' })
+    const first = item({ sourceId: 'ext-a', ticketKey: 'TST-1', status: 'In Progress' })
+    const second = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'In Progress' })
 
     const result = decideIntake(baseInput({ items: [first, second], sourceHasJobs: true, maxEnqueuePerPoll: 2 }))
 
@@ -109,7 +109,7 @@ describe('decideIntake', () => {
   })
 
   it('proposes new In Progress items when the enqueue cap is zero', () => {
-    const inProgress = item({ externalId: 'ext-a', status: 'In Progress' })
+    const inProgress = item({ sourceId: 'ext-a', status: 'In Progress' })
 
     const result = decideIntake(baseInput({ items: [inProgress], sourceHasJobs: true, maxEnqueuePerPoll: 0 }))
 
@@ -117,14 +117,14 @@ describe('decideIntake', () => {
   })
 
   it('does not count items that already have a job toward the enqueue cap', () => {
-    const known = item({ externalId: 'ext-known', status: 'In Progress' })
-    const first = item({ externalId: 'ext-a', identifier: 'TST-1', status: 'In Progress' })
-    const second = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'In Progress' })
+    const known = item({ sourceId: 'ext-known', status: 'In Progress' })
+    const first = item({ sourceId: 'ext-a', ticketKey: 'TST-1', status: 'In Progress' })
+    const second = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'In Progress' })
 
     const result = decideIntake(
       baseInput({
         items: [known, first, second],
-        knownExternalIds: new Set([known.externalId]),
+        knownSourceIds: new Set([known.sourceId]),
         sourceHasJobs: true,
         maxEnqueuePerPoll: 2,
       }),
@@ -138,9 +138,9 @@ describe('decideIntake', () => {
   })
 
   it('skips proposals once open proposals reach the cap, mid-list', () => {
-    const first = item({ externalId: 'ext-a', identifier: 'TST-1', status: 'Todo' })
-    const second = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'Todo' })
-    const third = item({ externalId: 'ext-c', identifier: 'TST-3', status: 'Todo' })
+    const first = item({ sourceId: 'ext-a', ticketKey: 'TST-1', status: 'Todo' })
+    const second = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'Todo' })
+    const third = item({ sourceId: 'ext-c', ticketKey: 'TST-3', status: 'Todo' })
 
     const result = decideIntake(baseInput({ items: [first, second, third], openProposals: 1, maxOpenProposals: 2 }))
 
@@ -152,8 +152,8 @@ describe('decideIntake', () => {
   })
 
   it('skips every proposal when the open proposal cap is zero', () => {
-    const todo = item({ externalId: 'ext-a', status: 'Todo' })
-    const backlog = item({ externalId: 'ext-b', status: 'Backlog' })
+    const todo = item({ sourceId: 'ext-a', status: 'Todo' })
+    const backlog = item({ sourceId: 'ext-b', status: 'Backlog' })
 
     const result = decideIntake(baseInput({ items: [todo, backlog], maxOpenProposals: 0 }))
 
@@ -165,8 +165,8 @@ describe('decideIntake', () => {
   })
 
   it('counts baseline proposals against the open proposal cap', () => {
-    const inProgress = item({ externalId: 'ext-a', status: 'In Progress' })
-    const todo = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'Todo' })
+    const inProgress = item({ sourceId: 'ext-a', status: 'In Progress' })
+    const todo = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'Todo' })
 
     const result = decideIntake(
       baseInput({
@@ -182,8 +182,8 @@ describe('decideIntake', () => {
   })
 
   it('counts burst proposals against the open proposal cap', () => {
-    const first = item({ externalId: 'ext-a', identifier: 'TST-1', status: 'In Progress' })
-    const second = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'In Progress' })
+    const first = item({ sourceId: 'ext-a', ticketKey: 'TST-1', status: 'In Progress' })
+    const second = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'In Progress' })
 
     const result = decideIntake(
       baseInput({
@@ -200,8 +200,8 @@ describe('decideIntake', () => {
   })
 
   it('still queues In Progress items when the proposal cap is already reached', () => {
-    const todo = item({ externalId: 'ext-a', status: 'Todo' })
-    const inProgress = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'In Progress' })
+    const todo = item({ sourceId: 'ext-a', status: 'Todo' })
+    const inProgress = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'In Progress' })
 
     const result = decideIntake(
       baseInput({ items: [todo, inProgress], openProposals: 2, maxOpenProposals: 2, sourceHasJobs: true }),
@@ -212,8 +212,8 @@ describe('decideIntake', () => {
   })
 
   it('skips statuses that are not part of intake', () => {
-    const done = item({ externalId: 'ext-done', status: 'Done' })
-    const unknown = item({ externalId: 'ext-unknown', identifier: 'TST-2', status: 'Triage' })
+    const done = item({ sourceId: 'ext-done', status: 'Done' })
+    const unknown = item({ sourceId: 'ext-unknown', ticketKey: 'TST-2', status: 'Triage' })
 
     const result = decideIntake(baseInput({ items: [done, unknown] }))
 
@@ -225,17 +225,17 @@ describe('decideIntake', () => {
   })
 
   it('preserves input order in both output lists', () => {
-    const todo = item({ externalId: 'ext-a', status: 'Todo' })
-    const done = item({ externalId: 'ext-b', identifier: 'TST-2', status: 'Done' })
-    const backlog = item({ externalId: 'ext-c', identifier: 'TST-3', status: 'Backlog' })
-    const inProgress = item({ externalId: 'ext-d', identifier: 'TST-4', status: 'In Progress' })
+    const todo = item({ sourceId: 'ext-a', status: 'Todo' })
+    const done = item({ sourceId: 'ext-b', ticketKey: 'TST-2', status: 'Done' })
+    const backlog = item({ sourceId: 'ext-c', ticketKey: 'TST-3', status: 'Backlog' })
+    const inProgress = item({ sourceId: 'ext-d', ticketKey: 'TST-4', status: 'In Progress' })
 
     const result = decideIntake(
       baseInput({ items: [todo, done, backlog, inProgress], sourceHasJobs: true, maxEnqueuePerPoll: 1 }),
     )
 
-    expect(result.decisions.map((decision) => decision.item.externalId)).toEqual(['ext-a', 'ext-c', 'ext-d'])
-    expect(result.skipped.map((skip) => skip.item.externalId)).toEqual(['ext-b'])
+    expect(result.decisions.map((decision) => decision.item.sourceId)).toEqual(['ext-a', 'ext-c', 'ext-d'])
+    expect(result.skipped.map((skip) => skip.item.sourceId)).toEqual(['ext-b'])
   })
 
   it('returns empty lists for no items', () => {

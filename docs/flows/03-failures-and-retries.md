@@ -471,7 +471,7 @@ Columns are the real ones from `job_events`: `from_state`, `to_state`, `failure_
 List failed jobs with their kind and the reason the failure was recorded:
 
 ```sql
-select j.identifier, j.state, j.attempt, j.max_attempts, j.failure_kind, e.reason, e.at
+select j.ticketKey, j.state, j.attempt, j.max_attempts, j.failure_kind, e.reason, e.at
 from jobs j
 join lateral (
   select reason, at from job_events where job_id = j.id order by id desc limit 1
@@ -492,7 +492,7 @@ order by id;
 See the jobs that wait for a retry, with the delay already applied to `next_run_at`:
 
 ```sql
-select identifier, attempt, max_attempts, failure_kind, next_run_at, next_run_at - now() as wait
+select ticketKey, attempt, max_attempts, failure_kind, next_run_at, next_run_at - now() as wait
 from jobs
 where state = 'queued' and next_run_at is not null
 order by next_run_at;
@@ -510,7 +510,7 @@ The answer is the read model after the move, with the buttons the new state allo
 ```json
 {
   "id": "<JOB_ID>",
-  "identifier": "TST-1",
+  "ticketKey": "TST-1",
   "source": "linear",
   "state": "queued",
   "attempt": 0,

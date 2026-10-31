@@ -36,8 +36,8 @@ export const jobs = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     source: text('source').notNull(),
-    externalId: text('external_id').notNull(),
-    identifier: text('identifier').notNull(),
+    sourceId: text('source_id').notNull(),
+    ticketKey: text('ticket_key').notNull(),
     item: jsonb('item').$type<WorkItem>().notNull(),
     state: text('state').$type<JobState>().notNull(),
     attempt: integer('attempt').notNull().default(0),
@@ -48,7 +48,7 @@ export const jobs = pgTable(
     updatedAt: timestamptz('updated_at').notNull(),
   },
   (table) => [
-    uniqueIndex('jobs_source_external_id_key').on(table.source, table.externalId),
+    uniqueIndex('jobs_source_source_id_key').on(table.source, table.sourceId),
     index('jobs_state_idx').on(table.state),
     check('jobs_state_check', sql`${table.state} in (${sql.raw(quotedList(JOB_STATES))})`),
     check('jobs_failure_kind_check', sql`${table.failureKind} in (${sql.raw(quotedList(FAILURE_KINDS))})`),

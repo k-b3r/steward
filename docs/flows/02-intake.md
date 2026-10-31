@@ -34,9 +34,9 @@ The poll has no state of its own. It writes a row, or it does not.
 | `src/intake-policy.ts`      | Pure decision table. No clock, I/O or environment. Returns decisions and skips with a reason string.                      |
 | `src/linear.ts`             | `WorkFeed` over Linear's GraphQL API: query, pages, retries, raw-response log.                                            |
 | `src/linear-map.ts`         | Maps one issue node to a `WorkItem`; raises `LinearMapError` on a bad shape.                                              |
-| `src/db/intake-queries.ts`  | Three reads: known external ids, job count for a source, open proposal count.                                             |
+| `src/db/intake-queries.ts`  | Three reads: known source ids, job count for a source, open proposal count.                                               |
 | `src/db/store.ts`           | `insertJob`: inserts a row and its first event in one transaction, or reports the existing row.                           |
-| `src/db/schema.ts`          | Tables `jobs` and `job_events`; unique index on `(source, external_id)`.                                                  |
+| `src/db/schema.ts`          | Tables `jobs` and `job_events`; unique index on `(source, source_id)`.                                                    |
 | `src/worker/queue.ts`       | BullMQ queue. `enqueue(jobId)` carries only the steward job id.                                                           |
 | `src/platform/config.ts`    | Validates `POLL_INTERVAL_MS`, `MAX_ENQUEUE_PER_POLL`, `MAX_OPEN_PROPOSALS`, `DRY_RUN`, `LINEAR_TEAM_KEY`, `MAX_ATTEMPTS`. |
 | `src/jobs-commands.ts`      | `confirmJob`, `declineJob`, `reconsiderJob`: the person's moves around `proposed`.                                        |
@@ -84,7 +84,7 @@ const ISSUES_QUERY = `query StewardIntake($teamKey: String!, $after: String, $fi
   ) {
 ```
 
-The query also asks for `id`, `identifier`, `title`, `description`, `url`, `branchName`,
+The query also asks for `id`, `ticketKey`, `title`, `description`, `url`, `branchName`,
 `labels { nodes { name } }`, `state { name }`, and `pageInfo { hasNextPage endCursor }`.
 
 The client retries a `429` or any `5xx` up to `MAX_TRIES` (5) with backoff; any other non-2xx
@@ -107,8 +107,8 @@ export function mapIssueToWorkItem(node: unknown, source: string): WorkItem {
 
   const item: WorkItem = {
     source,
-    externalId: readNonEmptyString(issue.id, 'id', source),
-    identifier: readNonEmptyString(issue.identifier, 'identifier', source),
+    sourceId: readNonEmptyString(issue.id, 'id', source),
+    ticketKey: readNonEmptyString(issue.identifier, 'identifier', source),
     title: readNonEmptyString(issue.title, 'title', source),
     body: readNullableString(issue.description, 'description', source) ?? '',
     labels: readLabelNames(issue.labels, source),
@@ -123,17 +123,17 @@ export function mapIssueToWorkItem(node: unknown, source: string): WorkItem {
 }
 ```
 
-Three details matter later: `externalId` is Linear's issue `id` (not the identifier) and is the
+Three details matter later: `sourceId` is Linear's issue `id` (not the ticketKey) and is the
 dedupe key; a null `description` becomes `""`; a null or empty `branchName` leaves `branch` out.
 `status` is the state name exactly as Linear writes it, because every policy comparison is an
 exact string match.
 
 ### 5. Three reads from Postgres
 
-`runIntakePoll` calls `knownExternalIds(db, source)`, `countJobsForSource(db, source)` and
+`runIntakePoll` calls `knownSourceIds(db, source)`, `countJobsForSource(db, source)` and
 `countOpenProposals(db)` in parallel, once per poll.
 
-- `knownExternalIds` returns every external id with a job row for this source, in any state:
+- `knownSourceIds` returns every source id with a job row for this source, in any state:
   `proposed`, `declined`, `queued`, `done`, `failed`, all of them.
 - `countJobsForSource` counts every row for this source. Zero means this poll is the source's
   baseline (`sourceHasJobs: false`).
@@ -175,7 +175,7 @@ Source: `src/intake-policy.ts` (`decideIntake`, the proposal helper and the per-
   }
 
   for (const item of input.items) {
-    if (input.knownExternalIds.has(item.externalId)) {
+    if (input.knownSourceIds.has(item.sourceId)) {
       skipped.push({ item, reason: ALREADY_HAS_JOB })
       continue
     }
@@ -206,7 +206,7 @@ Queueing is never capped.
 ### 7. Every decision is logged
 
 `runIntakePoll` logs one `Intake decision` line per decision and one `Intake skipped` line per
-skip. A decision line has `source`, `externalId`, `identifier`, `action` and `reason`; a skip line
+skip. A decision line has `source`, `sourceId`, `ticketKey`, `action` and `reason`; a skip line
 has the same fields without `action`. `src/platform/logger.ts` writes one JSON object per call:
 
 ```json
@@ -215,8 +215,8 @@ has the same fields without `action`. `src/platform/logger.ts` writes one JSON o
   "level": "info",
   "msg": "Intake decision",
   "source": "linear",
-  "externalId": "lin_synthetic_0001",
-  "identifier": "TST-1",
+  "sourceId": "lin_synthetic_0001",
+  "ticketKey": "TST-1",
   "action": "propose",
   "reason": "Todo"
 }
@@ -254,7 +254,7 @@ repeats the same lines. `DRY_RUN` defaults to `true` when the key is absent (`pa
 Source: `src/db/store.ts` (`insertJob`, the insert and its first event)
 
 ```ts
-      .onConflictDoNothing({ target: [jobs.source, jobs.externalId] })
+      .onConflictDoNothing({ target: [jobs.source, jobs.sourceId] })
       .returning()
 
     if (inserted !== undefined) {
@@ -271,13 +271,13 @@ Source: `src/db/store.ts` (`insertJob`, the insert and its first event)
     }
 ```
 
-The `jobs` row copies `source`, `external_id` and `identifier`, stores the whole `WorkItem` as JSON
+The `jobs` row copies `source`, `source_id` and `ticketKey`, stores the whole `WorkItem` as JSON
 in `item`, and sets `state`, `attempt = 0`, `max_attempts = MAX_ATTEMPTS`, `next_run_at = NULL`,
 `failure_kind = NULL`, `created_at = updated_at = poll time`. Its single event is `from_state
 NULL`, `to_state` the new state, `failure_kind NULL`, `reason NULL`, `data NULL`, `at` the poll
 time.
 
-When the unique index on `(source, external_id)` rejects a row, `onConflictDoNothing` returns
+When the unique index on `(source, source_id)` rejects a row, `onConflictDoNothing` returns
 nothing. `insertJob` then reads the existing row and reports `created: false`; intake logs `Intake
 duplicate between decision and insert`, writes no event and enqueues nothing. The poll's `skipped`
 count includes those duplicates.
@@ -403,14 +403,14 @@ queued, because the cap is checked only inside the `propose` helper.
 
 ### A ticket seen again is a duplicate
 
-(a) Seen by an earlier poll. The id is in `knownExternalIds`, so the policy skips it with
+(a) Seen by an earlier poll. The id is in `knownSourceIds`, so the policy skips it with
 `already has a job` before any status logic. There is no `insertJob` call: no second row, no second
 event, no enqueue. The row keeps its state, even `declined`, `done` or `failed`. Intake never
 reopens a ticket it has seen.
 
 (b) The same id twice in one poll, or a second worker inserting it at the same moment. The
 in-memory set cannot catch that, so `insertJob` runs twice; the unique index on `(source,
-external_id)` rejects the second row, `onConflictDoNothing` returns nothing, and `insertJob` reads
+source_id)` rejects the second row, `onConflictDoNothing` returns nothing, and `insertJob` reads
 the existing row and returns `created: false`. Intake logs `Intake duplicate between decision and
 insert` and continues.
 
@@ -425,8 +425,8 @@ ticket with another name produces this line and nothing else:
   "level": "info",
   "msg": "Intake skipped",
   "source": "linear",
-  "externalId": "lin_synthetic_0013",
-  "identifier": "TST-13",
+  "sourceId": "lin_synthetic_0013",
+  "ticketKey": "TST-13",
   "reason": "unknown status"
 }
 ```
@@ -441,8 +441,8 @@ The poll reads the feed and the three counts, runs the same policy, logs every d
 and exits before the insert loop. For a feed of one `In Progress` and one `Todo` ticket:
 
 ```json
-{"ts":"2026-10-30T09:10:00.000Z","level":"info","msg":"Intake decision","source":"linear","externalId":"lin_synthetic_0014","identifier":"TST-14","action":"queue","reason":"In Progress"}
-{"ts":"2026-10-30T09:10:00.000Z","level":"info","msg":"Intake decision","source":"linear","externalId":"lin_synthetic_0015","identifier":"TST-15","action":"propose","reason":"Todo"}
+{"ts":"2026-10-30T09:10:00.000Z","level":"info","msg":"Intake decision","source":"linear","sourceId":"lin_synthetic_0014","ticketKey":"TST-14","action":"queue","reason":"In Progress"}
+{"ts":"2026-10-30T09:10:00.000Z","level":"info","msg":"Intake decision","source":"linear","sourceId":"lin_synthetic_0015","ticketKey":"TST-15","action":"propose","reason":"Todo"}
 {"ts":"2026-10-30T09:10:00.000Z","level":"info","msg":"Intake poll finished","dryRun":true,"queued":1,"proposed":1,"skipped":0}
 ```
 
@@ -531,15 +531,15 @@ curl -sS -H "Authorization: Bearer <API_TOKEN>" \
   "http://127.0.0.1:3000/v1/jobs?state=proposed&limit=50"
 ```
 
-The response is a JSON array of job summaries: `id`, `identifier`, `source`, `state`, `attempt`,
-`maxAttempts`, `slot`, `nextRunAt`, `failureKind` and `allowedActions`. `external_id` is not in it,
+The response is a JSON array of job summaries: `id`, `ticketKey`, `source`, `state`, `attempt`,
+`maxAttempts`, `slot`, `nextRunAt`, `failureKind` and `allowedActions`. `source_id` is not in it,
 and `allowedActions` for a proposal is `["confirm","decline"]`.
 
 The database holds more than the API shows:
 
 ```sql
 -- every proposal, with the ticket status the policy saw
-select identifier, item->>'status' as ticket_status, external_id, created_at
+select ticketKey, item->>'status' as ticket_status, source_id, created_at
 from jobs
 where state = 'proposed'
 order by created_at desc;
@@ -554,7 +554,7 @@ select count(*) from jobs where state = 'proposed';
 -- the event history of one job; intake rows have from_state and reason both null
 select id, from_state, to_state, failure_kind, reason, at
 from job_events
-where job_id = (select id from jobs where source = 'linear' and identifier = 'TST-1')
+where job_id = (select id from jobs where source = 'linear' and ticketKey = 'TST-1')
 order by id;
 ```
 
