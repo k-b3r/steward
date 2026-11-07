@@ -3,13 +3,14 @@ import { z } from 'zod'
 
 import {
   actionResponseSchema,
+  jobEventResponseSchema,
   jobResponseSchema,
   runResponseSchema,
   transcriptEnvelopeSchema,
 } from '../../src/api/contract'
-import type { ActionResponse, JobResponse } from '../../src/api/contract'
+import type { ActionResponse, JobEventResponse, JobResponse } from '../../src/api/contract'
 
-export type { ActionResponse, JobResponse }
+export type { ActionResponse, JobEventResponse, JobResponse }
 export type Envelope = z.infer<typeof transcriptEnvelopeSchema>
 
 const TOKEN_KEY = 'steward.token'
@@ -59,6 +60,7 @@ export const api = {
   jobs: () => getJson('/v1/jobs', z.array(jobResponseSchema)),
   job: (id: string) => getJson(`/v1/jobs/${id}`, jobResponseSchema),
   runs: (id: string) => getJson(`/v1/jobs/${id}/runs`, z.array(runResponseSchema)),
+  events: (id: string) => getJson(`/v1/jobs/${id}/events`, z.array(jobEventResponseSchema)),
   actions: () => getJson('/v1/actions', z.array(actionResponseSchema)),
   retry: (id: string) => post(`/v1/jobs/${id}/retry`, jobResponseSchema),
   cancel: (id: string) => post(`/v1/jobs/${id}/cancel`, jobResponseSchema),

@@ -4,6 +4,7 @@ import { api, followLog } from './api'
 import type { Envelope } from './api'
 import { useStore } from './data'
 import { delay } from './delay'
+import { Events } from './events'
 import { followRunLog } from './log-resume'
 import { JobActions } from './job-actions'
 import { STATE_LABEL, relativeTime, safeTrackerUrl } from './model'
@@ -157,6 +158,9 @@ export function JobDetail({ id }: { id: string }) {
         {job.nextRunAt === null ? null : <p className="sm muted">Next run {relativeTime(job.nextRunAt, now)}</p>}
       </section>
       <LiveLog jobId={job.id} />
+      <div style={{ marginTop: 16 }}>
+        <Events jobId={job.id} now={now} />
+      </div>
     </>
   )
 }

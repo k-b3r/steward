@@ -148,6 +148,19 @@ describe('runs', () => {
   })
 })
 
+describe('events', () => {
+  it('asks the API for a job state log', async () => {
+    fetchMock.mockResolvedValue(
+      json([{ from: null, to: 'proposed', failureKind: null, reason: null, at: '2026-01-02T03:04:05.000Z' }]),
+    )
+
+    const events = await api.events(JOB.id)
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`/v1/jobs/${JOB.id}/events`)
+    expect(events.map((event) => event.to)).toEqual(['proposed'])
+  })
+})
+
 describe('followLog', () => {
   const run = async (chunks: string[], after = 0, runNumber?: number): Promise<Envelope[]> => {
     fetchMock.mockResolvedValue(sse(chunks))
