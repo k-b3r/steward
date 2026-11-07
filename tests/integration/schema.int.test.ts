@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { migrateDb } from '../../src/db/migrate'
-import { jobs } from '../../src/db/schema'
+import { jobs, runs } from '../../src/db/schema'
 import { closePool, createDb, createPool } from '../../src/platform/db'
 import { JOB_STATES, type WorkItem } from '../../src/types'
 
@@ -59,12 +59,12 @@ afterAll(async () => {
 })
 
 describe('schema', () => {
-  it('creates the four tables', async () => {
+  it('creates the five tables', async () => {
     const result = await db.execute<{ table_name: string }>(
       sql`select table_name from information_schema.tables where table_schema = 'public' order by table_name`,
     )
 
-    expect(result.rows.map((r) => r.table_name)).toEqual(['job_events', 'jobs', 'pending_actions', 'slots'])
+    expect(result.rows.map((r) => r.table_name)).toEqual(['job_events', 'jobs', 'pending_actions', 'runs', 'slots'])
   })
 
   it('allows one job per source and external id', async () => {
@@ -88,5 +88,16 @@ describe('schema', () => {
 
   it('rejects an unknown failure kind', async () => {
     await expect(db.insert(jobs).values(row({ externalId: 'ext-3', failureKind: 'bogus' as never }))).rejects.toThrow()
+  })
+
+  it('allows one run number per job, and rejects an unknown run outcome', async () => {
+    const [job] = await db.insert(jobs).values(row()).returning()
+    const startedAt = new Date('2025-01-01T00:00:00.000Z')
+    await db.insert(runs).values({ jobId: job!.id, runNumber: 1, startedAt })
+
+    await expect(db.insert(runs).values({ jobId: job!.id, runNumber: 1, startedAt })).rejects.toThrow()
+    await expect(
+      db.insert(runs).values({ jobId: job!.id, runNumber: 2, startedAt, outcome: 'bogus' as never }),
+    ).rejects.toThrow()
   })
 })

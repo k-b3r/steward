@@ -34,6 +34,22 @@ export type JobState = (typeof JOB_STATES)[number]
 export const FAILURE_KINDS = ['infra', 'agent', 'setup'] as const
 export type FailureKind = (typeof FAILURE_KINDS)[number]
 
+/** How a run ended. `retry` is an automatic infra retry: the job went back to the queue. */
+export const RUN_OUTCOMES = ['done', 'pr_open', 'retry', 'failed', 'cancelled'] as const
+export type RunOutcome = (typeof RUN_OUTCOMES)[number]
+
+/** One execution of a job. A retry or a resume adds a run; the job row stays one per ticket. */
+export type Run = {
+  jobId: string
+  /** 1, 2, 3, ... per job. Not reset by a manual retry. */
+  number: number
+  slot: number | null
+  startedAt: Date
+  endedAt: Date | null
+  outcome: RunOutcome | null
+  failureKind: FailureKind | null
+}
+
 export type Job = {
   id: string
   source: string
@@ -52,7 +68,8 @@ export interface WorkFeed {
 }
 
 export interface AgentRunner {
-  start(job: Job): Promise<{ sessionId: string }>
+  /** `runNumber` is the job's open run (src/runs.ts): the runner keeps that run's output apart. */
+  start(job: Job, runNumber: number): Promise<{ sessionId: string }>
   resume(sessionId: string, feedback: string): Promise<void>
   cancel(jobId: string): Promise<void>
 }
