@@ -6,10 +6,11 @@ orchestrator validates the result, pushes it, and opens a draft pull request for
 runs on one local Linux box. It is a personal tool, and it holds no employer code, ticket
 text, or team keys in the repo.
 
-Status: phase 1 is in progress. The state machine, retry policy, slot allocator, ticket
-mapping, transcript writer, config loader, and redacting logger are built and tested. The API
-and worker entry points are stubs. There is no build script yet, so the systemd units cannot
-start until one exists. Phases are listed in [docs/architecture.md](docs/architecture.md).
+Status: phase 1 is done. The state machine, retry policy, slots, tracker intake, queue,
+worker, API, dashboard, and deploy files are built and tested, with an echo runner standing in
+for a real agent. No real agent has run yet. There is no build script yet, so the systemd units
+cannot start until one exists. See [docs/status.md](docs/status.md) for what works, what is
+left, and what is still open. Phases are listed in [docs/architecture.md](docs/architecture.md).
 
 ## Requirements
 
@@ -216,7 +217,7 @@ systemctl --user restart steward-worker@personal.service
 ```
 
 Turn it off only after reading the logged JSON. Every phase starts in dry run on the personal
-instance. Ticket intake itself is phase 1 work and is not built yet.
+instance.
 
 ## Tests
 
@@ -255,6 +256,7 @@ share a database, a Redis, or a runs folder between them.
 - [docs/decisions.md](docs/decisions.md): dated decision log, verified facts, unverified
   items, open questions.
 - [docs/project-brief.md](docs/project-brief.md): the design.
+- [docs/status.md](docs/status.md): what works today, what is left, and what is still open.
 
 ## Dashboard
 
@@ -283,4 +285,4 @@ The production build (`pnpm --filter steward-dashboard build`) adds a Content-Se
 
 The API serves the built `dashboard/dist` when `DASHBOARD_DIR` is set to its absolute path (`pnpm --filter steward-dashboard build` writes it). The dashboard is then at the API origin, `http://127.0.0.1:<API_PORT>`. Over an SSH tunnel the local port must equal `API_PORT`, because the Host and Origin checks compare it.
 
-The API has no job titles, projects, costs or health data yet, so those parts of the design are not built. `pnpm --filter steward-dashboard build` writes `dashboard/dist`.
+The API has no projects, costs or health data yet, so those parts of the design are not built. The ticket title, its tracker link and its age are served today. `pnpm --filter steward-dashboard build` writes `dashboard/dist`.

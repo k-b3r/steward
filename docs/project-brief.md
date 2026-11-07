@@ -11,7 +11,7 @@ Follow `k-b3r/agent-config` (`CODING_STANDARDS.md`). Start the repo with `/init-
 Fit check (record in `CONTEXT.md`):
 
 - Orchestrator: question 1, fewer than 3 features with their own data. **Flat**: one module, pure files beside shell files. No `moduleTiers`. Split into modules when a phase adds features with their own data.
-- Dashboard (later): question 3, a framework app. Follow the framework's conventions.
+- Dashboard: question 3, a framework app. Follow the framework's conventions.
 
 ## Stack
 
@@ -137,7 +137,7 @@ Hono, `/v1` prefix, chained route definitions, `src/api/contract.ts` exports `Ap
 - `GET /v1/jobs`, `GET /v1/jobs/:id`, `GET /v1/jobs/:id/runs` (a job's runs), `GET /v1/jobs/:id/events` (the state log), `GET /v1/jobs/:id/log` (SSE tail, `?run=<n>` picks a run), `POST /v1/jobs/:id/{retry,cancel,confirm,decline,reconsider}`, `GET /v1/actions?status=pending`, `POST /v1/actions/:id/{approve,reject}`.
 - Auth: `API_TOKEN` bearer, constant-time compare, redacted in logs. Reject any `Host` that is not `127.0.0.1:PORT` or `localhost:PORT`, or one of the exact values in `ALLOWED_HOSTS` (default empty). Reject cross-origin requests unless in `ALLOWED_ORIGINS` (default empty).
 - SSE clients use `fetch` streaming, since `EventSource` cannot set headers.
-- Dashboard (later): `dashboard/` in this repo, a pnpm workspace member added when it starts. It imports only `src/api/contract.ts` as types (enforced with a dependency-cruiser rule). The token sits in `sessionStorage`; note the XSS risk in `docs/security.md`.
+- Dashboard: `dashboard/` in this repo, a pnpm workspace member. It imports only `src/api/contract.ts` as types (enforced with a dependency-cruiser rule). The token sits in `sessionStorage`; note the XSS risk in `docs/security.md`.
 
 ## Layout
 
@@ -168,10 +168,10 @@ The tree is a starting point. `/init-repo` and the fit check decide the final na
 5. Retry policy as pure code with tests (backoff, failure kinds).
 6. Transcript writer (both files) with tests.
 7. Hono API with auth, Host/Origin checks, confirm/decline, `GET /v1/jobs?state=…`, SSE tail with resume.
-8. Worker stub: take a queued job, make a git worktree for the configured repo path, run the echo runner, write transcripts, mark done.
+8. Worker: take a queued job, make a git worktree for the configured repo path, run the echo runner, write transcripts, mark done. (Built; the echo runner is still the stand-in.)
 9. `deploy/`: systemd template unit (own user, `EnvironmentFile`), Quadlet units for Postgres and two Redis on a per-instance network.
 
-Out of scope: real agent runs, Podman worker launch, validation, push and PRs, claim, GitHub reads, ntfy, Linear writes, OpenCode, dashboard, retention sweep. Leave typed stubs and `TODO(phase-N)` markers.
+Out of scope for that phase: real agent runs, Podman worker launch, validation, push and PRs, claim, GitHub reads, ntfy, Linear writes, OpenCode, retention sweep. (The dashboard was out of scope then and has since been built.) Leave typed stubs and `TODO(phase-N)` markers.
 
 ## Rules (project-specific)
 

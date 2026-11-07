@@ -86,8 +86,8 @@ So:
 
 ## API exposure
 
-The API is specified as local-only. The entry point is a stub today; these rules are part of
-its phase 1 contract.
+The API is local-only. `src/entries/api.ts` binds `127.0.0.1`, and `src/api/auth.ts` enforces
+the rules below. `src/api/app.test.ts` covers the token, Host and Origin checks.
 
 - Bind to `127.0.0.1` only. No `0.0.0.0`, no LAN address.
 - Every request needs `Authorization: Bearer <API_TOKEN>`. The token compare is
