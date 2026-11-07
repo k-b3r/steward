@@ -9,7 +9,7 @@ import { z } from 'zod'
 import type { Context } from 'hono'
 import type { PendingAction } from '../types'
 import { toActionSummary } from '../jobs-queries'
-import type { ActionSummary, JobSummary, RunSummary } from '../jobs-queries'
+import type { ActionSummary, JobEventSummary, JobSummary, RunSummary } from '../jobs-queries'
 import { ActionNotFoundError, ActionNotPendingError, JobNotFoundError } from '../jobs-commands'
 import type { Envelope } from '../runner/transcript'
 import { IllegalTransitionError } from '../transitions'
@@ -32,6 +32,7 @@ export type ApiReads = {
   getJob(id: string): Promise<JobSummary | null>
   listJobs(filter?: { state?: JobState; limit?: number }): Promise<JobSummary[]>
   listRuns(jobId: string): Promise<RunSummary[]>
+  listEvents(jobId: string): Promise<JobEventSummary[]>
   listActions(filter?: { status?: string; limit?: number }): Promise<ActionSummary[]>
 }
 
@@ -186,6 +187,12 @@ export function createApp(deps: AppDeps) {
       const job = await reads.getJob(id)
       if (job === null) return c.json({ error: 'not found' }, 404)
       return c.json(await reads.listRuns(job.id))
+    })
+    .get('/v1/jobs/:id/events', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
+      const { id } = c.req.valid('param')
+      const job = await reads.getJob(id)
+      if (job === null) return c.json({ error: 'not found' }, 404)
+      return c.json(await reads.listEvents(job.id))
     })
     .get(
       '/v1/jobs/:id/log',

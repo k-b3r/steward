@@ -34,6 +34,15 @@ export type JobState = (typeof JOB_STATES)[number]
 export const FAILURE_KINDS = ['infra', 'agent', 'setup'] as const
 export type FailureKind = (typeof FAILURE_KINDS)[number]
 
+/** One state change of a job, for the timeline a person reads. */
+export type JobEvent = {
+  fromState: JobState | null
+  toState: JobState
+  failureKind: FailureKind | null
+  reason: string | null
+  at: Date
+}
+
 /** How a run ended. `retry` is an automatic infra retry: the job went back to the queue. */
 export const RUN_OUTCOMES = ['done', 'pr_open', 'retry', 'failed', 'cancelled'] as const
 export type RunOutcome = (typeof RUN_OUTCOMES)[number]
