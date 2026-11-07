@@ -2,8 +2,8 @@
 // else from `src/`, so it must stay free of server code: zod plus type-only imports.
 import { z } from 'zod'
 
-import type { ActionSummary, JobSummary } from '../jobs-queries'
-import type { ActionStatus } from '../types'
+import type { ActionSummary, JobSummary, RunSummary } from '../jobs-queries'
+import type { ActionStatus, RunOutcome } from '../types'
 import type { Envelope, TranscriptKind } from '../runner/transcript'
 import type { FailureKind, JobState } from '../types'
 import type { createApp } from './app'
@@ -34,6 +34,8 @@ const ACTION_STATUS_VALUES = [
   'failed',
 ] as const satisfies readonly ActionStatus[]
 
+const RUN_OUTCOME_VALUES = ['done', 'pr_open', 'retry', 'failed', 'cancelled'] as const satisfies readonly RunOutcome[]
+
 const TRANSCRIPT_KIND_VALUES = [
   'system',
   'assistant',
@@ -50,6 +52,7 @@ const _failureKindsCovered: Exclude<FailureKind, (typeof FAILURE_KIND_VALUES)[nu
 const _actionStatusesCovered: Exclude<ActionStatus, (typeof ACTION_STATUS_VALUES)[number]> extends never
   ? true
   : never = true
+const _runOutcomesCovered: Exclude<RunOutcome, (typeof RUN_OUTCOME_VALUES)[number]> extends never ? true : never = true
 const _transcriptKindsCovered: Exclude<TranscriptKind, (typeof TRANSCRIPT_KIND_VALUES)[number]> extends never
   ? true
   : never = true
@@ -60,6 +63,8 @@ export const jobStateSchema = z.enum(JOB_STATE_VALUES)
 export const failureKindSchema = z.enum(FAILURE_KIND_VALUES)
 /** @public */
 export const actionStatusSchema = z.enum(ACTION_STATUS_VALUES)
+/** @public */
+export const runOutcomeSchema = z.enum(RUN_OUTCOME_VALUES)
 /** @public */
 export const transcriptKindSchema = z.enum(TRANSCRIPT_KIND_VALUES)
 
@@ -80,6 +85,19 @@ export const jobResponseSchema = z.object({
   nextRunAt: z.iso.datetime().nullable(),
   failureKind: failureKindSchema.nullable(),
   allowedActions: z.array(jobActionSchema),
+})
+
+/**
+ * One execution of a job, listed by `GET /v1/jobs/:id/runs`.
+ * @public
+ */
+export const runResponseSchema = z.object({
+  number: z.number().int().positive(),
+  slot: z.number().int().nonnegative().nullable(),
+  startedAt: z.iso.datetime(),
+  endedAt: z.iso.datetime().nullable(),
+  outcome: runOutcomeSchema.nullable(),
+  failureKind: failureKindSchema.nullable(),
 })
 
 /** @public */
@@ -120,12 +138,17 @@ export type JobResponse = z.infer<typeof jobResponseSchema>
 // A mismatch here is a type error: change both together.
 const _jobResponseMatchesReadLayer: z.ZodType<JobSummary> = jobResponseSchema
 const _actionResponseMatchesReadLayer: z.ZodType<ActionSummary> = actionResponseSchema
+const _runResponseMatchesReadLayer: z.ZodType<RunSummary> = runResponseSchema
+void _runResponseMatchesReadLayer
 void _jobResponseMatchesReadLayer
 void _actionResponseMatchesReadLayer
 export type ActionResponse = z.infer<typeof actionResponseSchema>
 
 // `Envelope` is structurally the same as `TranscriptEnvelope`.
 const _envelopeMatches: Envelope extends z.infer<typeof transcriptEnvelopeSchema> ? true : never = true
+
+/** @public */
+export type RunResponse = z.infer<typeof runResponseSchema>
 
 /** @public */
 export type AppType = ReturnType<typeof createApp>

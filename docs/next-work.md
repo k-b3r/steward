@@ -19,6 +19,10 @@ Settled in that discussion:
 Design only, no behaviour change. Do this in one PR with the code that needs it, per
 `CODING_STANDARDS.md`.
 
+Status 2026-11-07: the state, the runs table, per-run transcripts and the runs endpoint are on
+`ci-failed-state` and `runs-api`. Still open from this item: the `?ticket=` filter on
+`GET /v1/jobs`, a dashboard view of a job's runs, and whatever sets `ci_failed`.
+
 - **New state `ci_failed`**, between `pr_open` and `in_review`. "Ongoing" for a ticket means CI is
   red because of this PR. A failure that also occurs on `BASE_BRANCH` does not count. Edges:
   - `pr_open -> ci_failed`, `in_review -> ci_failed`: a check failed on this PR.
@@ -33,7 +37,8 @@ Design only, no behaviour change. Do this in one PR with the code that needs it,
   so a second run appends to the same `transcript.jsonl` and the two become indistinguishable.
   Move to `runs/<job-id>/<run-number>/`.
 - **Wire and dashboard.** `GET /v1/jobs` gains a filter by ticket identifier. A read endpoint lists a
-  ticket's runs. The dashboard gets a `ci_failed` label, icon and lane (`dashboard/src/model.ts`).
+  job's runs. The dashboard gets a `ci_failed` label, icon and lane (`dashboard/src/model.ts`) —
+  done. A dashboard view of a job's runs is still open.
 
 Files: `src/types.ts`, `src/transitions.ts` and its test, `src/api/contract.ts` (the state list is
 duplicated there with a completeness check, so the typecheck fails until it is updated),

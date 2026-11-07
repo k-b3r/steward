@@ -89,6 +89,25 @@ Notes:
 - `TODO(phase-4)` in `src/transitions.ts` marks `running -> done`. Remove it when the real
   runner lands.
 
+## Runs
+
+`jobs` holds one row per ticket and ends at `merged`. A run is one execution of that job, and
+each has a row in `runs`: job, run number, slot, start and end time, outcome and failure kind.
+
+- A run starts when the job enters `claiming` or `running` from a state that holds no slot: a
+  fresh claim, or a resume from `ci_failed` or `changes_requested`. It ends when the job leaves
+  those states. `src/runs.ts` holds the rules; `transitionJob` applies them in the same
+  transaction as the state change, so a run and its state can never disagree.
+- The outcome follows from where the job went next: `done`, `pr_open`, `retry` (an automatic
+  infra retry back to `queued`), `failed` or `cancelled`.
+- The run number counts up per job. A manual retry from `failed` is a new run, and the `attempt`
+  counter resets while the run number does not. `merged` does not touch runs: the last run
+  already ended when the job left the slot, at `pr_open`.
+- `GET /v1/jobs/:id/runs` lists a job's runs, and `GET /v1/jobs/:id/log?run=<n>` follows one
+  run's transcript. Without `run` the log follows the newest run at the time the stream opens
+  and stays on it. A resume (`after` or `Last-Event-ID` above 0) must name the run once the job
+  has runs, because a `seq` only means something inside one run.
+
 ## Failure kinds and retry rules
 
 The failure kind is stored on the `job_events` row with a free-text `reason`.
@@ -125,7 +144,7 @@ the accepted range is 1 to 16.
 
 ## Postgres is the source of truth
 
-Postgres holds jobs, job events, slots and pending actions. BullMQ only delivers job IDs and
+Postgres holds jobs, job events, runs, slots and pending actions. BullMQ only delivers job IDs and
 runs delayed jobs. The worker re-reads the job from Postgres before it acts. The retry
 policy lives in our code, not in BullMQ.
 
@@ -137,8 +156,9 @@ The startup reconciler runs before the worker takes new work:
 
 ## Transcripts
 
-Each job has a run directory: `~/steward-instances/<instance>/runs/<job-id>/`. The directory
-is mode 0700.
+Each run has its own folder: `~/steward-instances/<instance>/runs/<job-id>/<run-number>/`, mode 0700. A retry or a resume is a new run, so each execution's transcript stays apart and `seq`
+restarts at 1 in each. A job that ran before runs existed keeps its flat
+`runs/<job-id>/transcript.jsonl`, and the API still serves it when the job has no runs.
 
 - `transcript.jsonl`: one envelope per line, `{ seq, ts, kind, data }`. `kind` is one of
   `system`, `assistant`, `tool`, `result`, `error`, `orchestrator`. `seq` increases
@@ -156,7 +176,7 @@ like `INSTANCE`. The app checkout is separate and holds code only.
 
 - `.env`: secrets and non-secret config, mode 0600. The folder is 0700.
 - `repo/`: the clone the jobs work from (`REPO_PATH`).
-- `runs/`: one directory per job (`RUNS_DIR`, default
+- `runs/`: one directory per job, with one folder per run inside (`RUNS_DIR`, default
   `~/steward-instances/<instance>/runs`).
 - `quadlet/`: the rendered Quadlet files. `~/.config/containers/systemd` holds symlinks to
   them, so the real files live with the rest of the instance data.

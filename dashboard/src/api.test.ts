@@ -123,11 +123,38 @@ describe('requests', () => {
   })
 })
 
+describe('runs', () => {
+  it('asks the API for a job runs, oldest first', async () => {
+    fetchMock.mockResolvedValue(
+      json([
+        {
+          number: 1,
+          slot: 0,
+          startedAt: '2026-01-02T03:04:05.000Z',
+          endedAt: null,
+          outcome: null,
+          failureKind: null,
+        },
+      ]),
+    )
+
+    const runs = await api.runs(JOB.id)
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`/v1/jobs/${JOB.id}/runs`)
+    expect(runs.map((entry) => entry.number)).toEqual([1])
+  })
+})
+
 describe('followLog', () => {
-  const run = async (chunks: string[], after = 0): Promise<Envelope[]> => {
+  const run = async (chunks: string[], after = 0, runNumber?: number): Promise<Envelope[]> => {
     fetchMock.mockResolvedValue(sse(chunks))
     const seen: Envelope[] = []
-    await followLog(JOB.id, { after, signal: new AbortController().signal, onEnvelope: (e) => seen.push(e) })
+    await followLog(JOB.id, {
+      after,
+      ...(runNumber === undefined ? {} : { run: runNumber }),
+      signal: new AbortController().signal,
+      onEnvelope: (e) => seen.push(e),
+    })
     return seen
   }
 
@@ -135,6 +162,12 @@ describe('followLog', () => {
     await run([], 7)
 
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`/v1/jobs/${JOB.id}/log?after=7`)
+  })
+
+  it('names the run on every request, so a reconnect resumes the run it was reading', async () => {
+    await run([], 7, 3)
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`/v1/jobs/${JOB.id}/log?after=7&run=3`)
   })
 
   it('reads frames that arrive whole, in order', async () => {

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { followLog } from './api'
+import { api, followLog } from './api'
 import type { Envelope } from './api'
 import { useStore } from './data'
 import { delay } from './delay'
+import { followRunLog } from './log-resume'
 import { JobActions } from './job-actions'
 import { STATE_LABEL, relativeTime } from './model'
 import { Attempts, Empty, Icon, Skeleton, StateChip } from './ui'
@@ -36,26 +37,22 @@ function LiveLog({ jobId }: { jobId: string }) {
     const controller = new AbortController()
     setLines([])
     lastSeq.current = 0
-    void (async () => {
-      while (!controller.signal.aborted) {
-        try {
-          setStatus('live')
-          await followLog(jobId, {
-            after: lastSeq.current,
-            signal: controller.signal,
-            onEnvelope: (e) => {
-              lastSeq.current = Math.max(lastSeq.current, e.seq)
-              setLines((prev) => [...prev, e])
-            },
-          })
-        } catch {
-          if (controller.signal.aborted) return
-        }
-        if (controller.signal.aborted) return
-        setStatus('reconnecting')
-        await delay(RECONNECT_MS)
-      }
-    })()
+    void followRunLog({
+      follow: (args) => followLog(jobId, args),
+      runs: () => api.runs(jobId),
+      onEnvelope: (envelope) => {
+        lastSeq.current = Math.max(lastSeq.current, envelope.seq)
+        setLines((prev) => [...prev, envelope])
+      },
+      onRestart: () => {
+        lastSeq.current = 0
+        setLines([])
+      },
+      onStatus: setStatus,
+      sleep: delay,
+      signal: controller.signal,
+      retryMs: RECONNECT_MS,
+    })
     return () => controller.abort()
   }, [jobId])
 

@@ -1,7 +1,12 @@
 // Browser client for the Steward API. Types and schemas come from the shared contract only.
 import { z } from 'zod'
 
-import { actionResponseSchema, jobResponseSchema, transcriptEnvelopeSchema } from '../../src/api/contract'
+import {
+  actionResponseSchema,
+  jobResponseSchema,
+  runResponseSchema,
+  transcriptEnvelopeSchema,
+} from '../../src/api/contract'
 import type { ActionResponse, JobResponse } from '../../src/api/contract'
 
 export type { ActionResponse, JobResponse }
@@ -53,6 +58,7 @@ async function post<T>(path: string, schema: z.ZodType<T>, body?: unknown): Prom
 export const api = {
   jobs: () => getJson('/v1/jobs', z.array(jobResponseSchema)),
   job: (id: string) => getJson(`/v1/jobs/${id}`, jobResponseSchema),
+  runs: (id: string) => getJson(`/v1/jobs/${id}/runs`, z.array(runResponseSchema)),
   actions: () => getJson('/v1/actions', z.array(actionResponseSchema)),
   retry: (id: string) => post(`/v1/jobs/${id}/retry`, jobResponseSchema),
   cancel: (id: string) => post(`/v1/jobs/${id}/cancel`, jobResponseSchema),
@@ -70,9 +76,12 @@ export const api = {
  */
 export async function followLog(
   jobId: string,
-  opts: { after: number; signal: AbortSignal; onEnvelope: (e: Envelope) => void },
+  opts: { after: number; run?: number; signal: AbortSignal; onEnvelope: (e: Envelope) => void },
 ): Promise<void> {
-  const response = await request(`/v1/jobs/${jobId}/log?after=${opts.after}`, {
+  // A `seq` only means something inside one run, and the API rejects a resume that does not name
+  // the run once the job has runs. So the caller pins a run and sends it on every reconnect.
+  const run = opts.run === undefined ? '' : `&run=${opts.run}`
+  const response = await request(`/v1/jobs/${jobId}/log?after=${opts.after}${run}`, {
     headers: { Accept: 'text/event-stream' },
     signal: opts.signal,
   })

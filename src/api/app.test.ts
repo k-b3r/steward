@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { assertTransition } from '../transitions'
-import type { Job, JobState } from '../types'
+import type { Job, JobState, Run } from '../types'
 import type { PendingAction } from '../types'
 import type { Envelope } from '../runner/transcript'
 import {
@@ -13,7 +13,7 @@ import {
   retryJob,
   type CommandStore,
 } from '../jobs-commands'
-import { getJob, listActions, listJobs, type QueryStore } from '../jobs-queries'
+import { getJob, listActions, listJobs, listRuns, type QueryStore } from '../jobs-queries'
 import { createApp, type ApiCommands, type ApiReads, type AppDeps } from './app'
 
 const TOKEN = 'test-token-0123456789abcdef0123456789'
@@ -43,6 +43,19 @@ function makeJob(overrides: Partial<Job> = {}): Job {
   }
 }
 
+function makeRun(number: number, overrides: Partial<Run> = {}): Run {
+  return {
+    jobId: JOB_ID,
+    number,
+    slot: 0,
+    startedAt: new Date(CLOCK.getTime() + number * 1000),
+    endedAt: null,
+    outcome: null,
+    failureKind: null,
+    ...overrides,
+  }
+}
+
 function makeAction(overrides: Partial<PendingAction> = {}): PendingAction {
   return {
     id: ACTION_ID,
@@ -63,9 +76,11 @@ type FakeStore = QueryStore &
     actions: Map<string, PendingAction>
     transitions: { id: string; to: JobState; reason?: string; at: Date }[]
     decisions: { id: string; decision: 'approved' | 'rejected'; reason?: string }[]
+    runs: Run[]
   }
 
-function createFakeStore(options: { jobs?: Job[]; actions?: PendingAction[] } = {}): FakeStore {
+function createFakeStore(options: { jobs?: Job[]; actions?: PendingAction[]; runs?: Run[] } = {}): FakeStore {
+  const runs: Run[] = [...(options.runs ?? [])]
   const jobs = new Map((options.jobs ?? []).map((job) => [job.id, job]))
   const actions = new Map((options.actions ?? []).map((action) => [action.id, action]))
   const transitions: { id: string; to: JobState; reason?: string; at: Date }[] = []
@@ -76,11 +91,15 @@ function createFakeStore(options: { jobs?: Job[]; actions?: PendingAction[] } = 
     actions,
     transitions,
     decisions,
+    runs,
     async getJob(id) {
       return jobs.get(id) ?? null
     },
     async listJobs(filter = {}) {
       return [...jobs.values()].filter((job) => filter.state === undefined || job.state === filter.state)
+    },
+    async listRuns(jobId) {
+      return runs.filter((run) => run.jobId === jobId).sort((a, b) => a.number - b.number)
     },
     async transitionJob(id, to, opts) {
       const job = jobs.get(id)
@@ -114,27 +133,29 @@ type Setup = {
   store: ReturnType<typeof createFakeStore>
   enqueued: string[]
   cancelled: string[]
-  readLogCalls: { jobId: string; afterSeq: number }[]
+  readLogCalls: { jobId: string; run: number | null; afterSeq: number }[]
 }
 
 function setup(
   options: {
     jobs?: Job[]
     actions?: PendingAction[]
-    readLog?: (jobId: string, afterSeq: number) => Promise<Envelope[]>
+    runs?: Run[]
+    readLog?: (jobId: string, run: number | null, afterSeq: number) => Promise<Envelope[]>
     sleep?: AppDeps['sleep']
   } = {},
 ): Setup {
-  const store = createFakeStore({ jobs: options.jobs, actions: options.actions })
+  const store = createFakeStore({ jobs: options.jobs, actions: options.actions, runs: options.runs })
   const enqueued: string[] = []
   const cancelled: string[] = []
-  const readLogCalls: { jobId: string; afterSeq: number }[] = []
+  const readLogCalls: { jobId: string; run: number | null; afterSeq: number }[] = []
 
   // The routes call the real reads and commands, so their rules are tested here too.
   const reads: ApiReads = {
     getJob: (id) => getJob({ store }, id),
     listJobs: (filter) => listJobs({ store }, filter),
     listActions: (filter) => listActions({ store }, filter),
+    listRuns: (jobId) => listRuns({ store }, jobId),
   }
   const commandDeps = {
     store: store as unknown as CommandStore,
@@ -158,9 +179,9 @@ function setup(
   const app = createApp({
     reads,
     commands,
-    readLog: async (jobId, afterSeq) => {
-      readLogCalls.push({ jobId, afterSeq })
-      return options.readLog === undefined ? [] : options.readLog(jobId, afterSeq)
+    readLog: async (jobId, run, afterSeq) => {
+      readLogCalls.push({ jobId, run, afterSeq })
+      return options.readLog === undefined ? [] : options.readLog(jobId, run, afterSeq)
     },
     config: { apiToken: TOKEN, port: PORT, allowedOrigins: [ORIGIN], allowedHosts: [PROXY_HOST] },
     sleep: options.sleep ?? (async () => {}),
@@ -652,7 +673,7 @@ describe('GET /v1/jobs/:id/log (SSE)', () => {
     const controller = new AbortController()
     const { app, readLogCalls } = setup({
       jobs: [makeJob()],
-      readLog: async (_jobId, afterSeq) => envelopes.filter((envelope) => envelope.seq > afterSeq),
+      readLog: async (_jobId, _run, afterSeq) => envelopes.filter((envelope) => envelope.seq > afterSeq),
       sleep: () => new Promise<void>(() => {}),
     })
     const response = await request(app, `/v1/jobs/${JOB_ID}/log`, { signal: controller.signal })
@@ -668,14 +689,14 @@ describe('GET /v1/jobs/:id/log (SSE)', () => {
     expect(text).toContain('id: 3')
     expect(text).toContain('"seq":1')
     expect(text).toContain('"kind":"assistant"')
-    expect(readLogCalls[0]).toEqual({ jobId: JOB_ID, afterSeq: 0 })
+    expect(readLogCalls[0]).toEqual({ jobId: JOB_ID, run: null, afterSeq: 0 })
   })
 
   it('resumes after Last-Event-ID and skips earlier sequences', async () => {
     const controller = new AbortController()
     const { app, readLogCalls } = setup({
       jobs: [makeJob()],
-      readLog: async (_jobId, afterSeq) => envelopes.filter((envelope) => envelope.seq > afterSeq),
+      readLog: async (_jobId, _run, afterSeq) => envelopes.filter((envelope) => envelope.seq > afterSeq),
       sleep: () => new Promise<void>(() => {}),
     })
     const response = await request(app, `/v1/jobs/${JOB_ID}/log?after=0`, {
@@ -686,7 +707,7 @@ describe('GET /v1/jobs/:id/log (SSE)', () => {
     const text = await readSseUntil(response, (value) => value.includes('id: 3'))
     controller.abort()
 
-    expect(readLogCalls[0]).toEqual({ jobId: JOB_ID, afterSeq: 2 })
+    expect(readLogCalls[0]).toEqual({ jobId: JOB_ID, run: null, afterSeq: 2 })
     expect(text).toContain('id: 3')
     expect(text).not.toContain('id: 1')
     expect(text).not.toContain('id: 2')
@@ -696,7 +717,7 @@ describe('GET /v1/jobs/:id/log (SSE)', () => {
     const controller = new AbortController()
     const { app, readLogCalls } = setup({
       jobs: [makeJob()],
-      readLog: async (_jobId, afterSeq) => envelopes.filter((envelope) => envelope.seq > afterSeq),
+      readLog: async (_jobId, _run, afterSeq) => envelopes.filter((envelope) => envelope.seq > afterSeq),
       sleep: () => new Promise<void>(() => {}),
     })
     const response = await request(app, `/v1/jobs/${JOB_ID}/log?after=1`, { signal: controller.signal })
@@ -704,7 +725,7 @@ describe('GET /v1/jobs/:id/log (SSE)', () => {
     const text = await readSseUntil(response, (value) => value.includes('id: 3'))
     controller.abort()
 
-    expect(readLogCalls[0]).toEqual({ jobId: JOB_ID, afterSeq: 1 })
+    expect(readLogCalls[0]).toEqual({ jobId: JOB_ID, run: null, afterSeq: 1 })
     expect(text).not.toContain('id: 1')
     expect(text).toContain('id: 2')
   })
@@ -762,5 +783,189 @@ describe('GET /v1/jobs/:id/log (SSE)', () => {
 
     await new Promise((resolve) => setImmediate(resolve))
     expect(readCalls).toBe(readsAfterAbort)
+  })
+})
+
+describe('GET /v1/jobs/:id/runs', () => {
+  it('lists a job runs oldest first, with ISO dates', async () => {
+    const { app } = setup({
+      jobs: [makeJob()],
+      runs: [
+        makeRun(2),
+        makeRun(1, { endedAt: new Date(CLOCK.getTime() + 5000), outcome: 'retry', failureKind: 'infra' }),
+      ],
+    })
+
+    const response = await request(app, `/v1/jobs/${JOB_ID}/runs`)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual([
+      {
+        number: 1,
+        slot: 0,
+        startedAt: '2026-01-02T03:04:06.000Z',
+        endedAt: '2026-01-02T03:04:10.000Z',
+        outcome: 'retry',
+        failureKind: 'infra',
+      },
+      { number: 2, slot: 0, startedAt: '2026-01-02T03:04:07.000Z', endedAt: null, outcome: null, failureKind: null },
+    ])
+  })
+
+  it('returns an empty list for a job that never ran', async () => {
+    const { app } = setup({ jobs: [makeJob()] })
+
+    expect(await (await request(app, `/v1/jobs/${JOB_ID}/runs`)).json()).toEqual([])
+  })
+
+  it('does not show the runs of another job', async () => {
+    const { app } = setup({ jobs: [makeJob()], runs: [makeRun(1, { jobId: OTHER_JOB_ID })] })
+
+    expect(await (await request(app, `/v1/jobs/${JOB_ID}/runs`)).json()).toEqual([])
+  })
+
+  it('returns 404 for a missing job and 400 for a bad id', async () => {
+    const { app } = setup()
+
+    expect((await request(app, `/v1/jobs/${MISSING_JOB_ID}/runs`)).status).toBe(404)
+    expect((await request(app, '/v1/jobs/not-a-uuid/runs')).status).toBe(400)
+  })
+
+  it('needs the token like every other /v1 route', async () => {
+    const { app } = setup({ jobs: [makeJob()] })
+
+    const response = await app.request(`http://127.0.0.1:${PORT}/v1/jobs/${JOB_ID}/runs`, {
+      headers: { Host: `127.0.0.1:${PORT}` },
+    })
+
+    expect(response.status).toBe(401)
+  })
+})
+
+describe('GET /v1/jobs/:id/log with runs', () => {
+  async function firstRead(path: string, options: Parameters<typeof setup>[0]) {
+    const controller = new AbortController()
+    const { app, readLogCalls, store } = setup({ ...options, sleep: () => new Promise<void>(() => {}) })
+    const response = await request(app, path, { signal: controller.signal })
+    await vi.waitFor(() => expect(readLogCalls.length).toBeGreaterThan(0))
+    controller.abort()
+    return { response, readLogCalls, store }
+  }
+
+  it('follows the newest run by default', async () => {
+    const { readLogCalls } = await firstRead(`/v1/jobs/${JOB_ID}/log`, {
+      jobs: [makeJob()],
+      runs: [makeRun(1), makeRun(2)],
+    })
+
+    expect(readLogCalls[0]).toEqual({ jobId: JOB_ID, run: 2, afterSeq: 0 })
+  })
+
+  it('reads the run named by ?run=', async () => {
+    const { readLogCalls } = await firstRead(`/v1/jobs/${JOB_ID}/log?run=1`, {
+      jobs: [makeJob()],
+      runs: [makeRun(1), makeRun(2)],
+    })
+
+    expect(readLogCalls[0]).toEqual({ jobId: JOB_ID, run: 1, afterSeq: 0 })
+  })
+
+  it('returns 404 for a run the job does not have, and 400 for a bad run number', async () => {
+    const { app } = setup({ jobs: [makeJob()], runs: [makeRun(1)] })
+
+    expect((await request(app, `/v1/jobs/${JOB_ID}/log?run=9`)).status).toBe(404)
+    expect((await request(app, `/v1/jobs/${JOB_ID}/log?run=0`)).status).toBe(400)
+    expect((await request(app, `/v1/jobs/${JOB_ID}/log?run=abc`)).status).toBe(400)
+  })
+
+  it('reads the old flat transcript (run null) for a job that has no runs', async () => {
+    const { readLogCalls } = await firstRead(`/v1/jobs/${JOB_ID}/log`, { jobs: [makeJob()] })
+
+    expect(readLogCalls[0]).toEqual({ jobId: JOB_ID, run: null, afterSeq: 0 })
+  })
+
+  it('stays on the run it started on when a newer run begins, because seq restarts at 1 in a new run', async () => {
+    const controller = new AbortController()
+    let polls = 0
+    const { app, readLogCalls, store } = setup({
+      jobs: [makeJob()],
+      runs: [makeRun(1)],
+      sleep: async () => {
+        polls += 1
+        if (polls === 1) store.runs.push(makeRun(2))
+        if (polls === 3) controller.abort()
+      },
+    })
+
+    await request(app, `/v1/jobs/${JOB_ID}/log`, { signal: controller.signal })
+    await vi.waitFor(() => expect(polls).toBeGreaterThanOrEqual(3))
+
+    expect(readLogCalls.map((call) => call.run)).toEqual([1, 1, 1])
+  })
+
+  it('replays a run that starts after the stream opened, from its first envelope', async () => {
+    // The stream was reading the old flat transcript (run null). Run 1 appears, and its `seq`
+    // starts at 1, so the stream must reset its position instead of continuing where it was.
+    const controller = new AbortController()
+    let polls = 0
+    const { app, readLogCalls, store } = setup({
+      jobs: [makeJob()],
+      sleep: async () => {
+        polls += 1
+        if (polls === 1) store.runs.push(makeRun(1))
+        if (polls === 3) controller.abort()
+      },
+    })
+
+    await request(app, `/v1/jobs/${JOB_ID}/log`, { signal: controller.signal })
+    await vi.waitFor(() => expect(polls).toBeGreaterThanOrEqual(3))
+
+    expect(readLogCalls).toEqual([
+      { jobId: JOB_ID, run: null, afterSeq: 0 },
+      { jobId: JOB_ID, run: 1, afterSeq: 0 },
+      { jobId: JOB_ID, run: 1, afterSeq: 0 },
+    ])
+  })
+
+  it('refuses to resume without a run once the job has runs, because a seq belongs to one run', async () => {
+    const { app } = setup({ jobs: [makeJob()], runs: [makeRun(1), makeRun(2)] })
+
+    expect((await request(app, `/v1/jobs/${JOB_ID}/log?after=50`)).status).toBe(400)
+    expect((await request(app, `/v1/jobs/${JOB_ID}/log`, { headers: { 'Last-Event-ID': '50' } })).status).toBe(400)
+    // Naming the run is enough, and so is starting from the beginning.
+    for (const path of [`/v1/jobs/${JOB_ID}/log?run=2&after=50`, `/v1/jobs/${JOB_ID}/log?after=0`]) {
+      const controller = new AbortController()
+      const open = await request(app, path, { signal: controller.signal })
+      expect(open.status).toBe(200)
+      controller.abort()
+    }
+  })
+
+  it('still resumes the flat transcript of a job that never had a run', async () => {
+    const { app } = setup({ jobs: [makeJob()] })
+    const controller = new AbortController()
+
+    const response = await request(app, `/v1/jobs/${JOB_ID}/log?after=50`, { signal: controller.signal })
+    controller.abort()
+
+    expect(response.status).toBe(200)
+  })
+
+  it('starts following a run that appears after the stream was opened', async () => {
+    const controller = new AbortController()
+    let polls = 0
+    const { app, readLogCalls, store } = setup({
+      jobs: [makeJob()],
+      sleep: async () => {
+        polls += 1
+        if (polls === 1) store.runs.push(makeRun(1))
+        if (polls === 3) controller.abort()
+      },
+    })
+
+    await request(app, `/v1/jobs/${JOB_ID}/log`, { signal: controller.signal })
+    await vi.waitFor(() => expect(polls).toBeGreaterThanOrEqual(3))
+
+    expect(readLogCalls.map((call) => call.run)).toEqual([null, 1, 1])
   })
 })

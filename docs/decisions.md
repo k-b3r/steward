@@ -418,6 +418,29 @@ are exhausted and offers a retry, while here the right move is to resume the age
   verdict from phase 3). The base-branch comparison needs the phase 5 poller, so the classification
   lands then. Nothing in the code sets this state today.
 
+### 27. Runs are their own table, and transcripts are kept per run
+
+`jobs` stays one row per ticket (`source + externalId` is unique) and ends at `merged`. Each
+execution gets a row in `runs` (migration `0002`), so a ticket's history of attempts is data, not
+something to read out of `job_events`.
+
+- A run opens and closes inside `transitionJob`, in the same transaction as the state change. The
+  rule is the slot rule: entering `claiming` or `running` from a state that holds no slot opens a
+  run, leaving them closes it (`src/runs.ts`, with a test that every legal way out of a slot-holding
+  state has an outcome).
+- A manual `retry` from `failed` is a new run. The `attempt` counter resets, the run number does not.
+- `merged` does not close a run and needs no sweep: the last run already ended when the job
+  left the slot.
+- Transcripts move to `runs/<job-id>/<run-number>/`. Before this, a second run appended to the same
+  `transcript.jsonl`, and the two could not be told apart. `seq` now restarts at 1 in each run, so
+  a log stream stays on the run it opened on instead of following a newer one.
+- `AgentRunner.start` takes the run number. `cancel` and `resume` act on the newest run's folder, and
+  `cancel` no longer creates a folder for a job that never ran.
+- Not migrated: jobs that ran before this have no `runs` rows and keep a flat transcript folder. The
+  API reads that folder when a job has no runs, so old logs stay visible. Nothing backfills them.
+- Read side only: a job's runs show in the API (`/runs`, `?run=`). The dashboard follows the
+  newest run and has no runs view yet. Nothing is written to Linear.
+
 ## Unverified
 
 Each item still needs a run on the box.
