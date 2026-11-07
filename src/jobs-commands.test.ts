@@ -140,7 +140,7 @@ describe('retryJob', () => {
   })
 
   it('never retries a job that is finished, or one that is already in flight', async () => {
-    for (const state of ['done', 'merged', 'running', 'queued', 'pr_open'] as const) {
+    for (const state of ['done', 'merged', 'running', 'queued', 'pr_open', 'ci_failed'] as const) {
       const { deps } = setup({ job: makeJob({ state }) })
 
       await expect(retryJob(deps, '11111111-1111-4111-8111-111111111111')).rejects.toBeInstanceOf(

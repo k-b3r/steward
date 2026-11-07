@@ -74,7 +74,15 @@ const CONFIRMABLE: readonly JobState[] = ['proposed']
 const DECLINABLE: readonly JobState[] = ['proposed']
 const RECONSIDERABLE: readonly JobState[] = ['declined']
 const RETRYABLE: readonly JobState[] = ['failed', 'cancelled']
-const CANCELLABLE: readonly JobState[] = ['queued', 'claiming', 'running', 'pr_open', 'in_review', 'changes_requested']
+const CANCELLABLE: readonly JobState[] = [
+  'queued',
+  'claiming',
+  'running',
+  'pr_open',
+  'ci_failed',
+  'in_review',
+  'changes_requested',
+]
 
 /**
  * The intents available in a given state. Read models expose this so a client never offers a

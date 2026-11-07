@@ -102,12 +102,17 @@ describe('holdsSlot', () => {
     }
   })
 
-  it('returns false for the other ten states', () => {
+  it('returns false for the other eleven states', () => {
     const others = JOB_STATES.filter((state) => state !== 'claiming' && state !== 'running')
-    expect(others).toHaveLength(10)
+    expect(others).toHaveLength(11)
     for (const state of others) {
       expect(holdsSlot(state)).toBe(false)
     }
+  })
+
+  it('does not hold a slot while a pull request waits on red CI, like one waiting for review', () => {
+    expect(holdsSlot('ci_failed')).toBe(false)
+    expect(holdsSlot('pr_open')).toBe(false)
   })
 })
 

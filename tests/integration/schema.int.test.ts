@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { migrateDb } from '../../src/db/migrate'
 import { jobs } from '../../src/db/schema'
 import { closePool, createDb, createPool } from '../../src/platform/db'
-import type { WorkItem } from '../../src/types'
+import { JOB_STATES, type WorkItem } from '../../src/types'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 if (databaseUrl === undefined) {
@@ -71,6 +71,15 @@ describe('schema', () => {
     await db.insert(jobs).values(row())
 
     await expect(db.insert(jobs).values(row())).rejects.toThrow()
+  })
+
+  it('accepts every state of the state machine, ci_failed included', async () => {
+    for (const [index, state] of JOB_STATES.entries()) {
+      await db.insert(jobs).values(row({ externalId: `ext-state-${index}`, state }))
+    }
+
+    const stored = await db.select({ state: jobs.state }).from(jobs)
+    expect(stored.map((r) => r.state).sort()).toEqual([...JOB_STATES].sort())
   })
 
   it('rejects a state outside the state machine', async () => {

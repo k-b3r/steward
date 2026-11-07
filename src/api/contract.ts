@@ -15,6 +15,7 @@ const JOB_STATE_VALUES = [
   'claiming',
   'running',
   'pr_open',
+  'ci_failed',
   'in_review',
   'changes_requested',
   'merged',
