@@ -77,7 +77,8 @@ Self-transitions are never legal.
 | `done`              | none                                                              | Final.                                                    |
 | `failed`            | `queued`, `cancelled`                                             | Failed means retries are exhausted. Retry reuses the row. |
 | `cancelled`         | `queued`                                                          | A cancelled job can be retried.                           |
-| Notes:              |
+
+Notes:
 
 - `merged` and `done` are final. A retry on either returns 409.
 - A job response carries the ticket's `identifier`, `title` and `url` (a read-only tracker link) and
@@ -223,6 +224,8 @@ src/
   allocate.ts        pure slot allocation
   intake-policy.ts   pure intake rules: proposal, queued, baseline, burst cap
   linear-map.ts      pure tracker JSON to WorkItem
+  runs.ts            pure rules for when a run opens, closes and how it ended
+  subagent-policy.ts pure sub-agent spawn limits and reap rules
   types.ts           WorkItem, Job, JobState, FailureKind, the interfaces
   intake.ts          one poll: read the tracker, apply the policy, write jobs
   linear.ts          WorkFeed implementation: the Linear client (read only)
