@@ -1047,3 +1047,19 @@ describe('action ids', () => {
     expect((await request(app, `/v1/actions/${MISSING_ACTION_ID}/approve`, { method: 'POST' })).status).toBe(404)
   })
 })
+
+describe('action lists', () => {
+  it('passes the requested page size to the read model', async () => {
+    const actions = [makeAction(), makeAction({ id: MISSING_ACTION_ID, kind: 'other' })]
+    const { app } = setup({ actions })
+
+    const limited = await request(app, '/v1/actions?limit=1')
+    const all = await request(app, '/v1/actions')
+
+    expect(((await limited.json()) as unknown[]).length).toBe(1)
+    expect(((await all.json()) as unknown[]).length).toBe(2)
+    // The same bounds as the jobs read.
+    expect((await request(app, '/v1/actions?limit=0')).status).toBe(400)
+    expect((await request(app, '/v1/actions?limit=501')).status).toBe(400)
+  })
+})
