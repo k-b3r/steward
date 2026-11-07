@@ -1,11 +1,12 @@
 // What a caller may read, shaped for the wire. The HTTP layer validates and serializes; it never
 // decides which fields are public, how many rows come back, or which buttons a state allows.
 import { allowedActionsFor, type JobAction } from './jobs-commands'
-import type { ActionStatus, FailureKind, Job, JobState, PendingAction } from './types'
+import type { ActionStatus, FailureKind, Job, JobState, PendingAction, Run, RunOutcome } from './types'
 
 export type QueryStore = {
   getJob(id: string): Promise<Job | null>
   listJobs(filter?: { state?: JobState; limit?: number }): Promise<Job[]>
+  listRuns(jobId: string): Promise<Run[]>
   listActions(filter?: { status?: string; limit?: number }): Promise<PendingAction[]>
 }
 
@@ -23,6 +24,16 @@ export type JobSummary = {
   nextRunAt: string | null
   failureKind: FailureKind | null
   allowedActions: JobAction[]
+}
+
+/** One execution of a job as the API returns it. The job id is left out: the caller asked by it. */
+export type RunSummary = {
+  number: number
+  slot: number | null
+  startedAt: string
+  endedAt: string | null
+  outcome: RunOutcome | null
+  failureKind: FailureKind | null
 }
 
 export type ActionSummary = {
@@ -60,6 +71,17 @@ function toJobSummary(job: Job): JobSummary {
   }
 }
 
+function toRunSummary(run: Run): RunSummary {
+  return {
+    number: run.number,
+    slot: run.slot,
+    startedAt: run.startedAt.toISOString(),
+    endedAt: run.endedAt === null ? null : run.endedAt.toISOString(),
+    outcome: run.outcome,
+    failureKind: run.failureKind,
+  }
+}
+
 /** One decided action, mapped for the response. */
 export function toActionSummary(action: PendingAction): ActionSummary {
   return {
@@ -80,8 +102,16 @@ export async function listJobs(
 ): Promise<JobSummary[]> {
   const limit = filter.limit ?? DEFAULT_LIMIT
   assertLimit(limit)
-  const jobs = await deps.store.listJobs({ ...(filter.state === undefined ? {} : { state: filter.state }), limit })
+  const jobs = await deps.store.listJobs({
+    ...(filter.state === undefined ? {} : { state: filter.state }),
+    limit,
+  })
   return jobs.map(toJobSummary)
+}
+
+/** A job's runs, oldest first. */
+export async function listRuns(deps: QueryDeps, jobId: string): Promise<RunSummary[]> {
+  return (await deps.store.listRuns(jobId)).map(toRunSummary)
 }
 
 export async function getJob(deps: QueryDeps, id: string): Promise<JobSummary | null> {

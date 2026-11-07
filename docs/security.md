@@ -63,7 +63,7 @@ So:
 
 ## Files on disk
 
-- `~/steward-instances/<instance>/runs/<job-id>/` is mode 0700.
+- Each run folder, `~/steward-instances/<instance>/runs/<job-id>/<run-number>/`, is mode 0700. The transcript writer creates it. The job folder above it holds the worktree and is created by git with default permissions, so its protection is the 0700 instance folder.
 - `transcript.jsonl` and `raw.jsonl` are mode 0600. `raw.jsonl` is never served.
 - The run directory holds the agent's local logs. It is not in the repo and not synced.
 - Retention is `RUN_RETENTION_DAYS` (default 30). The sweep is phase 5. Until then, delete
@@ -74,7 +74,7 @@ So:
   `quadlet/` folder; `~/.config/containers/systemd` only holds symlinks to them.
 - Secrets are readable by the login user, and the orchestrator runs as that user. The folder
   mode keeps other OS users out, not agents. Agent containers see only their worktree (phase
-  2), and the agent session for a run lives in `runs/<job-id>/`, so it cannot read the env
+  2), and the agent session for a run lives in `runs/<job-id>/<run-number>/`, so it cannot read the env
   file unless it is pointed at the instance folder.
 - The agent-config guard hook blocks reads of files named `.env` or `.env.*` only, which is
   why the file is `.env` and not `<instance>.env`. That guard is not present in every agent

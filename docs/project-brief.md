@@ -124,9 +124,9 @@ Failure kinds (stored with a free-text `reason` on the `job_events` row):
 
 ## Transcripts
 
-`~/steward-instances/<instance>/runs/<job-id>/`:
+`~/steward-instances/<instance>/runs/<job-id>/<run-number>/`, one folder per run:
 
-- `transcript.jsonl`: one envelope per line, `{ seq, ts, kind, data }`. `kind` in `system | assistant | tool | result | error | orchestrator`. `data` holds the raw agent event unmodified. One writer for runner and orchestrator lines. `seq` increases monotonically so the SSE tail can resume (`Last-Event-ID`).
+- `transcript.jsonl`: one envelope per line, `{ seq, ts, kind, data }`. `kind` in `system | assistant | tool | result | error | orchestrator`. `data` holds the raw agent event unmodified. One writer for runner and orchestrator lines. `seq` increases monotonically inside one run so the SSE tail can resume (`Last-Event-ID`); a new run starts again at 1.
 - `raw.jsonl`: byte-exact runner output, mode `0600`, never served by the API.
   Redaction applies to orchestrator-originated lines and process logs only, not to agent output. Retention: `RUN_RETENTION_DAYS` (default 30), sweep in phase 5. Verify Claude Code's stream-json event shapes against the docs or a probe before writing the mapper.
 
@@ -134,7 +134,7 @@ Failure kinds (stored with a free-text `reason` on the `job_events` row):
 
 Hono, `/v1` prefix, chained route definitions, `src/api/contract.ts` exports `AppType` and the zod schemas. Bind to `127.0.0.1` only.
 
-- `GET /v1/jobs`, `GET /v1/jobs/:id`, `GET /v1/jobs/:id/log` (SSE tail), `POST /v1/jobs/:id/{retry,cancel,confirm,decline}`, `GET /v1/actions?status=pending`, `POST /v1/actions/:id/{approve,reject}`.
+- `GET /v1/jobs`, `GET /v1/jobs/:id`, `GET /v1/jobs/:id/runs` (a job's runs), `GET /v1/jobs/:id/log` (SSE tail, `?run=<n>` picks a run), `POST /v1/jobs/:id/{retry,cancel,confirm,decline,reconsider}`, `GET /v1/actions?status=pending`, `POST /v1/actions/:id/{approve,reject}`.
 - Auth: `API_TOKEN` bearer, constant-time compare, redacted in logs. Reject any `Host` that is not `127.0.0.1:PORT` or `localhost:PORT`, or one of the exact values in `ALLOWED_HOSTS` (default empty). Reject cross-origin requests unless in `ALLOWED_ORIGINS` (default empty).
 - SSE clients use `fetch` streaming, since `EventSource` cannot set headers.
 - Dashboard (later): `dashboard/` in this repo, a pnpm workspace member added when it starts. It imports only `src/api/contract.ts` as types (enforced with a dependency-cruiser rule). The token sits in `sessionStorage`; note the XSS risk in `docs/security.md`.

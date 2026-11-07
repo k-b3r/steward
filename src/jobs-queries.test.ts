@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { allowedActionsFor } from './jobs-commands'
-import { getJob, listActions, listJobs, type QueryStore } from './jobs-queries'
-import { JOB_STATES, type Job, type JobState, type PendingAction } from './types'
+import { getJob, listActions, listJobs, listRuns, type QueryStore } from './jobs-queries'
+import { JOB_STATES, type Job, type JobState, type PendingAction, type Run } from './types'
 
 const NOW = new Date('2026-01-02T03:04:05.000Z')
 
@@ -36,7 +36,20 @@ function makeAction(overrides: Partial<PendingAction> = {}): PendingAction {
   }
 }
 
-function setup(jobs: Job[] = [], actions: PendingAction[] = []) {
+function makeRun(overrides: Partial<Run> = {}): Run {
+  return {
+    jobId: '11111111-1111-4111-8111-111111111111',
+    number: 1,
+    slot: 0,
+    startedAt: NOW,
+    endedAt: null,
+    outcome: null,
+    failureKind: null,
+    ...overrides,
+  }
+}
+
+function setup(jobs: Job[] = [], actions: PendingAction[] = [], runs: Run[] = []) {
   const calls: { filter?: { state?: JobState; limit?: number } }[] = []
   const store: QueryStore = {
     async getJob(id) {
@@ -46,6 +59,9 @@ function setup(jobs: Job[] = [], actions: PendingAction[] = []) {
       calls.push({ filter })
       const matching = jobs.filter((job) => filter.state === undefined || job.state === filter.state)
       return filter.limit === undefined ? matching : matching.slice(0, filter.limit)
+    },
+    async listRuns(jobId) {
+      return runs.filter((run) => run.jobId === jobId)
     },
     async listActions(filter = {}) {
       return actions.filter((action) => filter.status === undefined || action.status === filter.status)
@@ -149,6 +165,37 @@ describe('list limits', () => {
     await listJobs(deps, { state: 'failed' })
 
     expect(calls.at(-1)?.filter?.state).toBe('failed')
+  })
+})
+
+describe('run views', () => {
+  it('maps a run to wire shape with ISO dates, keeping open fields null', async () => {
+    const ended = new Date(NOW.getTime() + 60_000)
+    const { deps } = setup(
+      [],
+      [],
+      [makeRun({ number: 1, endedAt: ended, outcome: 'retry', failureKind: 'infra' }), makeRun({ number: 2 })],
+    )
+
+    expect(await listRuns(deps, '11111111-1111-4111-8111-111111111111')).toEqual([
+      {
+        number: 1,
+        slot: 0,
+        startedAt: '2026-01-02T03:04:05.000Z',
+        endedAt: '2026-01-02T03:05:05.000Z',
+        outcome: 'retry',
+        failureKind: 'infra',
+      },
+      { number: 2, slot: 0, startedAt: '2026-01-02T03:04:05.000Z', endedAt: null, outcome: null, failureKind: null },
+    ])
+  })
+
+  it('does not expose the job id: the caller already has it', async () => {
+    const { deps } = setup([], [], [makeRun()])
+
+    const [view] = await listRuns(deps, '11111111-1111-4111-8111-111111111111')
+
+    expect(view).not.toHaveProperty('jobId')
   })
 })
 

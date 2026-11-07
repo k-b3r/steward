@@ -28,7 +28,7 @@ Each instance has one folder under `~/steward-instances`. The app checkout sits 
 ~/steward-instances/<instance>/
   .env        secrets and settings (file mode 0600, folder mode 0700)
   repo/       the clone the instance works on (REPO_PATH)
-  runs/       job output: runs/<job-id>/{worktree,transcript.jsonl,raw.jsonl} (RUNS_DIR)
+  runs/       job output: runs/<job-id>/worktree and runs/<job-id>/<run-number>/{transcript.jsonl,raw.jsonl} (RUNS_DIR)
   quadlet/    the rendered Quadlet files; ~/.config/containers/systemd holds symlinks to them
   backups/    `podman volume export` files
 ```
@@ -153,7 +153,7 @@ A third argument sets the destination instead of `~/steward-instances/<instance>
 
 It clones once, then marks the clone as steward's: `steward.instance`, `steward.role` and `steward.repo` in the clone's local git config, and the same in `.git/steward.json`. Both are local, so they survive moving the clone and never appear in `git status`. It also prints the `REPO_PATH` line to put in the instance env file.
 
-Layout: `~/steward-instances/<instance>/repo` holds the clone, and `~/steward-instances/<instance>/runs/<job-id>/` holds one worktree and its transcripts per job. Each job gets a worktree from that clone; the clone itself is never touched by an agent.
+Layout: `~/steward-instances/<instance>/repo` holds the clone, and `~/steward-instances/<instance>/runs/<job-id>/` holds one worktree per job, and one folder per run (`1/`, `2/`, ...) with that run's transcripts. Each job gets a worktree from that clone; the clone itself is never touched by an agent.
 
 `REPO_PATH` must be absolute. `RUNS_DIR` defaults to `$HOME/steward-instances/$INSTANCE/runs`,
 which is `~/steward-instances/personal/runs` here. The env file is the only place the app

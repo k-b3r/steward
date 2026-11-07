@@ -9,7 +9,7 @@ import { z } from 'zod'
 import type { Context } from 'hono'
 import type { PendingAction } from '../types'
 import { toActionSummary } from '../jobs-queries'
-import type { ActionSummary, JobSummary } from '../jobs-queries'
+import type { ActionSummary, JobSummary, RunSummary } from '../jobs-queries'
 import { ActionNotFoundError, ActionNotPendingError, JobNotFoundError } from '../jobs-commands'
 import type { Envelope } from '../runner/transcript'
 import { IllegalTransitionError } from '../transitions'
@@ -31,6 +31,7 @@ async function reload(reads: ApiReads, id: string): Promise<JobSummary> {
 export type ApiReads = {
   getJob(id: string): Promise<JobSummary | null>
   listJobs(filter?: { state?: JobState; limit?: number }): Promise<JobSummary[]>
+  listRuns(jobId: string): Promise<RunSummary[]>
   listActions(filter?: { status?: string; limit?: number }): Promise<ActionSummary[]>
 }
 
@@ -53,7 +54,8 @@ type AppConfig = {
 export type AppDeps = {
   reads: ApiReads
   commands: ApiCommands
-  readLog(jobId: string, afterSeq: number): Promise<Envelope[]>
+  /** `run` is null for a job with no run: its transcript, if any, is the old flat folder. */
+  readLog(jobId: string, run: number | null, afterSeq: number): Promise<Envelope[]>
   config: AppConfig
   sleep: (ms: number) => Promise<void>
 }
@@ -64,7 +66,10 @@ const listQuerySchema = z.object({
   state: z.enum(JOB_STATES).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
 })
-const logQuerySchema = z.object({ after: z.coerce.number().int().min(0).optional() })
+const logQuerySchema = z.object({
+  after: z.coerce.number().int().min(0).optional(),
+  run: z.coerce.number().int().min(1).optional(),
+})
 const actionFilterSchema = z.object({ status: z.enum(ACTION_STATUSES).optional() })
 
 type ValidationOutcome = { success: boolean }
@@ -80,10 +85,13 @@ function parseSequence(value: string): number | null {
   return Number.isSafeInteger(sequence) ? sequence : null
 }
 
-function streamJobLog(c: Context, deps: AppDeps, jobId: string, after: number): Response {
+function streamJobLog(c: Context, deps: AppDeps, jobId: string, from: { after: number; run: number | null }): Response {
   return streamSSE(c, async (stream) => {
     const signal = c.req.raw.signal
-    let lastSeq = after
+    let lastSeq = from.after
+    // A new run restarts `seq` at 1, so a stream must never move to another run: it stays on the
+    // first one it can name. Before a job has a run it reads the old flat transcript.
+    let run = from.run
     let removeListener = (): void => undefined
 
     const isAborted = (): boolean => signal.aborted || stream.aborted
@@ -102,7 +110,8 @@ function streamJobLog(c: Context, deps: AppDeps, jobId: string, after: number): 
     })
 
     const sendNewEnvelopes = async (): Promise<boolean> => {
-      const envelopes = await deps.readLog(jobId, lastSeq)
+      if (run === null) run = (await deps.reads.listRuns(jobId)).at(-1)?.number ?? null
+      const envelopes = await deps.readLog(jobId, run, lastSeq)
       for (const envelope of envelopes) {
         if (isAborted()) return false
         await stream.writeSSE({ id: String(envelope.seq), data: JSON.stringify(envelope) })
@@ -152,11 +161,10 @@ export function createApp(deps: AppDeps) {
   return app
     .get('/v1/jobs', zValidator('query', listQuerySchema, rejectInvalid), async (c) => {
       const { state, limit } = c.req.valid('query')
-      const jobs = await reads.listJobs(
-        state === undefined && limit === undefined
-          ? {}
-          : { ...(state === undefined ? {} : { state }), ...(limit === undefined ? {} : { limit }) },
-      )
+      const jobs = await reads.listJobs({
+        ...(state === undefined ? {} : { state }),
+        ...(limit === undefined ? {} : { limit }),
+      })
       return c.json(jobs)
     })
     .get('/v1/jobs/:id', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
@@ -164,6 +172,12 @@ export function createApp(deps: AppDeps) {
       const job = await reads.getJob(id)
       if (job === null) return c.json({ error: 'not found' }, 404)
       return c.json(job)
+    })
+    .get('/v1/jobs/:id/runs', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
+      const { id } = c.req.valid('param')
+      const job = await reads.getJob(id)
+      if (job === null) return c.json({ error: 'not found' }, 404)
+      return c.json(await reads.listRuns(job.id))
     })
     .get(
       '/v1/jobs/:id/log',
@@ -174,6 +188,11 @@ export function createApp(deps: AppDeps) {
         const job = await reads.getJob(id)
         if (job === null) return c.json({ error: 'not found' }, 404)
 
+        const { run } = c.req.valid('query')
+        if (run !== undefined && !(await reads.listRuns(job.id)).some((known) => known.number === run)) {
+          return c.json({ error: 'not found' }, 404)
+        }
+
         const lastEventId = c.req.header('last-event-id')
         let after = c.req.valid('query').after ?? 0
         if (lastEventId !== undefined) {
@@ -182,7 +201,7 @@ export function createApp(deps: AppDeps) {
           after = sequence
         }
 
-        return streamJobLog(c, deps, job.id, after)
+        return streamJobLog(c, deps, job.id, { after, run: run ?? null })
       },
     )
     .post('/v1/jobs/:id/retry', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
