@@ -20,6 +20,7 @@ export const JOB_STATES = [
   'claiming',
   'running',
   'pr_open',
+  'ci_failed',
   'in_review',
   'changes_requested',
   'merged',

@@ -396,6 +396,28 @@ How a job gets the code it works on. Decided for phase 2; the git primitives lan
 - A failed fetch is classified at the fetch call. A permanent cause (no such remote, a missing base branch, `Repository not found`) fails as `setup` at once. A transient one (a network blip, a timeout) is `infra`: retried with backoff up to `MAX_ATTEMPTS`, then it lands in `failed`, the dead-letter, where you retry or cancel it.
 - Cleanup: the worktree is removed after the run; the branch stays (retries reuse it). Phase 5 deletes `agent/*` branches once merged and prunes dead worktrees.
 
+## Decisions taken 2026-11-07
+
+### 26. A `ci_failed` state between `pr_open` and `in_review`
+
+A pull request whose checks fail is neither waiting for review nor finished, and it must keep its
+ticket blocked. It gets its own state instead of reusing `failed`, because `failed` means retries
+are exhausted and offers a retry, while here the right move is to resume the agent.
+
+- Edges: `pr_open -> ci_failed` and `in_review -> ci_failed` (a check failed on this PR),
+  `ci_failed -> running` (the agent is resumed), `ci_failed -> in_review` (a person fixed it),
+  `ci_failed -> failed | cancelled` (as its neighbours).
+- "Ongoing" means CI is red because of this PR. A failure that also occurs on `BASE_BRANCH` does not
+  count.
+- It holds no slot, like `pr_open`: waiting for a fix must not starve the worker.
+- A person can cancel it, and cannot retry it: it is not stopped, it is ongoing.
+- Landed now: the state, its edges, the database constraint (migration `0001`), the API contract and
+  the dashboard label, icon and lane. The dashboard borrows the `failed` colour and icon, as it
+  does for other states the design has none for.
+- Not landed, undecided: which check results move a job here (GitHub's checks, or a validation
+  verdict from phase 3). The base-branch comparison needs the phase 5 poller, so the classification
+  lands then. Nothing in the code sets this state today.
+
 ## Unverified
 
 Each item still needs a run on the box.

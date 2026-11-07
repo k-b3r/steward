@@ -13,8 +13,11 @@ const TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = {
   claiming: ['running', 'queued', 'failed', 'cancelled'],
   // TODO(phase-4): remove running -> done. It exists only for the phase-1 echo worker stub.
   running: ['pr_open', 'done', 'queued', 'failed', 'cancelled'],
-  pr_open: ['in_review', 'failed', 'cancelled'],
-  in_review: ['changes_requested', 'merged', 'failed', 'cancelled'],
+  pr_open: ['in_review', 'ci_failed', 'failed', 'cancelled'],
+  // A check failed on this PR (not on the base branch). Still ongoing: the ticket stays blocked.
+  // -> running is the agent resumed to fix it; -> in_review is a person fixing it by hand.
+  ci_failed: ['running', 'in_review', 'failed', 'cancelled'],
+  in_review: ['changes_requested', 'ci_failed', 'merged', 'failed', 'cancelled'],
   changes_requested: ['in_review', 'running', 'failed', 'cancelled'],
   merged: ['done'],
   done: [],

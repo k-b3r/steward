@@ -63,6 +63,7 @@ describe('allowedActionsFor', () => {
       claiming: ['cancel'],
       running: ['cancel'],
       pr_open: ['cancel'],
+      ci_failed: ['cancel'],
       in_review: ['cancel'],
       changes_requested: ['cancel'],
       merged: [],

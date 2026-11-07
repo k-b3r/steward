@@ -15,7 +15,7 @@ function Today() {
   const stats: [string, number, string][] = [
     ['Working', count('running', 'claiming'), 'agents on a slot'],
     ['Waiting', count('queued', 'proposed'), 'queued or proposed'],
-    ['In review', count('pr_open', 'in_review', 'changes_requested'), 'pull requests open'],
+    ['In review', count('pr_open', 'ci_failed', 'in_review', 'changes_requested'), 'pull requests open'],
     ['Failed', count('failed'), 'need a retry'],
     ['Merged', count('merged', 'done'), 'finished'],
     ['Total', jobs.length, 'jobs known'],

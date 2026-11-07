@@ -62,25 +62,30 @@ The source of truth is `src/transitions.ts`. One function, `assertTransition`, e
 these edges. Every state has an entry, so a missing or extra state is a type error.
 Self-transitions are never legal.
 
-| From                | Allowed next states                                  | Note                                                      |
-| ------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
-| `proposed`          | `queued`, `declined`                                 | A person confirms or declines a proposal.                 |
-| `declined`          | `proposed`                                           | A declined job can be reconsidered.                       |
-| `queued`            | `claiming`, `cancelled`, `failed`                    | A queued job can fail before it claims a slot.            |
-| `claiming`          | `running`, `queued`, `failed`, `cancelled`           | `queued` is the automatic infra retry with backoff.       |
-| `running`           | `pr_open`, `done`, `queued`, `failed`, `cancelled`   | `done` exists only for the phase 1 echo worker stub.      |
-| `pr_open`           | `in_review`, `failed`, `cancelled`                   | The draft pull request is the visible claim.              |
-| `in_review`         | `changes_requested`, `merged`, `failed`, `cancelled` | A review asks for changes or approves.                    |
-| `changes_requested` | `in_review`, `running`, `failed`, `cancelled`        | Feedback can start another run.                           |
-| `merged`            | `done`                                               | A merged pull request is closed out.                      |
-| `done`              | none                                                 | Final.                                                    |
-| `failed`            | `queued`, `cancelled`                                | Failed means retries are exhausted. Retry reuses the row. |
-| `cancelled`         | `queued`                                             | A cancelled job can be retried.                           |
+| From                | Allowed next states                                               | Note                                                      |
+| ------------------- | ----------------------------------------------------------------- | --------------------------------------------------------- |
+| `proposed`          | `queued`, `declined`                                              | A person confirms or declines a proposal.                 |
+| `declined`          | `proposed`                                                        | A declined job can be reconsidered.                       |
+| `queued`            | `claiming`, `cancelled`, `failed`                                 | A queued job can fail before it claims a slot.            |
+| `claiming`          | `running`, `queued`, `failed`, `cancelled`                        | `queued` is the automatic infra retry with backoff.       |
+| `running`           | `pr_open`, `done`, `queued`, `failed`, `cancelled`                | `done` exists only for the phase 1 echo worker stub.      |
+| `pr_open`           | `in_review`, `ci_failed`, `failed`, `cancelled`                   | The draft pull request is the visible claim.              |
+| `ci_failed`         | `running`, `in_review`, `failed`, `cancelled`                     | A check failed on this PR. Still ongoing; see below.      |
+| `in_review`         | `changes_requested`, `ci_failed`, `merged`, `failed`, `cancelled` | A review asks for changes or approves.                    |
+| `changes_requested` | `in_review`, `running`, `failed`, `cancelled`                     | Feedback can start another run.                           |
+| `merged`            | `done`                                                            | A merged pull request is closed out.                      |
+| `done`              | none                                                              | Final.                                                    |
+| `failed`            | `queued`, `cancelled`                                             | Failed means retries are exhausted. Retry reuses the row. |
+| `cancelled`         | `queued`                                                          | A cancelled job can be retried.                           |
 
 Notes:
 
 - `merged` and `done` are final. A retry on either returns 409.
 - A retry keeps the job row and increments `attempt`.
+- `ci_failed` means CI is red because of this pull request. A failure that also occurs on
+  `BASE_BRANCH` does not count. It is an ongoing state: the ticket stays blocked, and it holds no
+  slot, like `pr_open`. `running` is the agent resumed to fix it, `in_review` is a person fixing
+  it by hand. Nothing sets it yet: the phase 5 poller decides what a failing check is.
 - `TODO(phase-4)` in `src/transitions.ts` marks `running -> done`. Remove it when the real
   runner lands.
 
