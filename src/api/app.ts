@@ -62,7 +62,8 @@ export type AppDeps = {
 }
 
 const idParamSchema = z.object({ id: z.uuid() })
-const actionParamSchema = z.object({ id: z.string().min(1) })
+// An action id is a uuid like a job id: a plain string reaches Postgres as a type error.
+const actionParamSchema = z.object({ id: z.uuid() })
 const listQuerySchema = z.object({
   state: z.enum(JOB_STATES).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
