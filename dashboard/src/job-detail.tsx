@@ -50,6 +50,8 @@ function LiveLog({ jobId }: { jobId: string }) {
           setStatus('live')
           await followLog(jobId, {
             ...resume,
+            // The position moves while the stream is open, so read it here, not from the plan.
+            after: lastSeq.current,
             signal: controller.signal,
             onEnvelope: (e) => {
               lastSeq.current = Math.max(lastSeq.current, e.seq)

@@ -24,3 +24,19 @@ describe('planResume', () => {
     expect(planResume({ run: 1, after: 40 }, 2)).toEqual({ resume: { run: 2, after: 0 }, restart: true })
   })
 })
+
+// The reconnect position is the highest seq seen so far, not the position the resume plan was made
+// with: a plan made before a long stream would replay everything it already showed.
+describe('the position a reconnect uses', () => {
+  it('grows while the stream is open, and a later plan starts from the newest seq', () => {
+    let resume = planResume({ after: 0 }, 2).resume
+    const seen = [1, 2, 3, 4] // envelopes delivered while the stream was open
+
+    resume = { ...resume, after: Math.max(resume.after, ...seen) }
+
+    expect(resume).toEqual({ run: 2, after: 4 })
+    // A refusal for a *different* run starts over; the same run keeps the newest position.
+    expect(planResume(resume, 2)).toEqual({ resume, restart: false })
+    expect(planResume(resume, 3)).toEqual({ resume: { run: 3, after: 0 }, restart: true })
+  })
+})
