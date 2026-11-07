@@ -285,4 +285,4 @@ The production build (`pnpm --filter steward-dashboard build`) adds a Content-Se
 
 The API serves the built `dashboard/dist` when `DASHBOARD_DIR` is set to its absolute path (`pnpm --filter steward-dashboard build` writes it). The dashboard is then at the API origin, `http://127.0.0.1:<API_PORT>`. Over an SSH tunnel the local port must equal `API_PORT`, because the Host and Origin checks compare it.
 
-The API has no job titles, projects, costs or health data yet, so those parts of the design are not built. `pnpm --filter steward-dashboard build` writes `dashboard/dist`.
+The API has no projects, costs or health data yet, so those parts of the design are not built. The ticket title, its tracker link and its age are served today. `pnpm --filter steward-dashboard build` writes `dashboard/dist`.

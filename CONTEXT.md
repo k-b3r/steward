@@ -6,7 +6,7 @@
 
 1. Fewer than 3 features with their own data? **Yes.** Only jobs and slots own tables. Flat: one module, pure files beside shell files.
 2. Mostly a library or SDK? No.
-3. Mostly a framework app? No for the orchestrator. The later dashboard is a framework app and gets its own answer when it starts.
+3. Mostly a framework app? No for the orchestrator. The dashboard is a framework app, lives in `dashboard/` as its own workspace member, and imports only `src/api/contract.ts`.
 4. A part that must scale, deploy, fail or run independently? Not yet (the Podman worker is phase 2; revisit then).
 5. Several teams with separate release cycles? No.
 6. Event-driven or realtime core? No.

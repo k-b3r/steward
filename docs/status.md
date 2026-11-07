@@ -24,9 +24,10 @@ Pi run.
 
 ## What works today
 
-Tests: 681 unit, 87 integration and 15 end-to-end tests pass. CI runs all three plus a
-report-only mutation job, and the agent review gate holds a pull request until its findings are
-answered. No Dependabot alerts are open.
+Every suite passes: unit, integration and end-to-end. CI runs all three plus a report-only
+mutation job, and the agent review gate holds a pull request until its findings are answered.
+Counts move with every pull request, so run `pnpm check`, `pnpm test:integration` and
+`pnpm test:e2e` rather than trusting a number here.
 
 ### Control logic (pure code, no side effects)
 
