@@ -81,9 +81,11 @@ Filter: team key from config, assignee `isMe`, status in `Todo`, `Backlog`, `In 
 
 ## Job lifecycle
 
-States: `proposed`, `declined`, `queued`, `claiming`, `running`, `pr_open`, `in_review` ⇄ `changes_requested`, `merged`, `done`, `failed`, `cancelled`.
+States: `proposed`, `declined`, `queued`, `claiming`, `running`, `pr_open`, `ci_failed`, `in_review` ⇄ `changes_requested`, `merged`, `done`, `failed`, `cancelled`.
 
 - `proposed → queued | declined`; `declined → proposed`.
+- `pr_open | in_review → ci_failed` when a check fails on this PR, `ci_failed → running` when the agent
+  is resumed, `ci_failed → in_review` when a person fixed it by hand.
 - `failed → queued | cancelled`; `cancelled → queued` (retry reuses the row, increments `attempt`). `merged` and `done` are final; retry returns 409.
 - `claiming` holds the slot and creates the claim; a claim failure means no agent started.
 - One function enforces legal transitions, with tests.
