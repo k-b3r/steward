@@ -6,7 +6,7 @@ import { useStore } from './data'
 import { delay } from './delay'
 import { followRunLog } from './log-resume'
 import { JobActions } from './job-actions'
-import { STATE_LABEL, relativeTime } from './model'
+import { STATE_LABEL, relativeTime, safeTrackerUrl } from './model'
 import { Attempts, Empty, Icon, Skeleton, StateChip } from './ui'
 
 const RECONNECT_MS = 2000
@@ -104,6 +104,8 @@ export function JobDetail({ id }: { id: string }) {
       </>
     )
   }
+  const trackerUrl = safeTrackerUrl(job.url)
+
   return (
     <>
       <div className="crumbs">
@@ -115,6 +117,14 @@ export function JobDetail({ id }: { id: string }) {
         <div className="jh-top">
           <div>
             <h1 className="mono">{job.identifier}</h1>
+            <p className="sub">
+              {job.title}{' '}
+              {trackerUrl === null ? null : (
+                <a className="link" href={trackerUrl} target="_blank" rel="noreferrer">
+                  Open in the tracker
+                </a>
+              )}
+            </p>
             <div className="jh-meta">
               <StateChip state={job.state} />
               <span className="it">Source {job.source}</span>

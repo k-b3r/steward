@@ -81,6 +81,8 @@ Self-transitions are never legal.
 Notes:
 
 - `merged` and `done` are final. A retry on either returns 409.
+- A job response carries the ticket's `identifier`, `title` and `url` (a read-only tracker link) and
+  `createdAt`, so a client can tell two jobs apart and show a link without a second request.
 - A retry keeps the job row and increments `attempt`.
 - `ci_failed` means CI is red because of this pull request. A failure that also occurs on
   `BASE_BRANCH` does not count. It is an ongoing state: the ticket stays blocked, and it holds no
@@ -103,6 +105,8 @@ each has a row in `runs`: job, run number, slot, start and end time, outcome and
 - The run number counts up per job. A manual retry from `failed` is a new run, and the `attempt`
   counter resets while the run number does not. `merged` does not touch runs: the last run
   already ended when the job left the slot, at `pr_open`.
+- `GET /v1/jobs/:id/events` lists the state log a person reads as a timeline, oldest first, capped
+  at 200 with the newest kept.
 - `GET /v1/jobs/:id/runs` lists a job's runs, and `GET /v1/jobs/:id/log?run=<n>` follows one
   run's transcript. Without `run` the log follows the newest run at the time the stream opens
   and stays on it. A resume (`after` or `Last-Event-ID` above 0) must name the run once the job

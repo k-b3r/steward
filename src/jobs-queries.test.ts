@@ -12,6 +12,9 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     source: 'linear',
     externalId: 'ext-1',
     identifier: 'TST-1',
+    title: 'A job for the ticket',
+    url: 'https://example.test/TST-1',
+    createdAt: new Date('2026-01-02T03:04:05.000Z'),
     state: 'proposed',
     attempt: 0,
     maxAttempts: 3,
@@ -104,6 +107,8 @@ describe('job views', () => {
       {
         id: '11111111-1111-4111-8111-111111111111',
         identifier: 'TST-1',
+        title: 'A job for the ticket',
+        url: 'https://example.test/TST-1',
         source: 'linear',
         state: 'failed',
         attempt: 2,
@@ -111,6 +116,7 @@ describe('job views', () => {
         slot: null,
         nextRunAt: NOW.toISOString(),
         failureKind: 'infra',
+        createdAt: '2026-01-02T03:04:05.000Z',
         allowedActions: ['retry'],
       },
     ])

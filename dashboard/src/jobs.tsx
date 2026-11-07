@@ -1,11 +1,27 @@
 import { useMemo, useState } from 'react'
 
+import type { JobResponse } from './api'
 import { useStore } from './data'
 import { JobActions } from './job-actions'
-import { FILTERS, relativeTime } from './model'
+import { FILTERS, relativeTime, safeTrackerUrl } from './model'
 import { Attempts, Empty, Icon, PageHead, Skeleton, StateChip } from './ui'
 
 const jobHref = (job: { id: string }): string => `#/jobs/${job.id}`
+
+/** What the Job and Created columns show: the key, the ticket title, a way into the tracker, and age. */
+export function ticketCell(
+  job: Pick<JobResponse, 'id' | 'identifier' | 'title' | 'url' | 'createdAt'>,
+  now: number,
+): { identifier: string; title: string; href: string; trackerUrl: string | null; createdAgo: string } {
+  return {
+    identifier: job.identifier,
+    title: job.title,
+    href: jobHref(job),
+    trackerUrl: safeTrackerUrl(job.url),
+    // An age is never "in 2s": a tick of clock skew reads as brand new, not as the future.
+    createdAgo: now - Date.parse(job.createdAt) <= 0 ? 'just now' : relativeTime(job.createdAt, now),
+  }
+}
 
 type SortKey = 'identifier' | 'state' | 'attempt'
 
@@ -22,7 +38,7 @@ export function Jobs() {
       .filter(
         (j) =>
           (states.length === 0 || states.includes(j.state)) &&
-          (q === '' || `${j.identifier} ${j.source}`.toLowerCase().includes(q)),
+          (q === '' || `${j.identifier} ${j.title} ${j.source}`.toLowerCase().includes(q)),
       )
       .sort((a, b) => {
         const left = a[sort.key]
@@ -82,42 +98,59 @@ export function Jobs() {
                 <th>Source</th>
                 {head('attempt', 'Attempt')}
                 <th>Slot</th>
+                <th>Created</th>
                 <th>Next run</th>
                 <th>Failure</th>
                 <th className="r">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((job) => (
-                <tr key={job.id}>
-                  <td>
-                    <a className="jid link" href={jobHref(job)}>
-                      {job.identifier}
-                    </a>
-                  </td>
-                  <td>
-                    <StateChip state={job.state} />
-                  </td>
-                  <td className="muted">{job.source}</td>
-                  <td>
-                    <Attempts job={job} />
-                  </td>
-                  <td className="mono">{job.slot ?? '—'}</td>
-                  <td className="mono muted">{relativeTime(job.nextRunAt, now)}</td>
-                  <td>
-                    {job.failureKind === null ? (
-                      <span className="faint">—</span>
-                    ) : (
-                      <span className="tag">{job.failureKind}</span>
-                    )}
-                  </td>
-                  <td className="r">
-                    <span style={{ display: 'inline-flex', gap: 6 }}>
-                      <JobActions job={job} />
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((job) => {
+                const cell = ticketCell(job, now)
+                return (
+                  <tr key={job.id}>
+                    <td>
+                      <a className="jid link" href={jobHref(job)}>
+                        {job.identifier}
+                      </a>
+                      {job.title === '' ? null : <div className="xs muted trunc">{job.title}</div>}
+                      {cell.trackerUrl === null ? null : (
+                        <a
+                          className="faint xs"
+                          href={cell.trackerUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`Open ${job.identifier} in the tracker`}
+                        >
+                          <Icon name="i-external" size="xs" /> tracker
+                        </a>
+                      )}
+                    </td>
+                    <td>
+                      <StateChip state={job.state} />
+                    </td>
+                    <td className="muted">{job.source}</td>
+                    <td>
+                      <Attempts job={job} />
+                    </td>
+                    <td className="mono">{job.slot ?? '—'}</td>
+                    <td className="mono muted">{cell.createdAgo}</td>
+                    <td className="mono muted">{relativeTime(job.nextRunAt, now)}</td>
+                    <td>
+                      {job.failureKind === null ? (
+                        <span className="faint">—</span>
+                      ) : (
+                        <span className="tag">{job.failureKind}</span>
+                      )}
+                    </td>
+                    <td className="r">
+                      <span style={{ display: 'inline-flex', gap: 6 }}>
+                        <JobActions job={job} />
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

@@ -55,6 +55,9 @@ export type Job = {
   source: string
   externalId: string
   identifier: string
+  title: string
+  url: string
+  createdAt: Date
   state: JobState
   attempt: number
   maxAttempts: number

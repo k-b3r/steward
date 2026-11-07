@@ -7,12 +7,15 @@ const JOB = {
   id: '11111111-1111-4111-8111-111111111111',
   source: 'linear',
   identifier: 'TST-1',
+  title: 'A job for the ticket',
+  url: 'https://example.test/TST-1',
   state: 'queued',
   attempt: 0,
   maxAttempts: 3,
   slot: null,
   nextRunAt: null,
   failureKind: null,
+  createdAt: '2026-01-02T03:04:05.000Z',
   allowedActions: ['confirm', 'decline'],
 }
 

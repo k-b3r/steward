@@ -16,6 +16,9 @@ export type QueryDeps = { store: QueryStore }
 export type JobSummary = {
   id: string
   identifier: string
+  /** The ticket text, so a person can tell two jobs apart without opening the tracker. */
+  title: string
+  url: string
   source: string
   state: JobState
   attempt: number
@@ -23,6 +26,7 @@ export type JobSummary = {
   slot: number | null
   nextRunAt: string | null
   failureKind: FailureKind | null
+  createdAt: string
   allowedActions: JobAction[]
 }
 
@@ -60,6 +64,8 @@ function toJobSummary(job: Job): JobSummary {
   return {
     id: job.id,
     identifier: job.identifier,
+    title: job.title,
+    url: job.url,
     source: job.source,
     state: job.state,
     attempt: job.attempt,
@@ -67,6 +73,7 @@ function toJobSummary(job: Job): JobSummary {
     slot: job.slot,
     nextRunAt: job.nextRunAt === null ? null : job.nextRunAt.toISOString(),
     failureKind: job.failureKind,
+    createdAt: job.createdAt.toISOString(),
     allowedActions: allowedActionsFor(job.state),
   }
 }

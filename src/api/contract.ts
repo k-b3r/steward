@@ -78,12 +78,15 @@ export const jobResponseSchema = z.object({
   id: z.uuid(),
   source: z.string(),
   identifier: z.string(),
+  title: z.string(),
+  url: z.string(),
   state: jobStateSchema,
   attempt: z.number().int().nonnegative(),
   maxAttempts: z.number().int().positive(),
   slot: z.number().int().nonnegative().nullable(),
   nextRunAt: z.iso.datetime().nullable(),
   failureKind: failureKindSchema.nullable(),
+  createdAt: z.iso.datetime(),
   allowedActions: z.array(jobActionSchema),
 })
 

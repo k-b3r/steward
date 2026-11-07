@@ -33,6 +33,9 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     source: 'linear',
     externalId: 'ext-1',
     identifier: 'TST-1',
+    title: 'A job for the ticket',
+    url: 'https://example.test/TST-1',
+    createdAt: new Date('2026-01-02T03:04:05.000Z'),
     state: 'proposed',
     attempt: 0,
     maxAttempts: 3,
@@ -145,7 +148,11 @@ function setup(
     sleep?: AppDeps['sleep']
   } = {},
 ): Setup {
-  const store = createFakeStore({ jobs: options.jobs, actions: options.actions, runs: options.runs })
+  const store = createFakeStore({
+    jobs: options.jobs,
+    actions: options.actions,
+    runs: options.runs,
+  })
   const enqueued: string[] = []
   const cancelled: string[] = []
   const readLogCalls: { jobId: string; run: number | null; afterSeq: number }[] = []
