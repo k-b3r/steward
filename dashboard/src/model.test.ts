@@ -29,11 +29,12 @@ describe('stateClass', () => {
     expect(stateClass('claiming')).toBe('s-running')
     expect(stateClass('proposed')).toBe('s-queued')
     expect(stateClass('declined')).toBe('s-cancelled')
+    expect(stateClass('ci_failed')).toBe('s-failed')
   })
 
   it('uses the state name for every other state', () => {
     for (const state of ALL_STATES) {
-      if (state === 'claiming' || state === 'proposed' || state === 'declined') continue
+      if (state === 'claiming' || state === 'proposed' || state === 'declined' || state === 'ci_failed') continue
       expect(stateClass(state)).toBe(`s-${state}`)
     }
   })

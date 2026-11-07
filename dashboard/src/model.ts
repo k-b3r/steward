@@ -10,6 +10,7 @@ export const STATE_LABEL: Record<JobState, string> = {
   claiming: 'Claiming',
   running: 'Running',
   pr_open: 'PR open',
+  ci_failed: 'CI failed',
   in_review: 'In review',
   changes_requested: 'Changes requested',
   merged: 'Merged',
@@ -25,6 +26,7 @@ const STATE_ICON: Record<JobState, string> = {
   claiming: 'i-running',
   running: 'i-running',
   pr_open: 'i-pr_open',
+  ci_failed: 'i-failed',
   in_review: 'i-in_review',
   changes_requested: 'i-changes_requested',
   merged: 'i-merged',
@@ -42,20 +44,22 @@ export const stateClass = (state: JobState): string =>
       ? 's-queued'
       : state === 'declined'
         ? 's-cancelled'
-        : `s-${state}`
+        : state === 'ci_failed'
+          ? 's-failed'
+          : `s-${state}`
 export const isSpinning = (state: JobState): boolean => state === 'running' || state === 'claiming'
 
 export const LANES: { name: string; states: JobState[] }[] = [
   { name: 'Waiting', states: ['proposed', 'queued', 'claiming'] },
   { name: 'Working', states: ['running'] },
-  { name: 'In review', states: ['pr_open', 'in_review', 'changes_requested'] },
+  { name: 'In review', states: ['pr_open', 'ci_failed', 'in_review', 'changes_requested'] },
   { name: 'Finished', states: ['merged', 'done', 'failed', 'cancelled', 'declined'] },
 ]
 
 export const FILTERS: { name: string; states: JobState[] }[] = [
   { name: 'All', states: [] },
   { name: 'Active', states: ['queued', 'claiming', 'running'] },
-  { name: 'Review', states: ['pr_open', 'in_review', 'changes_requested'] },
+  { name: 'Review', states: ['pr_open', 'ci_failed', 'in_review', 'changes_requested'] },
   { name: 'Proposed', states: ['proposed'] },
   { name: 'Failed', states: ['failed'] },
   { name: 'Done', states: ['merged', 'done'] },
