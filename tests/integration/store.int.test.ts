@@ -486,9 +486,11 @@ describe('runs', () => {
     await transitionJob(db, job.id, 'ci_failed', { now: at(5) })
     await transitionJob(db, job.id, 'running', { now: at(6) })
 
+    // The resume goes straight to `running`, so that run never took a slot. A resumed job needs
+    // the claim path (queued -> claiming -> acquireSlot) before it holds one.
     expect(await listRuns(db, job.id)).toMatchObject([
       { number: 1, endedAt: at(4), outcome: 'pr_open' },
-      { number: 2, startedAt: at(6), endedAt: null, outcome: null },
+      { number: 2, startedAt: at(6), endedAt: null, outcome: null, slot: null },
     ])
   })
 
