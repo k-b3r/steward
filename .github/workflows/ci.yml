@@ -11,4 +11,8 @@ jobs:
   ci:
     uses: k-b3r/agent-config/.github/workflows/ci-typescript.yml@main
     with:
-      jobs: static unit mutation
+      jobs: static unit mutation e2e
+      # The e2e job gets Postgres from the shared workflow; Redis it has to start itself.
+      e2e-setup: |
+        docker run -d --name redis -p 6379:6379 redis:7-alpine
+        echo "TEST_REDIS_URL=redis://127.0.0.1:6379/0" >> "$GITHUB_ENV"
