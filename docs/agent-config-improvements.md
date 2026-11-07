@@ -91,6 +91,12 @@ Rule of thumb from the README: add a rule once the same correction was needed tw
 - **Proposed.** A note in `standards/security.md`: a user unit is not a sandbox on this box; the container, or a system unit under a dedicated user, is. Ship the `systemd-run --user` probe as a script so a repo can check its own box.
 - **Where.** `standards/security.md`, `scripts/` (probe).
 
+### 2026-11-07: `test-db-env` flags a test that builds the app's config (seen: 1, open)
+
+- **What happened.** An end-to-end walkthrough has to hand the app a config, and the app's database key is `DATABASE_URL`. The `test-db-env` rule matches that token anywhere under `tests/`, so the walkthrough failed CI even though it only ever _reads_ `TEST_DATABASE_URL` and never touches the live value. Spelling the key from `.env.example` at runtime was the workaround; a computed or split name would have hidden a real leak just as well, which is worse.
+- **Proposed.** Match reads instead of occurrences: `process.env.DATABASE_URL`, `env.DATABASE_URL`, `env['DATABASE_URL']` and `destructure` forms. Keep flagging any test that reads the app's variable, and stop flagging a config object passed to the app under test.
+- **Where.** `scripts/repo-checks.mjs` (`testDbEnvLeaks`), `CODING_STANDARDS.md` Testing.
+
 ## Delegated work (sub-agents)
 
 ### 2026-10-27: "all green" reports from sub-agents hid real bugs (seen: 1, open)
