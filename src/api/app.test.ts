@@ -903,6 +903,54 @@ describe('GET /v1/jobs/:id/log with runs', () => {
     expect(readLogCalls.map((call) => call.run)).toEqual([1, 1, 1])
   })
 
+  it('replays a run that starts after the stream opened, from its first envelope', async () => {
+    // The stream was reading the old flat transcript (run null). Run 1 appears, and its `seq`
+    // starts at 1, so the stream must reset its position instead of continuing where it was.
+    const controller = new AbortController()
+    let polls = 0
+    const { app, readLogCalls, store } = setup({
+      jobs: [makeJob()],
+      sleep: async () => {
+        polls += 1
+        if (polls === 1) store.runs.push(makeRun(1))
+        if (polls === 3) controller.abort()
+      },
+    })
+
+    await request(app, `/v1/jobs/${JOB_ID}/log`, { signal: controller.signal })
+    await vi.waitFor(() => expect(polls).toBeGreaterThanOrEqual(3))
+
+    expect(readLogCalls).toEqual([
+      { jobId: JOB_ID, run: null, afterSeq: 0 },
+      { jobId: JOB_ID, run: 1, afterSeq: 0 },
+      { jobId: JOB_ID, run: 1, afterSeq: 0 },
+    ])
+  })
+
+  it('refuses to resume without a run once the job has runs, because a seq belongs to one run', async () => {
+    const { app } = setup({ jobs: [makeJob()], runs: [makeRun(1), makeRun(2)] })
+
+    expect((await request(app, `/v1/jobs/${JOB_ID}/log?after=50`)).status).toBe(400)
+    expect((await request(app, `/v1/jobs/${JOB_ID}/log`, { headers: { 'Last-Event-ID': '50' } })).status).toBe(400)
+    // Naming the run is enough, and so is starting from the beginning.
+    for (const path of [`/v1/jobs/${JOB_ID}/log?run=2&after=50`, `/v1/jobs/${JOB_ID}/log?after=0`]) {
+      const controller = new AbortController()
+      const open = await request(app, path, { signal: controller.signal })
+      expect(open.status).toBe(200)
+      controller.abort()
+    }
+  })
+
+  it('still resumes the flat transcript of a job that never had a run', async () => {
+    const { app } = setup({ jobs: [makeJob()] })
+    const controller = new AbortController()
+
+    const response = await request(app, `/v1/jobs/${JOB_ID}/log?after=50`, { signal: controller.signal })
+    controller.abort()
+
+    expect(response.status).toBe(200)
+  })
+
   it('starts following a run that appears after the stream was opened', async () => {
     const controller = new AbortController()
     let polls = 0

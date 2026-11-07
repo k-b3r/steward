@@ -104,8 +104,9 @@ each has a row in `runs`: job, run number, slot, start and end time, outcome and
   counter resets while the run number does not. `merged` does not touch runs: the last run
   already ended when the job left the slot, at `pr_open`.
 - `GET /v1/jobs/:id/runs` lists a job's runs, and `GET /v1/jobs/:id/log?run=<n>` follows one
-  run's transcript. Without `run` the log
-  follows the newest run at the time the stream opens, and stays on it.
+  run's transcript. Without `run` the log follows the newest run at the time the stream opens
+  and stays on it. A resume (`after` or `Last-Event-ID` above 0) must name the run once the job
+  has runs, because a `seq` only means something inside one run.
 
 ## Failure kinds and retry rules
 

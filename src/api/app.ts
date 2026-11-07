@@ -110,7 +110,14 @@ function streamJobLog(c: Context, deps: AppDeps, jobId: string, from: { after: n
     })
 
     const sendNewEnvelopes = async (): Promise<boolean> => {
-      if (run === null) run = (await deps.reads.listRuns(jobId)).at(-1)?.number ?? null
+      if (run === null) {
+        const newest = (await deps.reads.listRuns(jobId)).at(-1)?.number
+        if (newest !== undefined) {
+          // A job that had no run yet and starts one: this is that run's first log, so seq restarts.
+          run = newest
+          lastSeq = 0
+        }
+      }
       const envelopes = await deps.readLog(jobId, run, lastSeq)
       for (const envelope of envelopes) {
         if (isAborted()) return false
@@ -161,10 +168,11 @@ export function createApp(deps: AppDeps) {
   return app
     .get('/v1/jobs', zValidator('query', listQuerySchema, rejectInvalid), async (c) => {
       const { state, limit } = c.req.valid('query')
-      const jobs = await reads.listJobs({
-        ...(state === undefined ? {} : { state }),
-        ...(limit === undefined ? {} : { limit }),
-      })
+      const jobs = await reads.listJobs(
+        state === undefined && limit === undefined
+          ? {}
+          : { ...(state === undefined ? {} : { state }), ...(limit === undefined ? {} : { limit }) },
+      )
       return c.json(jobs)
     })
     .get('/v1/jobs/:id', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
@@ -189,7 +197,8 @@ export function createApp(deps: AppDeps) {
         if (job === null) return c.json({ error: 'not found' }, 404)
 
         const { run } = c.req.valid('query')
-        if (run !== undefined && !(await reads.listRuns(job.id)).some((known) => known.number === run)) {
+        const runs = await reads.listRuns(job.id)
+        if (run !== undefined && !runs.some((known) => known.number === run)) {
           return c.json({ error: 'not found' }, 404)
         }
 
@@ -199,6 +208,12 @@ export function createApp(deps: AppDeps) {
           const sequence = parseSequence(lastEventId)
           if (sequence === null) return c.json({ error: 'invalid request' }, 400)
           after = sequence
+        }
+
+        // A seq only means something inside one run. Once a job has runs, resuming without naming
+        // one would read the newest run from a position that belongs to another run.
+        if (run === undefined && runs.length > 0 && after > 0) {
+          return c.json({ error: 'invalid request' }, 400)
         }
 
         return streamJobLog(c, deps, job.id, { after, run: run ?? null })
