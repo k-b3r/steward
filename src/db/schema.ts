@@ -9,6 +9,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -19,9 +20,11 @@ import {
   ACTION_STATUSES,
   FAILURE_KINDS,
   JOB_STATES,
+  RUN_OUTCOMES,
   type ActionStatus,
   type FailureKind,
   type JobState,
+  type RunOutcome,
   type WorkItem,
 } from '../types'
 
@@ -71,6 +74,31 @@ export const jobEvents = pgTable(
     at: timestamptz('at').notNull(),
   },
   (table) => [index('job_events_job_id_id_idx').on(table.jobId, table.id)],
+)
+
+/**
+ * One execution of a job. `jobs` stays one row per ticket; a retry or a resume adds a run here.
+ * A run opens when the job takes a slot and closes when it lets go (src/runs.ts).
+ */
+export const runs = pgTable(
+  'runs',
+  {
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id),
+    runNumber: integer('run_number').notNull(),
+    /** Null for a run resumed from a waiting state, which has not taken a slot. */
+    slot: integer('slot'),
+    startedAt: timestamptz('started_at').notNull(),
+    endedAt: timestamptz('ended_at'),
+    outcome: text('outcome').$type<RunOutcome>(),
+    failureKind: text('failure_kind').$type<FailureKind>(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.jobId, table.runNumber] }),
+    check('runs_outcome_check', sql`${table.outcome} in (${sql.raw(quotedList(RUN_OUTCOMES))})`),
+    check('runs_failure_kind_check', sql`${table.failureKind} in (${sql.raw(quotedList(FAILURE_KINDS))})`),
+  ],
 )
 
 /** A row exists only while its job holds the slot. */

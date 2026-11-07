@@ -1,3 +1,4 @@
+import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import type { AgentRunner, Job } from '../types'
@@ -33,11 +34,24 @@ function resultEvent(sessionId: string): AgentEvent {
 export function createEchoRunner(opts: {
   runsDir: string
   clock: () => Date
-}): AgentRunner & { transcriptDir(jobId: string): string } {
+}): AgentRunner & { transcriptDir(jobId: string, runNumber?: number): string } {
   const { runsDir, clock } = opts
   const sessions = new Map<string, string>()
 
-  const transcriptDir = (jobId: string): string => join(runsDir, jobId)
+  /** `runs/<job-id>/<run-number>/`. Without a run number: the flat folder jobs used before runs existed. */
+  const transcriptDir = (jobId: string, runNumber?: number): string =>
+    runNumber === undefined ? join(runsDir, jobId) : join(runsDir, jobId, String(runNumber))
+
+  /** The newest run's folder by number, the old flat folder if only that exists, else null. */
+  const latestTranscriptDir = (jobId: string): string | null => {
+    const jobDir = transcriptDir(jobId)
+    if (!existsSync(jobDir)) return null
+    const numbers = readdirSync(jobDir)
+      .filter((name) => /^[1-9]\d*$/.test(name))
+      .map(Number)
+    if (numbers.length > 0) return transcriptDir(jobId, Math.max(...numbers))
+    return existsSync(join(jobDir, 'transcript.jsonl')) ? jobDir : null
+  }
 
   const jobIdForSession = (sessionId: string): string | undefined => {
     const known = sessions.get(sessionId)
@@ -53,11 +67,11 @@ export function createEchoRunner(opts: {
   return {
     transcriptDir,
 
-    async start(job: Job): Promise<{ sessionId: string }> {
+    async start(job: Job, runNumber: number): Promise<{ sessionId: string }> {
       const sessionId = `${SESSION_PREFIX}${job.id}`
       sessions.set(sessionId, job.id)
 
-      const writer = createTranscriptWriter({ dir: transcriptDir(job.id), clock })
+      const writer = createTranscriptWriter({ dir: transcriptDir(job.id, runNumber), clock })
       writer.writeOrchestrator('started', { jobId: job.id, sessionId })
       const system = systemEvent(sessionId)
       writer.writeAgent('system', system, JSON.stringify(system))
@@ -75,14 +89,20 @@ export function createEchoRunner(opts: {
         throw new Error(`Unknown echo session: ${sessionId}`)
       }
 
-      const writer = createTranscriptWriter({ dir: transcriptDir(jobId), clock })
+      const dir = latestTranscriptDir(jobId)
+      if (dir === null) {
+        throw new Error(`Job ${jobId} has no run to resume`)
+      }
+      const writer = createTranscriptWriter({ dir, clock })
       const assistant = assistantEvent(feedback)
       writer.writeAgent('assistant', assistant, JSON.stringify(assistant))
     },
 
     async cancel(jobId: string): Promise<void> {
-      const writer = createTranscriptWriter({ dir: transcriptDir(jobId), clock })
-      writer.writeOrchestrator('cancelled', { jobId })
+      // A job that never ran has nothing to cancel and no folder to write into.
+      const dir = latestTranscriptDir(jobId)
+      if (dir === null) return
+      createTranscriptWriter({ dir, clock }).writeOrchestrator('cancelled', { jobId })
     },
   }
 }

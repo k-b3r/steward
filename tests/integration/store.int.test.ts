@@ -11,8 +11,10 @@ import {
   getJob,
   heldSlots,
   insertJob,
+  latestRunNumber,
   listActions,
   listJobs,
+  listRuns,
   releaseLeakedSlots,
   releaseSlot,
   transitionJob,
@@ -402,5 +404,112 @@ describe('pending actions', () => {
 
     expect(await listActions(db, { status: 'pending' })).toHaveLength(1)
     expect(await listActions(db, { status: 'approved' })).toHaveLength(1)
+  })
+})
+
+describe('runs', () => {
+  const queueAndClaim = async (jobId: string, startMinute: number): Promise<void> => {
+    await transitionJob(db, jobId, 'queued', { now: at(startMinute) })
+    await acquireSlot(db, jobId, 3, at(startMinute))
+    await transitionJob(db, jobId, 'claiming', { now: at(startMinute + 1) })
+  }
+
+  it('opens run 1 when the job is claimed, with its slot and start time', async () => {
+    const job = await createJob()
+    await queueAndClaim(job.id, 1)
+
+    expect(await listRuns(db, job.id)).toEqual([
+      { jobId: job.id, number: 1, slot: 0, startedAt: at(2), endedAt: null, outcome: null, failureKind: null },
+    ])
+  })
+
+  it('does not open another run when claiming moves on to running', async () => {
+    const job = await createJob()
+    await queueAndClaim(job.id, 1)
+    await transitionJob(db, job.id, 'running', { now: at(3) })
+
+    expect((await listRuns(db, job.id)).map((run) => run.number)).toEqual([1])
+  })
+
+  it('closes the run with its outcome when the job is done', async () => {
+    const job = await createJob()
+    await queueAndClaim(job.id, 1)
+    await transitionJob(db, job.id, 'running', { now: at(3) })
+    await transitionJob(db, job.id, 'done', { now: at(4) })
+
+    expect(await listRuns(db, job.id)).toMatchObject([
+      { number: 1, endedAt: at(4), outcome: 'done', failureKind: null },
+    ])
+  })
+
+  it('records an automatic infra retry as outcome retry, and the next claim opens run 2', async () => {
+    const job = await createJob()
+    await queueAndClaim(job.id, 1)
+    await transitionJob(db, job.id, 'queued', { now: at(3), failureKind: 'infra', reason: 'blip' })
+    await acquireSlot(db, job.id, 3, at(4))
+    await transitionJob(db, job.id, 'claiming', { now: at(5) })
+
+    expect(await listRuns(db, job.id)).toMatchObject([
+      { number: 1, endedAt: at(3), outcome: 'retry', failureKind: 'infra' },
+      { number: 2, startedAt: at(5), endedAt: null, outcome: null },
+    ])
+  })
+
+  it('numbers a manual retry as a new run: the attempt counter resets, the run number does not', async () => {
+    const job = await createJob()
+    await queueAndClaim(job.id, 1)
+    await transitionJob(db, job.id, 'failed', { now: at(3), failureKind: 'setup', reason: 'bad repo' })
+    await transitionJob(db, job.id, 'queued', { now: at(4), reason: 'retried by hand' })
+    await acquireSlot(db, job.id, 3, at(5))
+    const claimed = await transitionJob(db, job.id, 'claiming', { now: at(6) })
+
+    expect(claimed.attempt).toBe(1)
+    expect(await listRuns(db, job.id)).toMatchObject([
+      { number: 1, outcome: 'failed', failureKind: 'setup' },
+      { number: 2, outcome: null },
+    ])
+  })
+
+  it('closes a cancelled run as cancelled', async () => {
+    const job = await createJob()
+    await queueAndClaim(job.id, 1)
+    await transitionJob(db, job.id, 'cancelled', { now: at(3) })
+
+    expect(await listRuns(db, job.id)).toMatchObject([{ number: 1, endedAt: at(3), outcome: 'cancelled' }])
+  })
+
+  it('opens a new run when a job waiting on red CI is resumed into running', async () => {
+    const job = await createJob()
+    await queueAndClaim(job.id, 1)
+    await transitionJob(db, job.id, 'running', { now: at(3) })
+    await transitionJob(db, job.id, 'pr_open', { now: at(4) })
+    await transitionJob(db, job.id, 'ci_failed', { now: at(5) })
+    await transitionJob(db, job.id, 'running', { now: at(6) })
+
+    expect(await listRuns(db, job.id)).toMatchObject([
+      { number: 1, endedAt: at(4), outcome: 'pr_open' },
+      { number: 2, startedAt: at(6), endedAt: null, outcome: null },
+    ])
+  })
+
+  it('has no runs for a job that never ran', async () => {
+    const job = await createJob()
+
+    expect(await listRuns(db, job.id)).toEqual([])
+    expect(await latestRunNumber(db, job.id)).toBeNull()
+  })
+
+  it('reports the latest run number, and keeps the runs of different jobs apart', async () => {
+    const first = await createJob('ext-1')
+    const second = await createJob('ext-2')
+    await queueAndClaim(first.id, 1)
+    await transitionJob(db, first.id, 'queued', { now: at(3), failureKind: 'infra' })
+    await acquireSlot(db, first.id, 3, at(4))
+    await transitionJob(db, first.id, 'claiming', { now: at(5) })
+    await queueAndClaim(second.id, 6)
+
+    expect(await latestRunNumber(db, first.id)).toBe(2)
+    expect(await latestRunNumber(db, second.id)).toBe(1)
+    expect((await listRuns(db, second.id)).map((run) => run.jobId)).toEqual([second.id])
   })
 })

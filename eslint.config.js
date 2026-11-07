@@ -16,6 +16,7 @@ export default [
       'src/retry-policy.ts',
       'src/intake-policy.ts',
       'src/subagent-policy.ts',
+      'src/runs.ts',
     ],
   }),
   // Repo-specific blocks (framework plugins, extra bans) go here.

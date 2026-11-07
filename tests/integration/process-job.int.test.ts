@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq, sql } from 'drizzle-orm'
@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { migrateDb } from '../../src/db/migrate'
 import { jobEvents } from '../../src/db/schema'
-import { acquireSlot, getJob, heldSlots, insertJob, transitionJob } from '../../src/db/store'
+import { acquireSlot, getJob, heldSlots, insertJob, listRuns, transitionJob } from '../../src/db/store'
 import { closePool, createDb, createPool } from '../../src/platform/db'
 import {
   attachWorktree,
@@ -99,25 +99,32 @@ async function eventsFor(jobId: string) {
   return db.select().from(jobEvents).where(eq(jobEvents.jobId, jobId)).orderBy(jobEvents.id)
 }
 
-type FakeRunner = AgentRunner & { transcriptDir(jobId: string): string; starts: Job[] }
+type FakeRunner = AgentRunner & {
+  transcriptDir(jobId: string, runNumber?: number): string
+  starts: Job[]
+  runNumbers: number[]
+}
 
 function makeRunner(options: { failStart?: Error } = {}): FakeRunner {
   const starts: Job[] = []
-  const runner: AgentRunner & { transcriptDir(jobId: string): string } = {
-    transcriptDir: (jobId) => join(runsDir, jobId),
-    async start(job) {
+  const runNumbers: number[] = []
+  const runner: AgentRunner & { transcriptDir(jobId: string, runNumber?: number): string } = {
+    transcriptDir: (jobId, runNumber) =>
+      runNumber === undefined ? join(runsDir, jobId) : join(runsDir, jobId, String(runNumber)),
+    async start(job, runNumber) {
       starts.push(job)
+      runNumbers.push(runNumber)
       if (options.failStart !== undefined) {
         throw options.failStart
       }
-      const writer = createTranscriptWriter({ dir: join(runsDir, job.id), clock: () => T0 })
+      const writer = createTranscriptWriter({ dir: join(runsDir, job.id, String(runNumber)), clock: () => T0 })
       writer.writeOrchestrator('started', { jobId: job.id })
       return { sessionId: `fake-${job.id}` }
     },
     async resume(): Promise<void> {},
     async cancel(): Promise<void> {},
   }
-  return Object.assign(runner, { starts })
+  return Object.assign(runner, { starts, runNumbers })
 }
 
 type Enqueued = { jobId: string; delayMs?: number }
@@ -184,12 +191,42 @@ describe('processJob', () => {
     expect(runner.starts).toHaveLength(1)
     expect(runner.starts[0]).toMatchObject({ id: job.id, state: 'running', attempt: 1 })
     expect(enqueued.calls).toEqual([])
-    expect(existsSync(join(runsDir, job.id, 'transcript.jsonl'))).toBe(true)
+    expect(runner.runNumbers).toEqual([1])
+    expect(existsSync(join(runsDir, job.id, '1', 'transcript.jsonl'))).toBe(true)
+    expect(statSync(join(runsDir, job.id, '1')).mode & 0o777).toBe(0o700)
+    expect(await listRuns(db, job.id)).toMatchObject([{ number: 1, slot: 0, outcome: 'done', failureKind: null }])
     expect(existsSync(join(runsDir, job.id, 'worktree'))).toBe(false)
     expect(await heldSlots(db)).toEqual([])
     expect(git(repoPath, ['rev-parse', '--verify', 'refs/heads/agent/tst-ext-1']).trim()).toBe(
       git(repoPath, ['rev-parse', 'agent/tst-ext-1']).trim(),
     )
+  })
+
+  it('gives a job that fails and is retried a second run and a second transcript folder', async () => {
+    const job = await createJob()
+    const enqueued = makeQueue()
+    const base = makeRunner()
+    const failingAfterWriting: typeof base = {
+      ...base,
+      async start(started, runNumber) {
+        await base.start(started, runNumber)
+        throw new Error('the container died after it started')
+      },
+    }
+
+    await processJob(makeDeps({ runner: failingAfterWriting, queue: enqueued.queue }), job.id)
+    expect(await getJob(db, job.id)).toMatchObject({ state: 'queued', failureKind: 'infra' })
+
+    await processJob(makeDeps({ runner: base, queue: enqueued.queue }), job.id)
+
+    expect(await getJob(db, job.id)).toMatchObject({ state: 'done', attempt: 2 })
+    expect(await listRuns(db, job.id)).toMatchObject([
+      { number: 1, outcome: 'retry', failureKind: 'infra' },
+      { number: 2, outcome: 'done', failureKind: null },
+    ])
+    expect(base.runNumbers).toEqual([1, 2])
+    expect(existsSync(join(runsDir, job.id, '1', 'transcript.jsonl'))).toBe(true)
+    expect(existsSync(join(runsDir, job.id, '2', 'transcript.jsonl'))).toBe(true)
   })
 
   it('ignores a job that is not queued', async () => {
@@ -273,9 +310,9 @@ describe('processJob', () => {
     const runner = makeRunner()
     const cancellingRunner: typeof runner = {
       ...runner,
-      async start(started) {
+      async start(started, runNumber) {
         await transitionJob(db, started.id, 'cancelled', { now: T0, reason: 'cancelled by user' })
-        return runner.start(started)
+        return runner.start(started, runNumber)
       },
     }
 

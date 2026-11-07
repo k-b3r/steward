@@ -1,17 +1,19 @@
 // Postgres-backed job store. Every function takes the drizzle handle and an
 // explicit `now: Date`; nothing here reads the clock or the environment.
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, max } from 'drizzle-orm'
 
 import { allocateSlot, findLeakedSlots, holdsSlot } from '../allocate'
+import { endsRun, runOutcomeFor, startsRun } from '../runs'
 import { assertTransition } from '../transitions'
-import type { FailureKind, Job, JobState, PendingAction, WorkItem } from '../types'
+import type { FailureKind, Job, JobState, PendingAction, Run, WorkItem } from '../types'
 import type { Db } from '../platform/db'
 import { ACTION_STATUSES } from '../types'
 import type { ActionStatus } from '../types'
-import { jobEvents, jobs, pendingActions, slots } from './schema'
+import { jobEvents, jobs, pendingActions, runs, slots } from './schema'
 
 type JobRow = typeof jobs.$inferSelect
 type PendingActionRow = typeof pendingActions.$inferSelect
+type RunRow = typeof runs.$inferSelect
 type JobWithSlot = { job: JobRow; slot: number | null }
 
 function toJob(row: JobWithSlot): Job {
@@ -39,6 +41,18 @@ function toPendingAction(row: PendingActionRow): PendingAction {
     reason: row.reason,
     createdAt: row.createdAt,
     decidedAt: row.decidedAt,
+  }
+}
+
+function toRun(row: RunRow): Run {
+  return {
+    jobId: row.jobId,
+    number: row.runNumber,
+    slot: row.slot,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    outcome: row.outcome,
+    failureKind: row.failureKind,
   }
 }
 
@@ -134,8 +148,8 @@ export async function getJob(db: Db, id: string): Promise<Job | null> {
   return row === undefined ? null : toJob(row)
 }
 
-export async function listJobs(db: Db, filter: { state?: JobState } = {}): Promise<Job[]> {
-  const condition = filter.state === undefined ? undefined : eq(jobs.state, filter.state)
+export async function listJobs(db: Db, filter: { state?: JobState; ticket?: string } = {}): Promise<Job[]> {
+  const condition = and(filter.state === undefined ? undefined : eq(jobs.state, filter.state))
   const rows = await db
     .select({ job: jobs, slot: slots.slot })
     .from(jobs)
@@ -143,6 +157,44 @@ export async function listJobs(db: Db, filter: { state?: JobState } = {}): Promi
     .where(condition)
     .orderBy(desc(jobs.createdAt))
   return rows.map((row) => toJob(row))
+}
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
+
+/**
+ * Opens or closes the job's run for one state change (rules in src/runs.ts). Called inside the
+ * transition's transaction, where the job row is locked, so two transitions cannot pick the same
+ * run number.
+ */
+async function recordRunChange(
+  tx: Tx,
+  change: {
+    jobId: string
+    from: JobState
+    to: JobState
+    failureKind: FailureKind | null
+    slot: number | null
+    now: Date
+  },
+): Promise<void> {
+  const { jobId, from, to } = change
+  if (startsRun(from, to)) {
+    const [latest] = await tx
+      .select({ number: max(runs.runNumber) })
+      .from(runs)
+      .where(eq(runs.jobId, jobId))
+    await tx.insert(runs).values({
+      jobId,
+      runNumber: (latest?.number ?? 0) + 1,
+      slot: change.slot,
+      startedAt: change.now,
+    })
+  } else if (endsRun(from, to)) {
+    await tx
+      .update(runs)
+      .set({ endedAt: change.now, outcome: runOutcomeFor(to), failureKind: change.failureKind })
+      .where(and(eq(runs.jobId, jobId), isNull(runs.endedAt)))
+  }
 }
 
 export async function transitionJob(
@@ -195,6 +247,9 @@ export async function transitionJob(
     }
 
     const [slotRow] = await tx.select({ slot: slots.slot }).from(slots).where(eq(slots.jobId, id)).limit(1)
+
+    await recordRunChange(tx, { jobId: id, from, to, failureKind, slot: slotRow?.slot ?? null, now: opts.now })
+
     return toJob({ job: updated, slot: slotRow?.slot ?? null })
   })
 }
@@ -234,6 +289,21 @@ export async function acquireSlot(db: Db, jobId: string, slotCount: number, now:
 
 export async function releaseSlot(db: Db, jobId: string): Promise<void> {
   await db.delete(slots).where(eq(slots.jobId, jobId))
+}
+
+/** A job's runs, oldest first. Empty for a job that never took a slot. */
+export async function listRuns(db: Db, jobId: string): Promise<Run[]> {
+  const rows = await db.select().from(runs).where(eq(runs.jobId, jobId)).orderBy(asc(runs.runNumber))
+  return rows.map(toRun)
+}
+
+/** The number of the job's newest run, or null when it never ran. */
+export async function latestRunNumber(db: Db, jobId: string): Promise<number | null> {
+  const [row] = await db
+    .select({ number: max(runs.runNumber) })
+    .from(runs)
+    .where(eq(runs.jobId, jobId))
+  return row?.number ?? null
 }
 
 export async function heldSlots(db: Db): Promise<{ slot: number; jobId: string; jobState: JobState | null }[]> {
