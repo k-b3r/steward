@@ -148,4 +148,7 @@ export type ActionResponse = z.infer<typeof actionResponseSchema>
 const _envelopeMatches: Envelope extends z.infer<typeof transcriptEnvelopeSchema> ? true : never = true
 
 /** @public */
+export type RunResponse = z.infer<typeof runResponseSchema>
+
+/** @public */
 export type AppType = ReturnType<typeof createApp>

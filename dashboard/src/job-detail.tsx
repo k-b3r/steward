@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { followLog } from './api'
+import { api, followLog } from './api'
 import type { Envelope } from './api'
 import { useStore } from './data'
 import { delay } from './delay'
@@ -37,11 +37,15 @@ function LiveLog({ jobId }: { jobId: string }) {
     setLines([])
     lastSeq.current = 0
     void (async () => {
+      // Pin the run once, from the server, so a reconnect resumes the same run it was reading.
+      const runs = await api.runs(jobId).catch(() => [])
+      const run = runs.at(-1)?.number
       while (!controller.signal.aborted) {
         try {
           setStatus('live')
           await followLog(jobId, {
             after: lastSeq.current,
+            ...(run === undefined ? {} : { run }),
             signal: controller.signal,
             onEnvelope: (e) => {
               lastSeq.current = Math.max(lastSeq.current, e.seq)
