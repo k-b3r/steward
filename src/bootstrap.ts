@@ -24,7 +24,8 @@ function secretsOf(config: Config): string[] {
 export function createContext(config: Config, write: (line: string) => void) {
   const clock = (): Date => new Date()
   const logger: Logger = createLogger({ write, clock, secrets: secretsOf(config) })
-  const pool = createPool(config.DATABASE_URL)
+  // A dropped connection is logged, never fatal: the worker must survive a Postgres restart.
+  const pool = createPool(config.DATABASE_URL, (error) => logger.error('Postgres pool error', error))
   const db: Db = createDb(pool)
   const queue = createJobQueue({ redisUrl: config.REDIS_QUEUE_URL, queueName: `steward-${config.INSTANCE}` })
   // TODO(phase-2): replace the echo runner with the Claude Code runner.

@@ -8,8 +8,20 @@ import * as schema from '../db/schema'
 
 export type Db = NodePgDatabase<typeof schema>
 
-export function createPool(url: string): pg.Pool {
-  return new pg.Pool({ connectionString: url })
+/** What a pool error is reported to; the caller decides how to log it. */
+export type PoolErrorHandler = (error: { message: string }) => void
+
+/**
+ * A pool whose lost connections are reported instead of thrown. An idle client that loses its
+ * server emits `error` on the pool, and Node turns an unhandled `error` event into a crashed
+ * process: that is how a Postgres restart used to kill the worker and the API.
+ */
+export function createPool(url: string, onError: PoolErrorHandler = () => undefined): pg.Pool {
+  const pool = new pg.Pool({ connectionString: url })
+  pool.on('error', (error: unknown) => {
+    onError({ message: error instanceof Error ? error.message : String(error) })
+  })
+  return pool
 }
 
 export async function closePool(pool: pg.Pool): Promise<void> {

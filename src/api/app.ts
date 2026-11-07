@@ -62,7 +62,8 @@ export type AppDeps = {
 }
 
 const idParamSchema = z.object({ id: z.uuid() })
-const actionParamSchema = z.object({ id: z.string().min(1) })
+// An action id is a uuid like a job id: a plain string reaches Postgres as a type error.
+const actionParamSchema = z.object({ id: z.uuid() })
 const listQuerySchema = z.object({
   state: z.enum(JOB_STATES).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
@@ -71,7 +72,10 @@ const logQuerySchema = z.object({
   after: z.coerce.number().int().min(0).optional(),
   run: z.coerce.number().int().min(1).optional(),
 })
-const actionFilterSchema = z.object({ status: z.enum(ACTION_STATUSES).optional() })
+const actionFilterSchema = z.object({
+  status: z.enum(ACTION_STATUSES).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+})
 
 type ValidationOutcome = { success: boolean }
 
@@ -253,8 +257,11 @@ export function createApp(deps: AppDeps) {
       return c.json(await reload(reads, job.id))
     })
     .get('/v1/actions', zValidator('query', actionFilterSchema, rejectInvalid), async (c) => {
-      const { status } = c.req.valid('query')
-      const actions = await reads.listActions(status === undefined ? {} : { status })
+      const { status, limit } = c.req.valid('query')
+      const actions = await reads.listActions({
+        ...(status === undefined ? {} : { status }),
+        ...(limit === undefined ? {} : { limit }),
+      })
       return c.json(actions)
     })
     .post('/v1/actions/:id/approve', zValidator('param', actionParamSchema, rejectInvalid), async (c) => {

@@ -555,3 +555,34 @@ describe('listJobEvents', () => {
     expect(await listJobEvents(db, first.id)).toHaveLength(2)
   })
 })
+
+describe('list limits', () => {
+  it('returns at most the requested number of jobs, newest first', async () => {
+    // Distinct creation times: with equal timestamps the order between them is not defined.
+    await createJob('ext-1', at(1))
+    await createJob('ext-2', at(2))
+    await createJob('ext-3', at(3))
+
+    const jobs = await listJobs(db, { limit: 2 })
+
+    expect(jobs).toHaveLength(2)
+    expect(jobs.map((job) => job.externalId)).toEqual(['ext-3', 'ext-2'])
+  })
+
+  it('returns every job when no limit is asked for, which the reconciler relies on', async () => {
+    for (const id of ['ext-1', 'ext-2', 'ext-3']) await createJob(id)
+
+    expect(await listJobs(db)).toHaveLength(3)
+    expect(await listJobs(db, { state: 'proposed' })).toHaveLength(3)
+  })
+
+  it('limits actions by status the same way', async () => {
+    const job = await createJob()
+    for (const kind of ['one', 'two', 'three']) {
+      await createAction(db, { jobId: job.id, kind, payload: {}, now: T0 })
+    }
+
+    expect(await listActions(db, { status: 'pending', limit: 2 })).toHaveLength(2)
+    expect(await listActions(db, { status: 'pending' })).toHaveLength(3)
+  })
+})

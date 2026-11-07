@@ -124,7 +124,10 @@ function createFakeStore(
       return updated
     },
     async listActions(filter = {}) {
-      return [...actions.values()].filter((action) => filter.status === undefined || action.status === filter.status)
+      const matching = [...actions.values()].filter(
+        (action) => filter.status === undefined || action.status === filter.status,
+      )
+      return filter.limit === undefined ? matching : matching.slice(0, filter.limit)
     },
     async getAction(id) {
       return actions.get(id) ?? null
@@ -1025,5 +1028,38 @@ describe('GET /v1/jobs/:id/events', () => {
       headers: { Host: `127.0.0.1:${PORT}` },
     })
     expect(anonymous.status).toBe(401)
+  })
+})
+
+describe('action ids', () => {
+  it('answers 400 for a non-uuid action id, not 500', async () => {
+    // The id goes to Postgres as a uuid: rejecting it here keeps a bad request from becoming a
+    // database error the route reports as internal.
+    const { app } = setup()
+
+    expect((await request(app, '/v1/actions/nope/approve', { method: 'POST' })).status).toBe(400)
+    expect((await request(app, '/v1/actions/nope/reject', { method: 'POST', body: {} })).status).toBe(400)
+  })
+
+  it('still answers 404 for an unknown action with a valid uuid', async () => {
+    const { app } = setup()
+
+    expect((await request(app, `/v1/actions/${MISSING_ACTION_ID}/approve`, { method: 'POST' })).status).toBe(404)
+  })
+})
+
+describe('action lists', () => {
+  it('passes the requested page size to the read model', async () => {
+    const actions = [makeAction(), makeAction({ id: MISSING_ACTION_ID, kind: 'other' })]
+    const { app } = setup({ actions })
+
+    const limited = await request(app, '/v1/actions?limit=1')
+    const all = await request(app, '/v1/actions')
+
+    expect(((await limited.json()) as unknown[]).length).toBe(1)
+    expect(((await all.json()) as unknown[]).length).toBe(2)
+    // The same bounds as the jobs read.
+    expect((await request(app, '/v1/actions?limit=0')).status).toBe(400)
+    expect((await request(app, '/v1/actions?limit=501')).status).toBe(400)
   })
 })
