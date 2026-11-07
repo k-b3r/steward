@@ -12,6 +12,7 @@ import {
   heldSlots,
   insertJob,
   latestRunNumber,
+  listJobEvents,
   listActions,
   listJobs,
   listRuns,
@@ -513,5 +514,44 @@ describe('runs', () => {
     expect(await latestRunNumber(db, first.id)).toBe(2)
     expect(await latestRunNumber(db, second.id)).toBe(1)
     expect((await listRuns(db, second.id)).map((run) => run.jobId)).toEqual([second.id])
+  })
+})
+
+describe('listJobEvents', () => {
+  it('returns the state log oldest first, with reason and failure kind', async () => {
+    const job = await createJob()
+    await transitionJob(db, job.id, 'queued', { now: at(1), reason: 'confirmed' })
+    await transitionJob(db, job.id, 'claiming', { now: at(2) })
+
+    const events = await listJobEvents(db, job.id)
+
+    expect(events.map((event) => [event.fromState, event.toState])).toEqual([
+      [null, 'proposed'],
+      ['proposed', 'queued'],
+      ['queued', 'claiming'],
+    ])
+    expect(events[1]).toMatchObject({ reason: 'confirmed', failureKind: null })
+  })
+
+  it('keeps the newest events when the log is longer than the limit', async () => {
+    const job = await createJob()
+    await transitionJob(db, job.id, 'queued', { now: at(1) })
+    await transitionJob(db, job.id, 'claiming', { now: at(2) })
+
+    const events = await listJobEvents(db, job.id, 2)
+
+    // The last two are the current state and how it got there; the creation event is older.
+    expect(events.map((event) => event.toState)).toEqual(['queued', 'claiming'])
+  })
+
+  it('keeps the events of different jobs apart', async () => {
+    const first = await createJob('ext-1')
+    const second = await createJob('ext-2')
+    await transitionJob(db, first.id, 'queued', { now: at(1) })
+
+    expect(await listJobEvents(db, second.id)).toEqual([
+      { fromState: null, toState: 'proposed', failureKind: null, reason: null, at: T0 },
+    ])
+    expect(await listJobEvents(db, first.id)).toHaveLength(2)
   })
 })

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { assertTransition } from '../transitions'
-import type { Job, JobState, Run } from '../types'
+import type { Job, JobEvent, JobState, Run } from '../types'
 import type { PendingAction } from '../types'
 import type { Envelope } from '../runner/transcript'
 import {
@@ -13,7 +13,7 @@ import {
   retryJob,
   type CommandStore,
 } from '../jobs-commands'
-import { getJob, listActions, listJobs, listRuns, type QueryStore } from '../jobs-queries'
+import { getJob, listActions, listEvents, listJobs, listRuns, type QueryStore } from '../jobs-queries'
 import { createApp, type ApiCommands, type ApiReads, type AppDeps } from './app'
 
 const TOKEN = 'test-token-0123456789abcdef0123456789'
@@ -33,6 +33,9 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     source: 'linear',
     externalId: 'ext-1',
     identifier: 'TST-1',
+    title: 'A job for the ticket',
+    url: 'https://example.test/TST-1',
+    createdAt: new Date('2026-01-02T03:04:05.000Z'),
     state: 'proposed',
     attempt: 0,
     maxAttempts: 3,
@@ -54,6 +57,10 @@ function makeRun(number: number, overrides: Partial<Run> = {}): Run {
     failureKind: null,
     ...overrides,
   }
+}
+
+function makeEvent(overrides: Partial<JobEvent> = {}): JobEvent {
+  return { fromState: null, toState: 'proposed', failureKind: null, reason: null, at: CLOCK, ...overrides }
 }
 
 function makeAction(overrides: Partial<PendingAction> = {}): PendingAction {
@@ -79,8 +86,11 @@ type FakeStore = QueryStore &
     runs: Run[]
   }
 
-function createFakeStore(options: { jobs?: Job[]; actions?: PendingAction[]; runs?: Run[] } = {}): FakeStore {
+function createFakeStore(
+  options: { jobs?: Job[]; actions?: PendingAction[]; runs?: Run[]; events?: JobEvent[] } = {},
+): FakeStore {
   const runs: Run[] = [...(options.runs ?? [])]
+  const eventsList: JobEvent[] = [...(options.events ?? [])]
   const jobs = new Map((options.jobs ?? []).map((job) => [job.id, job]))
   const actions = new Map((options.actions ?? []).map((action) => [action.id, action]))
   const transitions: { id: string; to: JobState; reason?: string; at: Date }[] = []
@@ -100,6 +110,9 @@ function createFakeStore(options: { jobs?: Job[]; actions?: PendingAction[]; run
     },
     async listRuns(jobId) {
       return runs.filter((run) => run.jobId === jobId).sort((a, b) => a.number - b.number)
+    },
+    async listEvents() {
+      return eventsList
     },
     async transitionJob(id, to, opts) {
       const job = jobs.get(id)
@@ -141,11 +154,17 @@ function setup(
     jobs?: Job[]
     actions?: PendingAction[]
     runs?: Run[]
+    events?: JobEvent[]
     readLog?: (jobId: string, run: number | null, afterSeq: number) => Promise<Envelope[]>
     sleep?: AppDeps['sleep']
   } = {},
 ): Setup {
-  const store = createFakeStore({ jobs: options.jobs, actions: options.actions, runs: options.runs })
+  const store = createFakeStore({
+    jobs: options.jobs,
+    actions: options.actions,
+    runs: options.runs,
+    events: options.events,
+  })
   const enqueued: string[] = []
   const cancelled: string[] = []
   const readLogCalls: { jobId: string; run: number | null; afterSeq: number }[] = []
@@ -156,6 +175,7 @@ function setup(
     listJobs: (filter) => listJobs({ store }, filter),
     listActions: (filter) => listActions({ store }, filter),
     listRuns: (jobId) => listRuns({ store }, jobId),
+    listEvents: (jobId) => listEvents({ store }, jobId),
   }
   const commandDeps = {
     store: store as unknown as CommandStore,
@@ -967,5 +987,43 @@ describe('GET /v1/jobs/:id/log with runs', () => {
     await vi.waitFor(() => expect(polls).toBeGreaterThanOrEqual(3))
 
     expect(readLogCalls.map((call) => call.run)).toEqual([null, 1, 1])
+  })
+})
+
+describe('GET /v1/jobs/:id/events', () => {
+  it('lists the state log oldest first, with ISO dates', async () => {
+    const later = new Date(CLOCK.getTime() + 1000)
+    const { app } = setup({
+      jobs: [makeJob()],
+      events: [
+        makeEvent(),
+        makeEvent({ fromState: 'claiming', toState: 'queued', failureKind: 'infra', reason: 'blip', at: later }),
+      ],
+    })
+
+    const response = await request(app, `/v1/jobs/${JOB_ID}/events`)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual([
+      { from: null, to: 'proposed', failureKind: null, reason: null, at: '2026-01-02T03:04:05.000Z' },
+      { from: 'claiming', to: 'queued', failureKind: 'infra', reason: 'blip', at: '2026-01-02T03:04:06.000Z' },
+    ])
+  })
+
+  it('returns an empty list for a job that has none, and 404 for a missing job', async () => {
+    const { app } = setup({ jobs: [makeJob()] })
+
+    expect(await (await request(app, `/v1/jobs/${JOB_ID}/events`)).json()).toEqual([])
+    expect((await request(app, `/v1/jobs/${MISSING_JOB_ID}/events`)).status).toBe(404)
+  })
+
+  it('rejects a malformed id and needs the token', async () => {
+    const { app } = setup({ jobs: [makeJob()] })
+
+    expect((await request(app, '/v1/jobs/not-a-uuid/events')).status).toBe(400)
+    const anonymous = await app.request(`http://127.0.0.1:${PORT}/v1/jobs/${JOB_ID}/events`, {
+      headers: { Host: `127.0.0.1:${PORT}` },
+    })
+    expect(anonymous.status).toBe(401)
   })
 })

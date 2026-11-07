@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { jobStateSchema } from '../../src/api/contract'
-import { FILTERS, LANES, isSpinning, relativeTime, stateClass } from './model'
+import { FILTERS, LANES, isSpinning, relativeTime, safeTrackerUrl, stateClass } from './model'
 
 const ALL_STATES = jobStateSchema.options
 const NOW = Date.parse('2026-01-01T12:00:00.000Z')
@@ -21,6 +21,19 @@ describe('relativeTime', () => {
   it('counts into the future for a scheduled retry', () => {
     expect(relativeTime(at(45), NOW)).toBe('in 45s')
     expect(relativeTime(at(10 * 60), NOW)).toBe('in 10m')
+  })
+})
+
+describe('safeTrackerUrl', () => {
+  it('keeps http and https links', () => {
+    expect(safeTrackerUrl('https://linear.app/x/TST-1')).toBe('https://linear.app/x/TST-1')
+    expect(safeTrackerUrl('http://localhost:3000/TST-1')).toBe('http://localhost:3000/TST-1')
+  })
+
+  it('refuses anything else, so a script URL never becomes an href', () => {
+    for (const url of ['', 'javascript:alert(1)', 'data:text/html,hi', '//evil.example', 'linear.app/TST-1']) {
+      expect(safeTrackerUrl(url), url).toBeNull()
+    }
   })
 })
 

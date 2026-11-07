@@ -5,7 +5,7 @@ import { and, asc, desc, eq, inArray, isNull, max } from 'drizzle-orm'
 import { allocateSlot, findLeakedSlots, holdsSlot } from '../allocate'
 import { endsRun, runOutcomeFor, startsRun } from '../runs'
 import { assertTransition } from '../transitions'
-import type { FailureKind, Job, JobState, PendingAction, Run, WorkItem } from '../types'
+import type { FailureKind, Job, JobEvent, JobState, PendingAction, Run, WorkItem } from '../types'
 import type { Db } from '../platform/db'
 import { ACTION_STATUSES } from '../types'
 import type { ActionStatus } from '../types'
@@ -22,6 +22,9 @@ function toJob(row: JobWithSlot): Job {
     source: row.job.source,
     externalId: row.job.externalId,
     identifier: row.job.identifier,
+    title: row.job.item.title,
+    url: row.job.item.url,
+    createdAt: row.job.createdAt,
     state: row.job.state,
     attempt: row.job.attempt,
     maxAttempts: row.job.maxAttempts,
@@ -289,6 +292,26 @@ export async function acquireSlot(db: Db, jobId: string, slotCount: number, now:
 
 export async function releaseSlot(db: Db, jobId: string): Promise<void> {
   await db.delete(slots).where(eq(slots.jobId, jobId))
+}
+
+/**
+ * A job's state changes, oldest first. When there are more than `limit`, the newest are kept: those
+ * hold the current state and the failure that put it there, which is what a person needs.
+ */
+export async function listJobEvents(db: Db, jobId: string, limit = 200): Promise<JobEvent[]> {
+  const rows = await db
+    .select()
+    .from(jobEvents)
+    .where(eq(jobEvents.jobId, jobId))
+    .orderBy(desc(jobEvents.id))
+    .limit(limit)
+  return rows.reverse().map((row) => ({
+    fromState: row.fromState,
+    toState: row.toState,
+    failureKind: row.failureKind,
+    reason: row.reason,
+    at: row.at,
+  }))
 }
 
 /** A job's runs, oldest first. Empty for a job that never took a slot. */

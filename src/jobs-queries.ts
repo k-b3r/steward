@@ -1,12 +1,13 @@
 // What a caller may read, shaped for the wire. The HTTP layer validates and serializes; it never
 // decides which fields are public, how many rows come back, or which buttons a state allows.
 import { allowedActionsFor, type JobAction } from './jobs-commands'
-import type { ActionStatus, FailureKind, Job, JobState, PendingAction, Run, RunOutcome } from './types'
+import type { ActionStatus, FailureKind, Job, JobEvent, JobState, PendingAction, Run, RunOutcome } from './types'
 
 export type QueryStore = {
   getJob(id: string): Promise<Job | null>
   listJobs(filter?: { state?: JobState; limit?: number }): Promise<Job[]>
   listRuns(jobId: string): Promise<Run[]>
+  listEvents(jobId: string, limit?: number): Promise<JobEvent[]>
   listActions(filter?: { status?: string; limit?: number }): Promise<PendingAction[]>
 }
 
@@ -16,6 +17,9 @@ export type QueryDeps = { store: QueryStore }
 export type JobSummary = {
   id: string
   identifier: string
+  /** The ticket text, so a person can tell two jobs apart without opening the tracker. */
+  title: string
+  url: string
   source: string
   state: JobState
   attempt: number
@@ -23,7 +27,17 @@ export type JobSummary = {
   slot: number | null
   nextRunAt: string | null
   failureKind: FailureKind | null
+  createdAt: string
   allowedActions: JobAction[]
+}
+
+/** One state change, as the timeline shows it. */
+export type JobEventSummary = {
+  from: JobState | null
+  to: JobState
+  failureKind: FailureKind | null
+  reason: string | null
+  at: string
 }
 
 /** One execution of a job as the API returns it. The job id is left out: the caller asked by it. */
@@ -60,6 +74,8 @@ function toJobSummary(job: Job): JobSummary {
   return {
     id: job.id,
     identifier: job.identifier,
+    title: job.title,
+    url: job.url,
     source: job.source,
     state: job.state,
     attempt: job.attempt,
@@ -67,6 +83,7 @@ function toJobSummary(job: Job): JobSummary {
     slot: job.slot,
     nextRunAt: job.nextRunAt === null ? null : job.nextRunAt.toISOString(),
     failureKind: job.failureKind,
+    createdAt: job.createdAt.toISOString(),
     allowedActions: allowedActionsFor(job.state),
   }
 }
@@ -80,6 +97,18 @@ function toRunSummary(run: Run): RunSummary {
     outcome: run.outcome,
     failureKind: run.failureKind,
   }
+}
+
+/** A job's state changes, oldest first. */
+export async function listEvents(deps: QueryDeps, jobId: string): Promise<JobEventSummary[]> {
+  const events = await deps.store.listEvents(jobId)
+  return events.map((event) => ({
+    from: event.fromState,
+    to: event.toState,
+    failureKind: event.failureKind,
+    reason: event.reason,
+    at: event.at.toISOString(),
+  }))
 }
 
 /** One decided action, mapped for the response. */

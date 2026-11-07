@@ -438,8 +438,9 @@ something to read out of `job_events`.
   `cancel` no longer creates a folder for a job that never ran.
 - Not migrated: jobs that ran before this have no `runs` rows and keep a flat transcript folder. The
   API reads that folder when a job has no runs, so old logs stay visible. Nothing backfills them.
-- Read side only: a job's runs show in the API (`/runs`, `?run=`). The dashboard follows the
-  newest run and has no runs view yet. Nothing is written to Linear.
+- Read side only: a job's runs show in the API (`/runs`, `?run=`) and the dashboard lists them,
+  pinning the one whose transcript is on screen. The job page also shows the state log (`/events`)
+  as a timeline. Nothing is written to Linear.
 
 ## Unverified
 

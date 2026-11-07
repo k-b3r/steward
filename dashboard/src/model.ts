@@ -65,6 +65,11 @@ export const FILTERS: { name: string; states: JobState[] }[] = [
   { name: 'Done', states: ['merged', 'done'] },
 ]
 
+/** A tracker link is only rendered when it is http(s): a javascript: URL never becomes an href. */
+export function safeTrackerUrl(url: string): string | null {
+  return /^https?:\/\//i.test(url) ? url : null
+}
+
 export function relativeTime(iso: string | null, now: number): string {
   if (iso === null) return '—'
   const seconds = Math.round((new Date(iso).getTime() - now) / 1000)

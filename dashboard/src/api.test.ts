@@ -7,12 +7,15 @@ const JOB = {
   id: '11111111-1111-4111-8111-111111111111',
   source: 'linear',
   identifier: 'TST-1',
+  title: 'A job for the ticket',
+  url: 'https://example.test/TST-1',
   state: 'queued',
   attempt: 0,
   maxAttempts: 3,
   slot: null,
   nextRunAt: null,
   failureKind: null,
+  createdAt: '2026-01-02T03:04:05.000Z',
   allowedActions: ['confirm', 'decline'],
 }
 
@@ -142,6 +145,19 @@ describe('runs', () => {
 
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`/v1/jobs/${JOB.id}/runs`)
     expect(runs.map((entry) => entry.number)).toEqual([1])
+  })
+})
+
+describe('events', () => {
+  it('asks the API for a job state log', async () => {
+    fetchMock.mockResolvedValue(
+      json([{ from: null, to: 'proposed', failureKind: null, reason: null, at: '2026-01-02T03:04:05.000Z' }]),
+    )
+
+    const events = await api.events(JOB.id)
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`/v1/jobs/${JOB.id}/events`)
+    expect(events.map((event) => event.to)).toEqual(['proposed'])
   })
 })
 

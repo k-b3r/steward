@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { allowedActionsFor } from './jobs-commands'
-import { getJob, listActions, listJobs, listRuns, type QueryStore } from './jobs-queries'
-import { JOB_STATES, type Job, type JobState, type PendingAction, type Run } from './types'
+import { getJob, listActions, listEvents, listJobs, listRuns, type QueryStore } from './jobs-queries'
+import { JOB_STATES, type Job, type JobEvent, type JobState, type PendingAction, type Run } from './types'
 
 const NOW = new Date('2026-01-02T03:04:05.000Z')
 
@@ -12,6 +12,9 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     source: 'linear',
     externalId: 'ext-1',
     identifier: 'TST-1',
+    title: 'A job for the ticket',
+    url: 'https://example.test/TST-1',
+    createdAt: new Date('2026-01-02T03:04:05.000Z'),
     state: 'proposed',
     attempt: 0,
     maxAttempts: 3,
@@ -49,7 +52,7 @@ function makeRun(overrides: Partial<Run> = {}): Run {
   }
 }
 
-function setup(jobs: Job[] = [], actions: PendingAction[] = [], runs: Run[] = []) {
+function setup(jobs: Job[] = [], actions: PendingAction[] = [], runs: Run[] = [], eventsList: JobEvent[] = []) {
   const calls: { filter?: { state?: JobState; limit?: number } }[] = []
   const store: QueryStore = {
     async getJob(id) {
@@ -62,6 +65,9 @@ function setup(jobs: Job[] = [], actions: PendingAction[] = [], runs: Run[] = []
     },
     async listRuns(jobId) {
       return runs.filter((run) => run.jobId === jobId)
+    },
+    async listEvents() {
+      return eventsList
     },
     async listActions(filter = {}) {
       return actions.filter((action) => filter.status === undefined || action.status === filter.status)
@@ -104,6 +110,8 @@ describe('job views', () => {
       {
         id: '11111111-1111-4111-8111-111111111111',
         identifier: 'TST-1',
+        title: 'A job for the ticket',
+        url: 'https://example.test/TST-1',
         source: 'linear',
         state: 'failed',
         attempt: 2,
@@ -111,6 +119,7 @@ describe('job views', () => {
         slot: null,
         nextRunAt: NOW.toISOString(),
         failureKind: 'infra',
+        createdAt: '2026-01-02T03:04:05.000Z',
         allowedActions: ['retry'],
       },
     ])
@@ -165,6 +174,32 @@ describe('list limits', () => {
     await listJobs(deps, { state: 'failed' })
 
     expect(calls.at(-1)?.filter?.state).toBe('failed')
+  })
+})
+
+describe('event views', () => {
+  it('maps the state log to the wire shape with ISO dates and nulls kept', async () => {
+    const at = new Date('2026-01-02T03:04:06.000Z')
+    const { deps } = setup(
+      [],
+      [],
+      [],
+      [
+        { fromState: null, toState: 'proposed', failureKind: null, reason: null, at: NOW },
+        { fromState: 'claiming', toState: 'queued', failureKind: 'infra', reason: 'blip', at },
+      ],
+    )
+
+    expect(await listEvents(deps, '11111111-1111-4111-8111-111111111111')).toEqual([
+      { from: null, to: 'proposed', failureKind: null, reason: null, at: '2026-01-02T03:04:05.000Z' },
+      { from: 'claiming', to: 'queued', failureKind: 'infra', reason: 'blip', at: '2026-01-02T03:04:06.000Z' },
+    ])
+  })
+
+  it('returns an empty list for a job with no events', async () => {
+    const { deps } = setup()
+
+    expect(await listEvents(deps, '11111111-1111-4111-8111-111111111111')).toEqual([])
   })
 })
 

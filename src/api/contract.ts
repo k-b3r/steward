@@ -2,7 +2,7 @@
 // else from `src/`, so it must stay free of server code: zod plus type-only imports.
 import { z } from 'zod'
 
-import type { ActionSummary, JobSummary, RunSummary } from '../jobs-queries'
+import type { ActionSummary, JobEventSummary, JobSummary, RunSummary } from '../jobs-queries'
 import type { ActionStatus, RunOutcome } from '../types'
 import type { Envelope, TranscriptKind } from '../runner/transcript'
 import type { FailureKind, JobState } from '../types'
@@ -78,13 +78,25 @@ export const jobResponseSchema = z.object({
   id: z.uuid(),
   source: z.string(),
   identifier: z.string(),
+  title: z.string(),
+  url: z.string(),
   state: jobStateSchema,
   attempt: z.number().int().nonnegative(),
   maxAttempts: z.number().int().positive(),
   slot: z.number().int().nonnegative().nullable(),
   nextRunAt: z.iso.datetime().nullable(),
   failureKind: failureKindSchema.nullable(),
+  createdAt: z.iso.datetime(),
   allowedActions: z.array(jobActionSchema),
+})
+
+/** One state change of a job, oldest first. */
+export const jobEventResponseSchema = z.object({
+  from: jobStateSchema.nullable(),
+  to: jobStateSchema,
+  failureKind: failureKindSchema.nullable(),
+  reason: z.string().nullable(),
+  at: z.iso.datetime(),
 })
 
 /**
@@ -139,6 +151,8 @@ export type JobResponse = z.infer<typeof jobResponseSchema>
 const _jobResponseMatchesReadLayer: z.ZodType<JobSummary> = jobResponseSchema
 const _actionResponseMatchesReadLayer: z.ZodType<ActionSummary> = actionResponseSchema
 const _runResponseMatchesReadLayer: z.ZodType<RunSummary> = runResponseSchema
+const _eventResponseMatchesReadLayer: z.ZodType<JobEventSummary> = jobEventResponseSchema
+void _eventResponseMatchesReadLayer
 void _runResponseMatchesReadLayer
 void _jobResponseMatchesReadLayer
 void _actionResponseMatchesReadLayer
@@ -146,6 +160,9 @@ export type ActionResponse = z.infer<typeof actionResponseSchema>
 
 // `Envelope` is structurally the same as `TranscriptEnvelope`.
 const _envelopeMatches: Envelope extends z.infer<typeof transcriptEnvelopeSchema> ? true : never = true
+
+/** @public */
+export type JobEventResponse = z.infer<typeof jobEventResponseSchema>
 
 /** @public */
 export type RunResponse = z.infer<typeof runResponseSchema>
