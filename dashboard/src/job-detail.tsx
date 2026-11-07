@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { api, ApiError, followLog } from './api'
+import { api, followLog } from './api'
 import type { Envelope } from './api'
 import { useStore } from './data'
 import { delay } from './delay'
-import { planResume, type LogResume } from './log-resume'
+import { followRunLog } from './log-resume'
 import { JobActions } from './job-actions'
 import { STATE_LABEL, relativeTime } from './model'
 import { Attempts, Empty, Icon, Skeleton, StateChip } from './ui'
@@ -37,49 +37,22 @@ function LiveLog({ jobId }: { jobId: string }) {
     const controller = new AbortController()
     setLines([])
     lastSeq.current = 0
-    void (async () => {
-      // Pin the newest run up front when it can be read. A failure here is not "no runs": the
-      // loop below learns the run from the API's refusal instead.
-      const newestRun = await api
-        .runs(jobId)
-        .then((runs) => runs.at(-1)?.number)
-        .catch(() => undefined)
-      let resume: LogResume = planResume({ after: 0 }, newestRun).resume
-      while (!controller.signal.aborted) {
-        try {
-          setStatus('live')
-          await followLog(jobId, {
-            ...resume,
-            // The position moves while the stream is open, so read it here, not from the plan.
-            after: lastSeq.current,
-            signal: controller.signal,
-            onEnvelope: (e) => {
-              lastSeq.current = Math.max(lastSeq.current, e.seq)
-              setLines((prev) => [...prev, e])
-            },
-          })
-        } catch (error) {
-          if (controller.signal.aborted) return
-          // The API refuses a bare resume once the job has runs. Learn the run, then start that
-          // run's log from its first envelope instead of looping on a rejected request.
-          if (error instanceof ApiError && error.status === 400) {
-            const newestRun = await api
-              .runs(jobId)
-              .then((runs) => runs.at(-1)?.number)
-              .catch(() => undefined)
-            const plan = planResume({ ...resume, after: lastSeq.current }, newestRun)
-            if (plan.restart) {
-              resume = plan.resume
-              lastSeq.current = 0
-              setLines([])
-            }
-          }
-        }
-        if (controller.signal.aborted) return
-        setStatus('reconnecting')
-        await delay(RECONNECT_MS)
-      }
-    })()
+    void followRunLog({
+      follow: (args) => followLog(jobId, args),
+      runs: () => api.runs(jobId),
+      onEnvelope: (envelope) => {
+        lastSeq.current = Math.max(lastSeq.current, envelope.seq)
+        setLines((prev) => [...prev, envelope])
+      },
+      onRestart: () => {
+        lastSeq.current = 0
+        setLines([])
+      },
+      onStatus: setStatus,
+      sleep: delay,
+      signal: controller.signal,
+      retryMs: RECONNECT_MS,
+    })
     return () => controller.abort()
   }, [jobId])
 
