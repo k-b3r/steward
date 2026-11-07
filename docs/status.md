@@ -4,7 +4,7 @@ A running document. It says what steward can do today, what is left to do, and w
 decided or checked yet. Update it in the same pull request that changes the answer. Do not let
 it drift: a stale line here is worse than no line.
 
-Last updated: 2026-11-07, against `main` at `cfc0c51`.
+Last updated: 2026-11-07, against `main` at `3830788`.
 
 Other documents hold the reasons. This one holds the state.
 
@@ -111,22 +111,18 @@ touch Linear or GitHub.
 
 ### Now (small, concrete)
 
-1. Fix the three defects found by running it: a Postgres outage kills the worker and the API
-   (no `pool.on('error')`); `GET /v1/jobs?limit=` is ignored; a non-UUID action id answers 500
-   instead of 404.
-2. Choose the build: add `.js` to every relative import, or emit with esbuild. Add the script.
+1. Choose the build: add `.js` to every relative import, or emit with esbuild. Add the script.
    Until then the host units cannot start.
-3. Run the git fetch with `LC_ALL=C`. The setup check reads git's English messages.
-4. Add a test that `/v1/*` still needs a token when `DASHBOARD_DIR` is set.
-5. Make the two test containers Quadlet units. They stop after a reboot and the integration
+2. Run the git fetch with `LC_ALL=C`. The setup check reads git's English messages.
+3. Make the two test containers Quadlet units. They stop after a reboot and the integration
    tests then fail in a confusing way.
-6. Settle the failing `pr-upkeep` and `auto-merge` workflows. They need a GitHub App (an
+4. Settle the failing `pr-upkeep` and `auto-merge` workflows. They need a GitHub App (an
    `appId`), and fail on every push to `main`. Configure the App or remove the workflows.
-7. Housekeeping: close Dependabot's vite 8 pull request, delete merged branches
+5. Housekeeping: close Dependabot's vite 8 pull request, delete merged branches
    (`decisions`, `two-roots`, `fix-leftover-worktree`, `deps-vitest-4`, and the old `stack/*`).
-8. First real run on the personal instance, once Podman is installed and the Linear key is set:
+6. First real run on the personal instance, once Podman is installed and the Linear key is set:
    `start-stack.sh`, then the worker and the API, then one dry poll before turning dry run off.
-9. Enable user lingering (`loginctl enable-linger`) once the host units work.
+7. Enable user lingering (`loginctl enable-linger`) once the host units work.
 
 ### Next
 
@@ -208,8 +204,8 @@ Each of these needs a run on the real box.
 - The reconciler assumes one worker per instance.
 - BullMQ runs one job at a time, so `SLOT_COUNT` is not reached yet: raising it or documenting one
   is an open decision.
-- A Postgres outage crashes the worker and the API today, and `limit` is ignored: the three
-  defects at the top of the to-do list.
+- A dropped database connection is logged, so a Postgres restart no longer kills the worker. The
+  read limits apply, and a non-uuid action id answers 400.
 - User systemd units on this machine do not enforce sandbox settings. The container is the real
   boundary.
 - The agent review checks each commit. It blocks a commit that mixes a refactor with a change
