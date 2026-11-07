@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { holdsSlot } from '../allocate'
-import { acquireSlot, getJob, releaseSlot, transitionJob } from '../db/store'
+import { acquireSlot, getJob, latestRunNumber, releaseSlot, transitionJob } from '../db/store'
 import type { Db } from '../platform/db'
 import type {
   attachWorktree,
@@ -19,7 +19,7 @@ import type { AgentRunner, FailureKind, Job } from '../types'
 
 export type ProcessJobDeps = {
   db: Db
-  runner: AgentRunner & { transcriptDir(jobId: string): string }
+  runner: AgentRunner & { transcriptDir(jobId: string, runNumber?: number): string }
   clock: () => Date
   rand: () => number
   config: {
@@ -206,7 +206,12 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
       })
     }
     current = await transitionJob(deps.db, jobId, 'running', { now: deps.clock() })
-    await deps.runner.start(current)
+    // The transition to `claiming` opened this run in the same transaction (src/runs.ts).
+    const runNumber = await latestRunNumber(deps.db, jobId)
+    if (runNumber === null) {
+      throw new Error(`Job ${jobId} is running but has no run row`)
+    }
+    await deps.runner.start(current, runNumber)
     // TODO(phase-4): go to pr_open after validation and the draft pull request.
     await transitionJob(deps.db, jobId, 'done', { now: deps.clock() })
     deps.log?.(`job ${jobId}: done`)
