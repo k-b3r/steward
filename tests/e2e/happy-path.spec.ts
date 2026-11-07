@@ -208,7 +208,7 @@ describe.skipIf(redisUrl === undefined)('steward, phase 1: from a tracker ticket
     expect(git(repoPath, 'branch', '--show-current')).toBe('main')
   })
 
-  it('SETUP 3. prepares the database: Drizzle migrations create jobs, job_events, slots, pending_actions', async () => {
+  it('SETUP 3. prepares the database: Drizzle migrations create jobs, job_events, runs, slots, pending_actions', async () => {
     // `createContext` is the shared wiring (src/bootstrap.ts): logger, pg pool, Drizzle, the BullMQ
     // queue and the runner. Here it is our own handle; the worker and API build theirs below.
     driver = createContext(config, (line) => logLines.push(line))
@@ -222,7 +222,7 @@ describe.skipIf(redisUrl === undefined)('steward, phase 1: from a tracker ticket
     const tables = await driver.db.execute<{ table_name: string }>(
       sql`select table_name from information_schema.tables where table_schema = 'public' order by 1`,
     )
-    expect(tables.rows.map((row) => row.table_name)).toEqual(['job_events', 'jobs', 'pending_actions', 'slots'])
+    expect(tables.rows.map((row) => row.table_name)).toEqual(['job_events', 'jobs', 'pending_actions', 'runs', 'slots'])
     // Postgres is the source of truth. BullMQ will only ever carry job ids.
   })
 
@@ -420,6 +420,10 @@ describe.skipIf(redisUrl === undefined)('steward, phase 1: from a tracker ticket
     ])
     expect(events[1]?.reason).toBe('confirmed')
     expect(job.attempt).toBe(1)
+    // One run is its own record: which slot it had, when it started, and how it ended.
+    const runs = await store.listRuns(driver.db, job.id)
+    expect(runs).toMatchObject([{ number: 1, slot: 0, outcome: 'done', failureKind: null }])
+    expect(runs[0]?.endedAt).not.toBeNull()
   })
 
   it('7. what the run left behind: transcript, branch, no worktree, no slot', async () => {
@@ -430,7 +434,9 @@ describe.skipIf(redisUrl === undefined)('steward, phase 1: from a tracker ticket
 
     // Run folder: one transcript for the UI (redacted orchestrator lines, agent events as-is)
     // and one raw file (byte-exact runner output, never served by the API).
-    const runDir = join(runsDir, job.id)
+    // One folder per run, so a retry cannot be confused with the attempt before it.
+    expect(readdirSync(join(runsDir, job.id)).sort()).toEqual(['1'])
+    const runDir = join(runsDir, job.id, '1')
     expect(readdirSync(runDir).sort()).toEqual(['raw.jsonl', 'transcript.jsonl'])
     const envelopes = readTranscript(runDir, 0)
     expect(envelopes.map((envelope) => [envelope.seq, envelope.kind])).toEqual([
@@ -444,7 +450,7 @@ describe.skipIf(redisUrl === undefined)('steward, phase 1: from a tracker ticket
     // Git: the branch stays (a retry continues it); the worktree was removed in `finally`.
     expect(git(repoPath, 'branch', '--list', 'agent/*')).toContain('agent/tst-1')
     expect(git(repoPath, 'worktree', 'list').split('\n')).toHaveLength(1)
-    expect(existsSync(join(runDir, 'worktree'))).toBe(false)
+    expect(existsSync(join(runsDir, job.id, 'worktree'))).toBe(false)
   })
 
   it('8. the transcript streams over SSE, and a client can resume from any seq', async () => {
@@ -478,9 +484,15 @@ describe.skipIf(redisUrl === undefined)('steward, phase 1: from a tracker ticket
     }
 
     expect(await readEvents(`/v1/jobs/${job.id}/log`, 4)).toEqual([1, 2, 3, 4])
+    // A `seq` only means something inside one run, so a resume names the run it was reading.
+    expect(await readEvents(`/v1/jobs/${job.id}/log?run=1`, 2, { 'Last-Event-ID': '2' })).toEqual([3, 4])
     // EventSource cannot send an Authorization header, so clients use fetch streaming and
     // resume with the standard Last-Event-ID header:
-    expect(await readEvents(`/v1/jobs/${job.id}/log`, 2, { 'Last-Event-ID': '2' })).toEqual([3, 4])
+    // Without the run, the server refuses the resume rather than guess which run seq 2 belongs to.
+    const refused = await api.app.request(`${apiOrigin}/v1/jobs/${job.id}/log`, {
+      headers: { Host: '127.0.0.1:3100', Authorization: `Bearer ${config.API_TOKEN}`, 'Last-Event-ID': '2' },
+    })
+    expect(refused.status).toBe(400)
   })
 
   // -------------------------------------------------------------------------------------------
