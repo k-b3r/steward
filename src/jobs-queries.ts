@@ -102,10 +102,7 @@ export async function listJobs(
 ): Promise<JobSummary[]> {
   const limit = filter.limit ?? DEFAULT_LIMIT
   assertLimit(limit)
-  const jobs = await deps.store.listJobs({
-    ...(filter.state === undefined ? {} : { state: filter.state }),
-    limit,
-  })
+  const jobs = await deps.store.listJobs({ ...(filter.state === undefined ? {} : { state: filter.state }), limit })
   return jobs.map(toJobSummary)
 }
 
