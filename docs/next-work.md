@@ -59,6 +59,10 @@ Still undecided:
 
 ## 2. Fix the crash and the API defects
 
+Done in `fix-defects`: the pool logs a lost connection instead of crashing the process, both list
+reads apply their limit (100 by default), and an action id must be a uuid, so a bad one is a 400
+rather than a 500 from Postgres.
+
 Found while running the system end to end against real Postgres and Redis.
 
 - **A Postgres outage kills the process.** `createPool` adds no error listener
