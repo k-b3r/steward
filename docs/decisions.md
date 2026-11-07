@@ -442,6 +442,14 @@ something to read out of `job_events`.
   pinning the one whose transcript is on screen. The job page also shows the state log (`/events`)
   as a timeline. Nothing is written to Linear.
 
+### 28. A lost database connection is logged, never fatal
+
+`createPool` registers an `error` listener (`src/platform/db.ts`), so an idle client that loses its
+server reports the message instead of raising an unhandled event, which Node turns into a crashed
+process. Before this, restarting Postgres killed the worker, and the API on its next query. The
+listener is registered even when the caller passes no handler, so a new caller cannot reintroduce
+the crash.
+
 ## Unverified
 
 Each item still needs a run on the box.
