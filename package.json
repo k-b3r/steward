@@ -33,7 +33,8 @@
       "src/allocate.ts",
       "src/linear-map.ts",
       "src/retry-policy.ts",
-      "src/intake-policy.ts"
+      "src/intake-policy.ts",
+      "src/subagent-policy.ts"
     ],
     "generatedPaths": [
       "src/db/migrations/**",
