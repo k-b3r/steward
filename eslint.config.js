@@ -15,6 +15,7 @@ export default [
       'src/linear-map.ts',
       'src/retry-policy.ts',
       'src/intake-policy.ts',
+      'src/subagent-policy.ts',
     ],
   }),
   // Repo-specific blocks (framework plugins, extra bans) go here.
