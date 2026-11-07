@@ -39,6 +39,8 @@ export type LogStreamDeps = {
   sleep: (ms: number) => Promise<void>
   signal: AbortSignal
   retryMs: number
+  /** When set, follow this run and never move to another. Without it the newest run is pinned. */
+  run?: number
 }
 
 /**
@@ -48,10 +50,12 @@ export type LogStreamDeps = {
  */
 export async function followRunLog(deps: LogStreamDeps): Promise<void> {
   let lastSeq = 0
-  const newestRun = await deps
-    .runs()
-    .then((runs) => runs.at(-1)?.number)
-    .catch(() => undefined)
+  const newestRun =
+    deps.run ??
+    (await deps
+      .runs()
+      .then((runs) => runs.at(-1)?.number)
+      .catch(() => undefined))
   let resume = planResume({ after: 0 }, newestRun).resume
 
   while (!deps.signal.aborted) {
@@ -69,7 +73,8 @@ export async function followRunLog(deps: LogStreamDeps): Promise<void> {
       })
     } catch (error) {
       if (deps.signal.aborted) return
-      if (error instanceof ApiError && error.status === 400) {
+      // A pinned run never moves, so a refusal for it is a real error and not a run switch.
+      if (error instanceof ApiError && error.status === 400 && deps.run === undefined) {
         const learnedRun = await deps
           .runs()
           .then((runs) => runs.at(-1)?.number)

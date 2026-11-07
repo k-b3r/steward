@@ -8,9 +8,9 @@ import {
   runResponseSchema,
   transcriptEnvelopeSchema,
 } from '../../src/api/contract'
-import type { ActionResponse, JobEventResponse, JobResponse } from '../../src/api/contract'
+import type { ActionResponse, JobEventResponse, JobResponse, RunResponse } from '../../src/api/contract'
 
-export type { ActionResponse, JobEventResponse, JobResponse }
+export type { ActionResponse, JobEventResponse, JobResponse, RunResponse }
 export type Envelope = z.infer<typeof transcriptEnvelopeSchema>
 
 const TOKEN_KEY = 'steward.token'

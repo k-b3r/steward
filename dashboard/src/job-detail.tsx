@@ -5,7 +5,9 @@ import type { Envelope } from './api'
 import { useStore } from './data'
 import { delay } from './delay'
 import { Events } from './events'
+import { selectRun, selectedRunFor, type RunSelection } from './job-detail-state'
 import { followRunLog } from './log-resume'
+import { Runs } from './runs'
 import { JobActions } from './job-actions'
 import { STATE_LABEL, relativeTime, safeTrackerUrl } from './model'
 import { Attempts, Empty, Icon, Skeleton, StateChip } from './ui'
@@ -27,7 +29,7 @@ function envelopeText(data: unknown): string {
   return JSON.stringify(data, null, 2)
 }
 
-function LiveLog({ jobId }: { jobId: string }) {
+function LiveLog({ jobId, run: pinnedRun }: { jobId: string; run?: number }) {
   const [lines, setLines] = useState<Envelope[]>([])
   const [status, setStatus] = useState<'live' | 'reconnecting'>('live')
   const [follow, setFollow] = useState(true)
@@ -53,9 +55,10 @@ function LiveLog({ jobId }: { jobId: string }) {
       sleep: delay,
       signal: controller.signal,
       retryMs: RECONNECT_MS,
+      ...(pinnedRun === undefined ? {} : { run: pinnedRun }),
     })
     return () => controller.abort()
-  }, [jobId])
+  }, [jobId, pinnedRun])
 
   useEffect(() => {
     const el = body.current
@@ -93,6 +96,10 @@ function LiveLog({ jobId }: { jobId: string }) {
 
 export function JobDetail({ id }: { id: string }) {
   const { jobs, loaded, now } = useStore()
+  // Which run's transcript is on screen. Undefined means "the newest one, follow it".
+  // The pick is stored with its job: this component instance survives a hash change to another job.
+  const [selection, setSelection] = useState<RunSelection>({ jobId: id })
+  const run = selectedRunFor(selection, id)
   const job = jobs.find((j) => j.id === id)
   if (!loaded) return <Skeleton />
   if (job === undefined) {
@@ -157,8 +164,9 @@ export function JobDetail({ id }: { id: string }) {
         ) : null}
         {job.nextRunAt === null ? null : <p className="sm muted">Next run {relativeTime(job.nextRunAt, now)}</p>}
       </section>
-      <LiveLog jobId={job.id} />
-      <div style={{ marginTop: 16 }}>
+      <LiveLog jobId={job.id} {...(run === undefined ? {} : { run })} />
+      <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
+        <Runs jobId={job.id} selected={run} onSelect={(picked) => setSelection(selectRun(selection, id, picked))} />
         <Events jobId={job.id} now={now} />
       </div>
     </>
