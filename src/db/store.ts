@@ -11,6 +11,7 @@ import { ACTION_STATUSES } from '../types'
 import type { ActionStatus } from '../types'
 import { jobEvents, jobs, pendingActions, runs, slots } from './schema'
 
+/** A read that does not ask for a page still gets one: an unbounded list is a memory leak. */
 type JobRow = typeof jobs.$inferSelect
 type PendingActionRow = typeof pendingActions.$inferSelect
 type RunRow = typeof runs.$inferSelect
@@ -151,14 +152,16 @@ export async function getJob(db: Db, id: string): Promise<Job | null> {
   return row === undefined ? null : toJob(row)
 }
 
-export async function listJobs(db: Db, filter: { state?: JobState; ticket?: string } = {}): Promise<Job[]> {
+export async function listJobs(db: Db, filter: { state?: JobState; limit?: number } = {}): Promise<Job[]> {
   const condition = and(filter.state === undefined ? undefined : eq(jobs.state, filter.state))
-  const rows = await db
+  const base = db
     .select({ job: jobs, slot: slots.slot })
     .from(jobs)
     .leftJoin(slots, eq(slots.jobId, jobs.id))
     .where(condition)
     .orderBy(desc(jobs.createdAt))
+  // Unbounded unless asked: the reconciler must see every holding job, not a page of them.
+  const rows = await (filter.limit === undefined ? base : base.limit(filter.limit))
   return rows.map((row) => toJob(row))
 }
 
@@ -396,12 +399,13 @@ export async function decideAction(
   throw new Error(`Pending action ${id} is ${existing.status}, not pending`)
 }
 
-export async function listActions(db: Db, filter: { status?: string } = {}): Promise<PendingAction[]> {
+export async function listActions(db: Db, filter: { status?: string; limit?: number } = {}): Promise<PendingAction[]> {
   const requested = filter.status === undefined ? undefined : actionStatus(filter.status)
   if (filter.status !== undefined && requested === undefined) {
     return []
   }
   const condition = requested === undefined ? undefined : eq(pendingActions.status, requested)
-  const rows = await db.select().from(pendingActions).where(condition).orderBy(desc(pendingActions.createdAt))
+  const base = db.select().from(pendingActions).where(condition).orderBy(desc(pendingActions.createdAt))
+  const rows = await (filter.limit === undefined ? base : base.limit(filter.limit))
   return rows.map((row) => toPendingAction(row))
 }
