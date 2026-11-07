@@ -4,7 +4,7 @@ A running document. It says what steward can do today, what is left to do, and w
 decided or checked yet. Update it in the same pull request that changes the answer. Do not let
 it drift: a stale line here is worse than no line.
 
-Last updated: 2026-11-07, after pull requests up to #34 (main `cfc0c51`).
+Last updated: 2026-11-07, against `main` at `cfc0c51`.
 
 Other documents hold the reasons. This one holds the state.
 
