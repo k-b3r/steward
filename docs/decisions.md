@@ -470,6 +470,8 @@ decision 7 and the worktree rule.
   starts a new branch named for the ticket.
 - Case matters to git: `INV-12` and `inv-12` are two branches.
 
+## Decisions taken 2026-11-08
+
 ### 30. Pi's JSON stream is mapped by a pure function, not by the runner
 
 `src/runner/pi-events.ts` reads `pi --mode json` output (Pi 1.5.0, `docs/json.md`). It starts no
@@ -513,6 +515,26 @@ container, one tool call; recorded as `tests/fixtures/pi/real-run.jsonl`):
   still treats them as written above.
 - Seen and skipped on purpose: a `message_end` with `role: "system"` (the full system prompt, about 5 KB),
   and `tool_execution_start` and `tool_execution_end`, which could later show a tool as running.
+
+### 31. The job log shows the worker's own steps
+
+A run's transcript held only the agent's lines, so a person watching a running job saw nothing until
+the agent started, and the worktree and cleanup steps never appeared at all. `processJob` now
+appends each of its steps as an `orchestrator` line: `claiming`, `base fetched`, `worktree ready`,
+`merged base into branch` or `merge conflict`, `running`, `finished` or `failed`, `worktree removed`,
+`slot released`. The message is a short lowercase label; the data stays small (slot, branch, base
+branch, `reused`, failure `kind` and `reason`), never the environment or a secret.
+
+- One writer per step: `createTranscriptWriter` reads the next `seq` from the file, and the steps are
+  written one after another in this process, so the numbers stay in order.
+- `slot acquired` comes before `claiming`, and `claiming` is what opens the run, so that step has no
+  transcript folder. It goes to the process log alone.
+- `failed` is written on a retried run too: the run did fail, and whether the job retries is decided
+  in Postgres. A cancel that lands mid-run still wins and writes no `failed` line.
+- The steps get the same known secrets as the logger (`secretsOf`), so a failure reason that quotes
+  one is redacted on its way into the transcript.
+- The transcript is a view, not the truth. A write that fails is logged and otherwise ignored, so a
+  full disk or a bad folder can never fail or change a job.
 
 ## Unverified
 

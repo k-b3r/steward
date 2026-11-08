@@ -172,6 +172,12 @@ restarts at 1 in each. A job that ran before runs existed keeps its flat
 - `src/runner/pi-events.ts` turns one `pi --mode json` record into a `kind` and the envelope
   `data`. It is pure: the splitter, the mapper and the turn counter take no clock and start no
   process. The mapping table is decision 30.
+- The worker writes its own steps as `orchestrator` lines, so a running job's log shows every step and
+  not only the agent's: `claiming`, `base fetched`, `worktree ready`, `merged base into branch` or
+  `merge conflict`, `running`, `finished` or `failed` (with `kind` and `reason`), `worktree removed`,
+  `slot released`. Each line is `{ msg, ...small data }`. The step before the run opens
+  (`slot acquired`) has no folder and goes to the process log. A failed write is logged and never
+  fails the job (decision 31).
 - Redaction covers orchestrator-originated lines and process logs. It does not cover agent
   output; see [security.md](security.md).
 - Retention is `RUN_RETENTION_DAYS` (default 30). The sweep is phase 5.
