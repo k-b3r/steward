@@ -17,7 +17,7 @@ import {
   mergeIntoWorktree,
   removeWorktree,
 } from '../../src/platform/git'
-import { createTranscriptWriter } from '../../src/runner/transcript'
+import { createTranscriptWriter, readTranscript } from '../../src/runner/transcript'
 import type { AgentRunner, Job, WorkItem } from '../../src/types'
 import { processJob, type ProcessJobDeps } from '../../src/worker/process-job'
 
@@ -97,6 +97,16 @@ async function createJob(overrides: { externalId?: string; maxAttempts?: number 
 
 async function eventsFor(jobId: string) {
   return db.select().from(jobEvents).where(eq(jobEvents.jobId, jobId)).orderBy(jobEvents.id)
+}
+
+/** The worker's own steps as the dashboard shows them, in file order. */
+function orchestratorLines(dir: string): { msg: string; data: Record<string, unknown> }[] {
+  return readTranscript(dir, 0)
+    .filter((envelope) => envelope.kind === 'orchestrator')
+    .map((envelope) => {
+      const data = envelope.data as Record<string, unknown>
+      return { msg: String(data.msg), data }
+    })
 }
 
 type FakeRunner = AgentRunner & {
@@ -193,6 +203,23 @@ describe('processJob', () => {
     expect(enqueued.calls).toEqual([])
     expect(runner.runNumbers).toEqual([1])
     expect(existsSync(join(runsDir, job.id, '1', 'transcript.jsonl'))).toBe(true)
+    const lines = orchestratorLines(join(runsDir, job.id, '1'))
+    expect(lines.map((line) => line.msg)).toEqual([
+      'claiming',
+      'base fetched',
+      'worktree ready',
+      'running',
+      // The fake runner announces itself after the job is `running`.
+      'started',
+      'finished',
+      'worktree removed',
+      'slot released',
+    ])
+    expect(lines.find((line) => line.msg === 'base fetched')?.data).toMatchObject({ baseBranch: 'main' })
+    expect(lines.find((line) => line.msg === 'worktree ready')?.data).toMatchObject({
+      branch: 'TST-ext-1',
+      reused: false,
+    })
     expect(statSync(join(runsDir, job.id, '1')).mode & 0o777).toBe(0o700)
     expect(await listRuns(db, job.id)).toMatchObject([{ number: 1, slot: 0, outcome: 'done', failureKind: null }])
     expect(existsSync(join(runsDir, job.id, 'worktree'))).toBe(false)
@@ -227,6 +254,58 @@ describe('processJob', () => {
     expect(base.runNumbers).toEqual([1, 2])
     expect(existsSync(join(runsDir, job.id, '1', 'transcript.jsonl'))).toBe(true)
     expect(existsSync(join(runsDir, job.id, '2', 'transcript.jsonl'))).toBe(true)
+  })
+
+  it('shows the steps of a failed job, ending with the failure kind and reason', async () => {
+    const job = await createJob({ maxAttempts: 1 })
+    const runner = makeRunner({ failStart: new Error('runner exploded') })
+
+    await processJob(makeDeps({ runner }), job.id)
+
+    expect(await getJob(db, job.id)).toMatchObject({ state: 'failed', failureKind: 'infra' })
+    const lines = orchestratorLines(join(runsDir, job.id, '1'))
+    expect(lines.map((line) => line.msg)).toEqual([
+      'claiming',
+      'base fetched',
+      'worktree ready',
+      'running',
+      // The runner failed before it wrote a line of its own.
+      'failed',
+      'worktree removed',
+      'slot released',
+    ])
+    expect(lines.find((line) => line.msg === 'failed')?.data).toMatchObject({
+      kind: 'infra',
+      reason: 'runner exploded',
+    })
+  })
+
+  it('redacts a known secret from a step it writes', async () => {
+    const job = await createJob({ maxAttempts: 1 })
+    const runner = makeRunner({ failStart: new Error('auth failed for token sk-test-123') })
+
+    await processJob(makeDeps({ runner, secrets: ['sk-test-123'] }), job.id)
+
+    const failed = orchestratorLines(join(runsDir, job.id, '1')).find((line) => line.msg === 'failed')
+    expect(failed?.data.reason).toBe('auth failed for token [REDACTED]')
+  })
+
+  it('still finishes the job when a step cannot be written to the transcript', async () => {
+    const job = await createJob()
+    // A regular file where the run folder goes: the writer cannot create the directory.
+    const notADirectory = join(root, 'not-a-directory')
+    writeFileSync(notADirectory, 'x\n')
+    const runner = Object.assign(makeRunner(), {
+      transcriptDir: () => join(notADirectory, 'run'),
+    })
+    const logs: string[] = []
+
+    await processJob(makeDeps({ runner, log: (message) => logs.push(message) }), job.id)
+
+    expect(await getJob(db, job.id)).toMatchObject({ state: 'done', slot: null })
+    expect((await eventsFor(job.id)).at(-1)).toMatchObject({ toState: 'done' })
+    expect(logs.some((message) => message.includes('transcript'))).toBe(true)
+    expect(await heldSlots(db)).toEqual([])
   })
 
   it('ignores a job that is not queued', async () => {
@@ -372,6 +451,12 @@ describe('processJob', () => {
       expect(() => git(repoPath, ['merge-base', '--is-ancestor', earlier, BRANCH])).not.toThrow()
       expect(() => git(repoPath, ['merge-base', '--is-ancestor', originTip, BRANCH])).not.toThrow()
       expect(logs.some((message) => message.includes('merge conflict'))).toBe(false)
+      const lines = orchestratorLines(join(runsDir, job.id, '1'))
+      expect(lines.find((line) => line.msg === 'worktree ready')?.data).toMatchObject({
+        branch: BRANCH,
+        reused: true,
+      })
+      expect(lines.map((line) => line.msg)).toContain('merged base into branch')
     })
 
     // A worker that dies mid-run never reaches its cleanup, so the next attempt finds the worktree still there.
@@ -422,6 +507,7 @@ describe('processJob', () => {
       expect(await getJob(db, job.id)).toMatchObject({ state: 'failed', failureKind: 'agent', slot: null })
       expect((await eventsFor(job.id)).at(-1)).toMatchObject({ toState: 'failed', failureKind: 'agent' })
       expect((await eventsFor(job.id)).at(-1)?.reason).toMatch(/merge conflict with origin\/main/)
+      expect(orchestratorLines(join(runsDir, job.id, '1')).map((line) => line.msg)).toContain('merge conflict')
       expect(enqueued.calls).toEqual([])
       expect(git(repoPath, ['rev-parse', BRANCH]).trim()).toBe(before)
       expect(existsSync(join(runsDir, job.id, 'worktree'))).toBe(false)

@@ -1,6 +1,6 @@
 // Builds the worker process: migrate, reconcile, consume the queue, poll the feed.
 // The wiring lives here; src/entries/worker.ts only starts and stops it.
-import { BACKOFF, createContext } from '../bootstrap'
+import { BACKOFF, createContext, secretsOf } from '../bootstrap'
 import { createLinearClient } from '../linear'
 import * as intakeQueries from '../db/intake-queries'
 import { migrateDb } from '../db/migrate'
@@ -59,6 +59,7 @@ export function composeWorker(config: Config, write: (line: string) => void) {
           queue,
           git: { attachWorktree, branchExists, createWorktree, fetchBase, mergeIntoWorktree, removeWorktree },
           baseBranch: config.BASE_BRANCH,
+          secrets: secretsOf(config),
           log: (msg) => logger.info(msg),
         },
         jobId,

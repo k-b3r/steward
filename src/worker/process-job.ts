@@ -16,6 +16,7 @@ import type {
   removeWorktree,
 } from '../platform/git'
 import { decideAfterFailure, type BackoffOptions } from '../retry-policy'
+import { createTranscriptWriter } from '../runner/transcript'
 import type { AgentRunner, FailureKind, Job } from '../types'
 
 export type ProcessJobDeps = {
@@ -40,6 +41,8 @@ export type ProcessJobDeps = {
   }
   /** Base branch a new job branch starts from. Defaults to main. */
   baseBranch?: string
+  /** Known secrets to redact from the steps written to the transcript. */
+  secrets?: readonly string[]
   log?: (msg: string) => void
 }
 
@@ -94,11 +97,45 @@ function logCleanupError(deps: ProcessJobDeps, jobId: string, action: string, er
 }
 
 /**
+ * Writes one of the worker's own steps into the run's transcript, so a person opening a
+ * running job sees every step and not only the agent's lines. A fresh writer per step is
+ * fine: each one reads the next `seq` from the file, and this process writes them in order.
+ *
+ * A step without a run (before `claiming` opened one) has no folder; it goes to the process
+ * log. A failed write is logged and otherwise ignored: the transcript must never fail a job.
+ */
+function logStep(
+  deps: ProcessJobDeps,
+  jobId: string,
+  runNumber: number | null,
+  msg: string,
+  data: Record<string, unknown> = {},
+): void {
+  if (runNumber === null) {
+    const details = Object.keys(data).length === 0 ? '' : ` ${JSON.stringify(data)}`
+    deps.log?.(`job ${jobId}: ${msg}${details}`)
+    return
+  }
+  try {
+    const dir = deps.runner.transcriptDir(jobId, runNumber)
+    createTranscriptWriter({ dir, clock: deps.clock, secrets: deps.secrets ?? [] }).writeOrchestrator(msg, data)
+  } catch (error) {
+    deps.log?.(`job ${jobId}: could not write the transcript step "${msg}": ${errorMessage(error)}`)
+  }
+}
+
+/**
  * Handles a failure after the slot was acquired. The original error is logged
  * and recorded, never thrown back at the queue: the retry decision belongs to
  * Postgres. If recording the failure fails, that error is logged too.
  */
-async function recordFailure(deps: ProcessJobDeps, jobId: string, lastKnown: Job, error: unknown): Promise<void> {
+async function recordFailure(
+  deps: ProcessJobDeps,
+  jobId: string,
+  lastKnown: Job,
+  runNumber: number | null,
+  error: unknown,
+): Promise<void> {
   const kind: FailureKind = error instanceof SetupError ? 'setup' : error instanceof AgentError ? 'agent' : 'infra'
   const now = deps.clock()
   const reason = errorMessage(error)
@@ -137,11 +174,13 @@ async function recordFailure(deps: ProcessJobDeps, jobId: string, lastKnown: Job
         nextRunAt: decision.nextRunAt,
       })
       await deps.queue.enqueue(jobId, Math.max(0, decision.nextRunAt.getTime() - now.getTime()))
+      logStep(deps, jobId, runNumber, 'failed', { kind, reason })
       deps.log?.(`job ${jobId}: ${kind} failure, retrying at ${decision.nextRunAt.toISOString()}: ${reason}`)
       return
     }
 
     await transitionJob(deps.db, jobId, 'failed', { now, failureKind: kind, reason })
+    logStep(deps, jobId, runNumber, 'failed', { kind, reason })
     deps.log?.(`job ${jobId}: ${kind} failure, no retry: ${reason}`)
   } catch (recordError) {
     logCleanupError(deps, jobId, 'recording the failure', recordError)
@@ -167,12 +206,19 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
     await deps.queue.enqueue(jobId, 5000)
     return
   }
+  // No run exists yet, so this step goes to the process log only.
+  logStep(deps, jobId, null, 'slot acquired', { slot })
 
   const worktreePath = join(deps.config.runsDir, jobId, 'worktree')
   let current = job
+  // Set once `claiming` opens the run; before that a step has no transcript folder.
+  let runNumber: number | null = null
 
   try {
     current = await transitionJob(deps.db, jobId, 'claiming', { now: deps.clock() })
+    // The transition to `claiming` opened this run in the same transaction (src/runs.ts).
+    runNumber = await latestRunNumber(deps.db, jobId)
+    logStep(deps, jobId, runNumber, 'claiming')
     if (!existsSync(deps.config.repoPath)) {
       throw new SetupError(`Repository path does not exist: ${deps.config.repoPath}`)
     }
@@ -180,6 +226,7 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
     // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
     const baseBranch = deps.baseBranch ?? 'main'
     await fetchBaseClassified(deps, baseBranch)
+    logStep(deps, jobId, runNumber, 'base fetched', { baseBranch })
     const branch = branchName(current.identifier)
     // A worker that died mid-run never ran its cleanup. Clear what it left, or `git worktree add`
     // refuses the path on every retry. The branch and its commits are not touched.
@@ -188,12 +235,15 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
       // An earlier attempt or an open pull request already owns this branch: continue on it,
       // then bring it up to date. A conflict is left in place for the agent, not thrown away.
       await deps.git.attachWorktree({ repoPath: deps.config.repoPath, worktreePath, branch })
+      logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: true })
       const outcome = await deps.git.mergeIntoWorktree(worktreePath, `origin/${baseBranch}`)
       if (outcome === 'conflict') {
+        logStep(deps, jobId, runNumber, 'merge conflict', { baseBranch })
         // TODO(phase-2): hand the conflicted tree to the runner to resolve. The echo stub cannot, and
         // finishing as `done` would report success and then throw the tree away.
         throw new AgentError(`merge conflict with origin/${baseBranch}; the echo runner cannot resolve it`)
       }
+      logStep(deps, jobId, runNumber, 'merged base into branch', { baseBranch })
     } else {
       await deps.git.createWorktree({
         repoPath: deps.config.repoPath,
@@ -201,22 +251,24 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
         branch,
         baseRef: `origin/${baseBranch}`,
       })
+      logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: false })
     }
     current = await transitionJob(deps.db, jobId, 'running', { now: deps.clock() })
-    // The transition to `claiming` opened this run in the same transaction (src/runs.ts).
-    const runNumber = await latestRunNumber(deps.db, jobId)
     if (runNumber === null) {
       throw new Error(`Job ${jobId} is running but has no run row`)
     }
+    logStep(deps, jobId, runNumber, 'running')
     await deps.runner.start(current, runNumber)
     // TODO(phase-4): go to pr_open after validation and the draft pull request.
     await transitionJob(deps.db, jobId, 'done', { now: deps.clock() })
+    logStep(deps, jobId, runNumber, 'finished')
     deps.log?.(`job ${jobId}: done`)
   } catch (error) {
-    await recordFailure(deps, jobId, current, error)
+    await recordFailure(deps, jobId, current, runNumber, error)
   } finally {
     try {
       await deps.git.removeWorktree(deps.config.repoPath, worktreePath)
+      logStep(deps, jobId, runNumber, 'worktree removed')
     } catch (cleanupError) {
       logCleanupError(deps, jobId, 'removing the worktree', cleanupError)
     }
@@ -224,6 +276,7 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
       // transitionJob frees the slot on claiming/running -> queued/failed; this
       // also covers a failure before `claiming` and a failed transition.
       await releaseSlot(deps.db, jobId)
+      logStep(deps, jobId, runNumber, 'slot released', { slot })
     } catch (releaseError) {
       logCleanupError(deps, jobId, 'releasing the slot', releaseError)
     }
