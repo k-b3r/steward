@@ -131,8 +131,10 @@ The work instance and the personal instance share the box but not state:
 - Separate ports on `127.0.0.1`, and one folder per instance for its env file, clone, runs,
   Quadlet files and backups.
 - Separate git author name and email, and a separate `gh` account, in each config.
-- Before any push, the worker checks `git config` and `gh auth status` against the instance
-  config. A mismatch fails the job with kind `setup`, which is never retried.
+- Before any push, the worker checks the clone's local `user.name`, `user.email` and
+  `steward.account` against the instance config, and that gh holds a token for `GH_ACCOUNT`
+  (`checkIdentity` in `src/platform/github.ts`). A mismatch fails the job with kind `setup`,
+  which is never retried. Nothing calls this yet; the write path is phase 4.
 
 The shared things are the box, the OS user, and the app checkout. The checkout is code only;
 every instance's data lives in its own folder.

@@ -97,6 +97,13 @@ Rule of thumb from the README: add a rule once the same correction was needed tw
 - **Proposed.** Match reads instead of occurrences: `process.env.DATABASE_URL`, `env.DATABASE_URL`, `env['DATABASE_URL']` and `destructure` forms. Keep flagging any test that reads the app's variable, and stop flagging a config object passed to the app under test.
 - **Where.** `scripts/repo-checks.mjs` (`testDbEnvLeaks`), `CODING_STANDARDS.md` Testing.
 
+### 2026-11-08: the `process.env` ban blocks an adapter that must build a child environment (seen: 1, open)
+
+- **What happened.** The new host-side GitHub module passes the account token to `git` and `gh` as `GH_TOKEN` in the child environment. `child_process.execFile` replaces the environment rather than extending it, so passing `{ GH_TOKEN }` alone drops `PATH` and `HOME`: git cannot find `gh`, and `gh` cannot read its account config. Keeping the ambient environment means reading `process.env`, which `no-restricted-properties` bans outside the files listed as `entryPoints`. The override that first solved it here (`files: ['src/platform/github.ts']` in `eslint.config.js`) hid the whole rule for the file, and an inline `eslint-disable` would trip the `escape-hatches` ratchet, so neither survives review.
+- **How this repo solved it.** The adapter takes the ambient environment as an argument: `createExecFileExec(ambient)` merges it under the caller's `env`, and the phase-4 composition root will pass `process.env` in. `src/platform/github.ts` reads no `process.env`, so no exception is needed.
+- **Proposed.** Let `baseConfig` take a short, documented list such as `childProcessModules` for adapters that add to the child environment, or ship a helper that merges the caller's `env` over the ambient environment, so each repo does not invent its own exception block.
+- **Where.** `configs/eslint.mjs` (the `no-restricted-properties` scopes), documented next to `entryPoints`.
+
 ## Delegated work (sub-agents)
 
 ### 2026-10-27: "all green" reports from sub-agents hid real bugs (seen: 1, open)

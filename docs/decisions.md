@@ -51,8 +51,8 @@ work. A person confirms each proposal.
 Phase 4 claim: the orchestrator pushes an empty commit to the job branch (the ticket id, see
 decision 29) and opens a
 draft PR, before the agent starts. The PR is the lock a person can see. If validation fails,
-nothing is pushed and the draft stays empty. `UNVERIFIED:` GitHub's acceptance of a
-pull request from an empty commit is not tested yet; see open items.
+nothing is pushed and the draft stays empty. Verified 2026-11-08: GitHub accepts a draft PR whose
+branch holds only an empty commit (see decision 35).
 
 ### 8. Hono with a typed RPC contract
 
@@ -342,7 +342,7 @@ PR. Note that `removeWorktree` uses `--force`, so uncommitted work in a stale wo
 - No token in config. At push time the worker runs `GH_TOKEN=$(gh auth token --user "$GH_ACCOUNT")`. If the service user cannot use `gh`, one secret `STEWARD_GH_TOKEN` in the same env file; nothing else carries credentials.
 - The identity is config, not clone state, because **the agent commits inside the container**, which has no `~/.gitconfig`. The container gets `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` from these values (phase 2).
 - `scripts/setup-repo.sh` reads them from the env file, clones with that account's token, and sets the clone's local `user.name`, `user.email` and `steward.account`, so the clone cannot disagree with the instance.
-- The phase 4 pre-push check refuses to push unless the clone's `steward.instance` equals `INSTANCE`, the clone's `user.email` equals `GIT_USER_EMAIL`, and `gh api user` for the resolved token returns `GH_ACCOUNT`. Failure kind `setup`, never retried.
+- The phase 4 pre-push check refuses to push unless the clone's `user.name`, `user.email` and `steward.account` match the instance and gh holds a token for `GH_ACCOUNT` (`checkIdentity` in `src/platform/github.ts`); the worker still adds the `steward.instance` check. Failure kind `setup`, never retried.
 
 ## User units do not sandbox the filesystem on this box (2026-10-28)
 
@@ -611,6 +611,49 @@ run and returns pass, retry or fail.
   diff until the check no longer sees it (delete the test, move the secret). Rules the agent could
   fix by changing its code keep the retry. Rules it must not work around do not get one.
 
+### 35. Host-side GitHub operations
+
+The claim's GitHub writes are one module, `src/platform/github.ts`, and every call takes an
+injected `Exec`, so unit tests record the exact `(cmd, args, env)` and the real implementation,
+`createExecFileExec(ambient)`, is only exercised by hand. Nothing calls the module yet; a later PR
+wires it in.
+
+- **Token only in the child env.** The account's token comes from
+  `gh auth token --user <GH_ACCOUNT>`, so an instance acts as its own account even when another
+  one is active on the box. It is passed as `GH_TOKEN` and nowhere else: never in an argument,
+  never in a return value, never in the clone's git config. The push goes to
+  `https://github.com/<repo>.git` directly instead of a stored remote, so nothing that carries a
+  token can be written to `.git/config`. `GIT_TERMINAL_PROMPT=0` turns a missing credential into
+  an error instead of a prompt a service would hang on.
+- **The credential helper is reset first.** The push passes `credential.helper=` and then
+  `credential.helper='!gh auth git-credential'`, so the gh helper answers even when a machine-wide
+  helper exists. `scripts/setup-repo.sh` sets the same helper for the clone.
+- **Never forced.** `pushBranch` builds no `--force`, `-f` or `+refspec`; a rejected push throws.
+- **Errors are redacted.** A thrown message carries the command's stderr with the known token and
+  every `gh[opsu]_[A-Za-z0-9]{20,}` replaced by `[REDACTED]`.
+- **The identity check names the field, never a secret.** `checkIdentity` compares the clone's
+  local `user.name`, `user.email` and `steward.account` with the instance values, and requires
+  `gh auth token --user <account>` to exit 0. A mismatch returns `{ ok: false, reason }` naming the
+  field; the worker turns it into a `setup` failure, which is never retried. This replaces the
+  `gh api user` wording in "Which account an instance acts as". The worker still adds the
+  `steward.instance` check, which this module cannot make.
+- **Ticket matching is on word boundaries.** `listOpenPrsForTicket` keeps a PR when its head branch
+  or title names the ticket, case-insensitively, so `INV-1` matches neither `INV-12` nor `XINV-1`.
+  It returns the author login; the "not made by this instance" rule stays with the caller.
+- **The ambient env is an argument, not a read.** `execFile` replaces the child environment
+  instead of extending it, and the child needs `PATH` and `HOME` for git to find `gh` and for gh
+  to find its account config, so the adapter merges the caller's `env` over an ambient
+  environment it receives from `createExecFileExec(ambient)`. `src/platform/github.ts` reads no
+  `process.env`: the composition root passes it in when the phase-4 wiring builds the adapter,
+  so the only readers stay the entry points.
+
+Verified against `k-b3r/steward-scratch` on 2026-11-08 with a throwaway `tsx` script, the real
+child-process adapter and a temp clone made the way `scripts/setup-repo.sh` makes one: `checkIdentity`
+passed; `pushEmptyClaim` pushed an empty commit on `INV-77`; `openDraftPr` opened draft PR #2 and
+returned its number; `listOpenPrsForTicket("INV-77")` found it and `"INV-7"` found nothing;
+`updatePrBody` changed the body. The PR was closed with `--delete-branch` and the temp clone
+deleted. Not in CI: it needs a real account and network.
+
 ## Unverified
 
 Each item still needs a run on the box.
@@ -624,8 +667,8 @@ Each item still needs a run on the box.
 
 1. No build script. The units run `dist/` files that do not exist. Pick the build (tsc emit or
    a bundler), add the script, and update this log.
-2. Empty-commit draft PR probe (phase 4). Verify in a scratch repo that GitHub accepts a pull
-   request whose branch has an empty commit, and record the result here.
+2. Empty-commit draft PR probe (phase 4). Resolved 2026-11-08: GitHub accepted a draft PR whose
+   branch held only an empty commit (scratch repo PR #2, since closed); see decision 35.
 3. Tracker probe: done 2026-10-28 for the query and response shape (see "Linear probe" above). Still open:
    a run with `Todo` and `Backlog` tickets, a second page of results, and a team with more than
    one user to prove `isMe` filters.
