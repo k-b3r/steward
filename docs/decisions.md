@@ -48,7 +48,8 @@ work. A person confirms each proposal.
 
 ### 7. A draft pull request is the visible claim
 
-Phase 4 claim: the orchestrator pushes an empty commit to `agent/<identifier>` and opens a
+Phase 4 claim: the orchestrator pushes an empty commit to the job branch (the ticket id, see
+decision 29) and opens a
 draft PR, before the agent starts. The PR is the lock a person can see. If validation fails,
 nothing is pushed and the draft stays empty. `UNVERIFIED:` GitHub's acceptance of a
 pull request from an empty commit is not tested yet; see open items.
@@ -325,7 +326,7 @@ live with the instance data and one removal takes them too.
 
 **Per-job lifecycle.** The worktree `runs/<job-id>/worktree` is created at claim and removed
 in `finally` after every outcome (done, failure, cancel). `transcript.jsonl` and `raw.jsonl`
-stay. The branch `agent/<slug>` stays in `repo/`, so a retry or a later run continues it. The
+stay. The job branch (decision 29) stays in `repo/`, so a retry or a later run continues it. The
 retention sweep and branch cleanup are phase 5 and are not built.
 
 **Known bug (not fixed here).** If the worker dies mid-run, `finally` never runs. The worktree
@@ -367,7 +368,7 @@ Consequences:
 
 - **A fetch failure is `infra`, unless the setup is wrong.** A missing remote, a missing base branch, or `Repository not found` fails the job as `setup` at once, because retrying cannot fix it. GitHub answers a wrong URL and a token without access with the same `Repository not found` text, so both land here: each needs the owner to act, and an early `failed` with that reason beats waiting through the backoff. Everything else raised by the fetch (network, timeout, and the other auth messages such as `Authentication failed`) is `infra` and retried with backoff. That leaves auth errors split by message wording, which is accepted for now. Classification happens at the fetch call only, so the same words from anywhere else in a job stay `infra`.
 - **The personal instance runs on its Quadlet stack**, not the disposable test containers: `steward-personal-postgres` and the two Redis servers, so data survives restarts.
-- **`BASE_BRANCH` is per instance.** A new `agent/*` branch is cut from `origin/<BASE_BRANCH>`; default `main`.
+- **`BASE_BRANCH` is per instance.** A new job branch is cut from `origin/<BASE_BRANCH>`; default `main`.
 - **`DASHBOARD_DIR` serves the built dashboard from the API's origin** when set. One origin, no CORS, and the CSP's `connect-src 'self'` holds. Unset means the API answers only `/v1`.
   - The static route is `app.get('*')` in `src/composition/api.ts`, added after `createApp`, so it sits outside `/v1/*` and **skips both the Host check and the bearer auth** (`src/api/app.ts` mounts `createAuthMiddleware` on `/v1/*` only). That is fine for public built assets, but it means **nothing secret may ever be placed in `DASHBOARD_DIR`**: anything readable by the API user can be fetched by anyone who can reach the API port, including over a tailnet.
   - Accepted limitation: `resolveAssetPath` normalises the joined path and rejects `..` and absolute paths, but it does **not** resolve symlinks (`src/platform/static.ts` calls `normalize`, not `realpath`). A symlink inside `DASHBOARD_DIR` can therefore point outside it and be served. Low risk, because `DASHBOARD_DIR` is operator-controlled and the operator is the one creating the symlink.
@@ -388,13 +389,13 @@ How a job gets the code it works on. Decided for phase 2; the git primitives lan
 
 - The orchestrator never clones per job. `REPO_PATH` is one clone on the host, per instance, and each job gets a **git worktree** cut from it (`<runsDir>/<jobId>/worktree`). A worktree shares the clone's objects, so six slots cost kilobytes, not six copies of history, and the container needs no git credentials at all.
 - Before cutting, every run runs `git fetch --prune origin <base>` and starts from `origin/<base>`, never from the clone's `HEAD`. `HEAD` may be stale or checked out on some other branch, which was a real bug until this change.
-- **No pull request yet:** create `agent/<identifier-slug>` from `origin/<base>`.
+- **No pull request yet:** create the job branch (decision 29) from `origin/<base>`.
 - **A pull request already exists:** attach the **existing PR head branch** into the worktree and **merge `origin/<base>` into it**, so the agent continues the same PR instead of opening a second one. Merge, never rebase: a rebase would rewrite the PR branch and need a force-push.
 - **A conflict is for the agent to resolve.** `mergeIntoWorktree` returns `'conflict'` and leaves the markers in the worktree, because resolving a merge is coding work. Phase 2 hands that tree to the runner. **Not built yet:** the runner handoff, and a guard that fails the job as `agent` when the same job conflicts a second time or the `origin/<base>..branch` diff is large (`abortMerge` exists for that path and is only exercised by its own test). Until then the phase 1 stub has no agent to give the tree to, so it fails the job as `agent` with the reason `merge conflict with origin/<base>`, leaves the branch as it was, and removes the worktree. A job that reports `done` after discarding a conflict would be wrong.
 - `jobs.branch` will store the branch actually used, set at claim time (phase 4). It is never recomputed from the identifier afterwards, because a PR's head branch can differ (Linear suggests `branchName`, which is a suggestion, not the PR branch). Phase 1/2 use the rule "attach if the branch exists, else create from the base".
 - The agent commits locally in the worktree. The orchestrator pushes, opens the PR and updates the tracker, from the host, with the instance's git identity checked first.
 - A failed fetch is classified at the fetch call. A permanent cause (no such remote, a missing base branch, `Repository not found`) fails as `setup` at once. A transient one (a network blip, a timeout) is `infra`: retried with backoff up to `MAX_ATTEMPTS`, then it lands in `failed`, the dead-letter, where you retry or cancel it.
-- Cleanup: the worktree is removed after the run; the branch stays (retries reuse it). Phase 5 deletes `agent/*` branches once merged and prunes dead worktrees.
+- Cleanup: the worktree is removed after the run; the branch stays (retries reuse it). Phase 5 deletes merged job branches (by the branch recorded for each job, since the name no longer has a prefix to match) and prunes dead worktrees.
 
 ## Decisions taken 2026-11-07
 
@@ -449,6 +450,25 @@ server reports the message instead of raising an unhandled event, which Node tur
 process. Before this, restarting Postgres killed the worker, and the API on its next query. The
 listener is registered even when the caller passes no handler, so a new caller cannot reintroduce
 the crash.
+
+### 29. A job branch is the ticket identifier, as is
+
+The branch a job works on is its ticket identifier exactly as the tracker gives it: `INV-12`, not
+`agent/inv-12`. No prefix, no lowercasing. `branchName` in `src/branch-name.ts` is the one place
+that decides it: it replaces a character git refuses in a branch name with `-`, drops a leading
+`-` (git would read the branch name as an option), and throws when nothing usable is left. Amends
+decision 7 and the worktree rule.
+
+- **Why:** a branch should not name an "agent" author, and the ticket id is what a person and the
+  tracker already search for.
+- **Cleanup changes.** Phase 5 can no longer delete `agent/*`. It must delete only the branches
+  recorded for steward's own jobs, so a branch you made by hand is never touched.
+- **A branch named for the ticket may already exist**, made by you or by Linear's copy-branch
+  button. The existing-branch rule applies: steward attaches it and merges the base into it.
+  Steward can then commit to a branch you were using.
+- **Existing branches named `agent/*`** from earlier runs are not renamed. A retry of such a job
+  starts a new branch named for the ticket.
+- Case matters to git: `INV-12` and `inv-12` are two branches.
 
 ## Unverified
 

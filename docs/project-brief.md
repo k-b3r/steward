@@ -99,7 +99,7 @@ Failure kinds (stored with a free-text `reason` on the `job_events` row):
 
 ## Flow per job (phases 3-4)
 
-1. **Claim**: orchestrator pushes an empty commit to `agent/<identifier>` and opens a **draft PR**. The PR is the visible lock. Verify in a scratch repo that GitHub accepts it. Record in `docs/decisions.md`.
+1. **Claim**: orchestrator pushes an empty commit to the job branch (the ticket identifier, for example `INV-12`) and opens a **draft PR**. The PR is the visible lock. Verify in a scratch repo that GitHub accepts it. Record in `docs/decisions.md`.
 2. **Run**: the agent works in a local worktree and commits locally. No credentials in the container.
 3. **Validate** (typecheck, lint, tests, diff policy, retries ≤2). Fail: nothing is pushed and the draft stays empty.
 4. **Push** the agent's commits once, to the same branch, with the validation report in the PR body.
