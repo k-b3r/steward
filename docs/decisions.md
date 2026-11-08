@@ -503,18 +503,16 @@ that follows only wires a pipe to it.
 - The default is skip, so a record type added by a newer Pi cannot break a run. It is not
   recorded as `invalid` either; only unusable JSON is.
 
-Not yet checked against a real run:
+Checked against a real run on 2026-11-08 (Pi 1.5.0, `opencode-go/deepseek-v4.1-flash`, in the Pi
+container, one tool call; recorded as `tests/fixtures/pi/real-run.jsonl`):
 
-- `UNVERIFIED:` That every tool result arrives as a `message_end` with `role: "toolResult"`. The
-  docs list tool results on `turn_end` and show a `toolResult` message type, but the event sequence
-  example has no tool call. If a real run shows results only in `turn_end.toolResults`, emit them
-  there and drop the `message_end` branch.
-- `UNVERIFIED:` That Pi writes no more than one tool result per `message_end`. The mapper returns
-  one envelope per record, so a batched result would need a list instead.
-- `UNVERIFIED:` That `agent_settled` is always the last record of a one-shot run, with `aborted`
-  present. A record without the flag is skipped and the run would end with no `result` envelope.
-- `UNVERIFIED:` That the session header (`type: "session"`) is the first record in `-p --mode
-json` output and carries `id`, since `sessionIdFromHeader` reads only that field.
+- Verified: every tool result arrives as a `message_end` with `role: "toolResult"`; the run had one.
+- Verified: the session header is the first record and carries `id`.
+- Verified: `agent_settled` is the last record, with `aborted: false`.
+- Not exercised: a batch of several tool results in one `message_end`, and an aborted run. The mapper
+  still treats them as written above.
+- Seen and skipped on purpose: a `message_end` with `role: "system"` (the full system prompt, about 5 KB),
+  and `tool_execution_start` and `tool_execution_end`, which could later show a tool as running.
 
 ## Unverified
 

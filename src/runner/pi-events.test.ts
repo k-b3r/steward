@@ -191,3 +191,22 @@ describe('pi record helpers', () => {
     expect(countTurn({ type: 'agent_settled', aborted: false })).toBe(false)
   })
 })
+
+describe('a real run (recorded 2026-11-08, Pi 1.5.0, opencode-go/deepseek-v4.1-flash)', () => {
+  // One tool call (create a file) and a final answer, from `pi -p --mode json` in the Pi container.
+  it('maps to system, assistant, tool, assistant, result in order', () => {
+    expect(kinds('real-run.jsonl')).toEqual(['system', 'assistant', 'tool', 'assistant', 'result'])
+  })
+
+  it('has the session header first, with an id, and agent_settled last with aborted false', () => {
+    const lines = records('real-run.jsonl')
+    expect(sessionIdFromHeader(JSON.parse(lines[0] ?? '{}'))).toMatch(/^[0-9a-f-]{36}$/)
+    expect(isSettled(JSON.parse(lines[lines.length - 1] ?? '{}'))).toEqual({ aborted: false })
+  })
+
+  it('emits one tool envelope for the one tool result, and counts two turns', () => {
+    const lines = records('real-run.jsonl')
+    expect(kinds('real-run.jsonl').filter((kind) => kind === 'tool')).toHaveLength(1)
+    expect(lines.filter((line) => countTurn(JSON.parse(line))).length).toBe(2)
+  })
+})
