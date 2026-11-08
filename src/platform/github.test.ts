@@ -204,11 +204,40 @@ describe('pushBranch', () => {
     expect(calls.some((call) => call.args.includes('push'))).toBe(false)
   })
 
-  it('refuses an unsafe branch name before running anything', async () => {
+  // The branch goes into `refs/heads/<branch>` and onto the command line, so the set of names
+  // is what git accepts in a ref and what cannot be read as an option.
+  it.each([
+    '-f',
+    '.hidden',
+    'agent/INV 1',
+    'agent/INV..1',
+    'agent/INV:1',
+    'agent/INV~1',
+    'agent/INV^1',
+    'agent/INV?1',
+    'agent/INV*1',
+    'agent/INV[1',
+    'agent/INV\\1',
+    'agent/INV-1.',
+    'agent/INV-1.lock',
+    'agent/x.lock/y',
+    'agent/.hidden',
+    'agent//INV-1',
+    '/agent/INV-1',
+    'agent/INV-1/',
+  ])('refuses the unsafe branch name %j before running anything', async (branch) => {
     const { exec, calls } = gitExec()
 
-    await expect(pushBranch({ exec }, { ...pushInput, branch: '-f' })).rejects.toThrow(/branch name/)
+    await expect(pushBranch({ exec }, { ...pushInput, branch })).rejects.toThrow(/Unsafe branch name/)
     expect(calls).toHaveLength(0)
+  })
+
+  it('accepts the punctuation git allows in a ref', async () => {
+    const { exec, calls } = gitExec()
+
+    await pushBranch({ exec }, { ...pushInput, branch: 'release/1.2_fix-3' })
+
+    expect(calls.some((call) => call.args.includes('push'))).toBe(true)
   })
 })
 

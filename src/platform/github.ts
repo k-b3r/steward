@@ -50,7 +50,15 @@ function assertSafe(value: string, what: string, pattern: RegExp): void {
   if (!pattern.test(value)) throw new Error(`Unsafe ${what}: ${value}`)
 }
 
-const BRANCH = /^(?!-)(?!.*\.\.)[^\s]+$/
+/**
+ * A branch name reaches `git push` as `refs/heads/<branch>` and as a plain argument, so it must
+ * be valid as a git ref and must not look like an option. Letters, digits, `.`, `_`, `-` and `/`
+ * only: that rules out the characters that break a refspec (space, `~`, `^`, `:`, `?`, `*`, `[`,
+ * `\`). No leading `-` or `/`, no trailing `/`, `.` or `.lock`, no `..`, no empty component and
+ * no component that starts with `.` or ends with `.lock`, since git refuses to build a ref from
+ * any of those.
+ */
+const BRANCH = /^(?!\.)(?!-)(?!\/)(?!.*\.\.)(?!.*\/\/)(?!.*\/\.)(?!.*\.lock(?:\/|$))[A-Za-z0-9._/-]+(?<!\/)(?<!\.)$/
 const REPO = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
 const ACCOUNT = /^[A-Za-z0-9-]+$/
 
