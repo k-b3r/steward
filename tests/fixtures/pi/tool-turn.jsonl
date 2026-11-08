@@ -1,0 +1,10 @@
+{"type":"session","version":3,"id":"8c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f","timestamp":"2026-11-08T16:10:00.000Z","cwd":"/home/kim/steward-instances/dev/repo"}
+{"type":"turn_start"}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"toolCall","id":"call_abc123","name":"bash","arguments":{"command":"ls -la"}}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-5-5","usage":{"input":120,"output":40,"cacheRead":0,"cacheWrite":0,"totalTokens":160,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"toolUse","timestamp":1762618201000}}
+{"type":"tool_execution_start","toolCallId":"call_abc123","toolName":"bash","args":{"command":"ls -la"}}
+{"type":"tool_execution_update","toolCallId":"call_abc123","toolName":"bash","args":{"command":"ls -la"},"partialResult":{"content":[{"type":"text","text":"partial output"}],"details":{}}}
+{"type":"tool_execution_end","toolCallId":"call_abc123","toolName":"bash","result":{"content":[{"type":"text","text":"complete output"}],"details":{}},"isError":false,"durationMs":12}
+{"type":"message_end","message":{"role":"toolResult","toolCallId":"call_abc123","toolName":"bash","content":[{"type":"text","text":"complete output"}],"details":{},"isError":false,"timestamp":1762618202000}}
+{"type":"turn_end","message":{"role":"assistant","content":[{"type":"toolCall","id":"call_abc123","name":"bash","arguments":{"command":"ls -la"}}],"stopReason":"toolUse","timestamp":1762618201000},"toolResults":[{"role":"toolResult","toolCallId":"call_abc123","toolName":"bash","content":[{"type":"text","text":"complete output"}],"details":{},"isError":false,"timestamp":1762618202000}]}
+{"type":"agent_end","messages":[{"role":"toolResult","toolCallId":"call_abc123","toolName":"bash","isError":false,"timestamp":1762618202000}],"willRetry":false}
+{"type":"agent_settled","aborted":false}

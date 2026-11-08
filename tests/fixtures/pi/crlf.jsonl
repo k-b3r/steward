@@ -1,0 +1,3 @@
+{"type":"session","version":3,"id":"c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f","timestamp":"2026-11-08T16:40:00.000Z","cwd":"/home/kim/steward-instances/dev/repo"}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Hello"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-5-5","usage":{"input":5,"output":2,"cacheRead":0,"cacheWrite":0,"totalTokens":7,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1762620001000}}
+{"type":"agent_settled","aborted":false}

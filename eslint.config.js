@@ -18,6 +18,7 @@ export default [
       'src/intake-policy.ts',
       'src/subagent-policy.ts',
       'src/runs.ts',
+      'src/runner/pi-events.ts',
     ],
   }),
   // Repo-specific blocks (framework plugins, extra bans) go here.
