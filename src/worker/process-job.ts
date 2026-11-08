@@ -38,7 +38,7 @@ export type ProcessJobDeps = {
     mergeIntoWorktree: typeof mergeIntoWorktree
     removeWorktree: typeof removeWorktree
   }
-  /** Base branch a new `agent/*` branch starts from. Defaults to main. */
+  /** Base branch a new job branch starts from. Defaults to main. */
   baseBranch?: string
   log?: (msg: string) => void
 }

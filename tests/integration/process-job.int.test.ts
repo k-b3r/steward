@@ -197,8 +197,8 @@ describe('processJob', () => {
     expect(await listRuns(db, job.id)).toMatchObject([{ number: 1, slot: 0, outcome: 'done', failureKind: null }])
     expect(existsSync(join(runsDir, job.id, 'worktree'))).toBe(false)
     expect(await heldSlots(db)).toEqual([])
-    expect(git(repoPath, ['rev-parse', '--verify', 'refs/heads/agent/tst-ext-1']).trim()).toBe(
-      git(repoPath, ['rev-parse', 'agent/tst-ext-1']).trim(),
+    expect(git(repoPath, ['rev-parse', '--verify', 'refs/heads/TST-ext-1']).trim()).toBe(
+      git(repoPath, ['rev-parse', 'TST-ext-1']).trim(),
     )
   })
 
@@ -330,8 +330,8 @@ describe('processJob', () => {
   })
 
   describe('base and branch', () => {
-    // The job for externalId 'ext-1' gets the identifier TST-ext-1 and so the branch agent/tst-ext-1.
-    const BRANCH = 'agent/tst-ext-1'
+    // The job for externalId 'ext-1' gets the identifier TST-ext-1 and so the branch TST-ext-1.
+    const BRANCH = 'TST-ext-1'
 
     function pushToOrigin(file: string, body: string): string {
       const other = join(root, `other-${file}`)
@@ -586,7 +586,7 @@ describe('processJob', () => {
   it('treats a git failure as infra and retries', async () => {
     const job = await createJob()
     // Git refuses a branch that another worktree already has checked out.
-    git(repoPath, ['worktree', 'add', '-b', 'agent/tst-ext-1', join(root, 'elsewhere')])
+    git(repoPath, ['worktree', 'add', '-b', 'TST-ext-1', join(root, 'elsewhere')])
     const enqueued = makeQueue()
 
     await processJob(makeDeps({ queue: enqueued.queue }), job.id)

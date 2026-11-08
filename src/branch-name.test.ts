@@ -3,11 +3,15 @@ import { describe, expect, it } from 'vitest'
 import { branchName } from './branch-name'
 
 describe('branchName', () => {
-  it('puts the ticket identifier under agent/, lowercased', () => {
-    expect(branchName('INV-12')).toBe('agent/inv-12')
+  it('is the ticket identifier exactly as the tracker gave it', () => {
+    expect(branchName('INV-12')).toBe('INV-12')
+  })
+
+  it('keeps the case of the identifier', () => {
+    expect(branchName('Tst-ext-1')).toBe('Tst-ext-1')
   })
 
   it('replaces a character git does not allow in a branch name', () => {
-    expect(branchName('INV 12:x')).toBe('agent/inv-12-x')
+    expect(branchName('INV 12:x')).toBe('INV-12-x')
   })
 })
