@@ -245,7 +245,7 @@ src/
   bootstrap.ts       config, logger, pool: shared start-up
   platform/          config, logger, db pool, delay, git helpers, static file serving
   db/                Drizzle schema, store, migrations, intake queries
-  runner/            transcript writer, echo runner, and the Pi event mapper (no process, no clock)
+  runner/            transcript writer, echo runner (a stub), the Pi event mapper and the Pi argv builder
   worker/            process-job, the BullMQ queue, the start-up reconciler
   api/               Hono app, auth middleware, and the contract types
   composition/       wires config into the API and the worker
@@ -256,6 +256,7 @@ tests/
   fixtures/          synthetic tracker data
   integration/       needs TEST_DATABASE_URL
 deploy/
+  pi-image/          Containerfile for the agent image, and its README
   quadlet/           Podman Quadlet templates with @INSTANCE@ placeholders
   render.sh          renders the templates for one instance and port base
   render.test.sh     shell test for render.sh

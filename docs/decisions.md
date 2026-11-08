@@ -654,6 +654,42 @@ returned its number; `listOpenPrsForTicket("INV-77")` found it and `"INV-7"` fou
 `updatePrBody` changed the body. The PR was closed with `--delete-branch` and the temp clone
 deleted. Not in CI: it needs a real account and network.
 
+### 36. The agent runs in a rootless Podman container, argv built in one pure function
+
+`buildPiRunArgs` (`src/runner/pi-command.ts`) turns one job into the arguments after `podman`.
+Nothing calls it yet, and nothing reads env, the clock or the filesystem: the caller passes the
+paths, the limits and the variable names.
+
+`run --rm --name steward-<instance>-job-<jobId>-<runNumber> --userns=keep-id --cpus=<n>
+--memory=<n>m --pids-limit=<n> --cap-drop=ALL --security-opt=no-new-privileges`, the worktree at
+`/workspace` and this run's sessions at `/session` (both read-write), `-w /workspace`, one `-e
+NAME` per forwarded variable, the image, then `-p --mode json --session-dir /session`, `--model`
+when set, `--session <id>` when resuming, and the prompt last, after `--`.
+
+- `keep-id`, not `--user`: files the agent writes in the worktree stay owned by the host user, so
+  the orchestrator commits and removes it without a chown. `--rm` plus the per-attempt name leaves
+  no container behind and keeps two attempts apart.
+- `--cap-drop=ALL` and `no-new-privileges`: the agent needs no capabilities, and a setuid binary
+  in the image must not raise them.
+- No `--network=none`: the container must reach the model API. The boundary is the mounts and the
+  environment, not the network.
+- The environment is a list of NAMES (`-e ANTHROPIC_API_KEY`), never values, so no secret is in
+  the argument list or a file. Names must be upper case, and `GITHUB`, `GH_`, `LINEAR`, `SSH` and
+  `GIT_` are refused: the model key is the only credential allowed in. A GitHub token, a `GH_`
+  token or an SSH socket would let the agent push, open pull requests and write to the tracker from
+  inside the container, and `GIT_*` would let it rewrite its own author identity, while those
+  writes belong to the orchestrator alone (docs/security.md).
+- The image is pinned in `deploy/pi-image/Containerfile`: `node:22-bookworm-slim`, Pi 1.5.0 from
+  npm, pnpm 10, and the tag `steward-pi:1.5.0`. A new Pi version is a new tag, so its flags are read
+  before they are used.
+- `UNVERIFIED:` the Pi flags came from Pi 1.5.0 `docs/cli.md` and `pi --help` inside the image,
+  not from a run against a model. Verified on the box: the image builds with `podman build
+--network=host -t steward-pi:test deploy/pi-image`, `podman run --rm steward-pi:test --version`
+  prints `1.5.0`, and the flags with `--userns=keep-id` gave uid 1000 and left 1000:1000 files in
+  the mount. A plain `podman build` fails here at `apt-get update` with `Temporary failure
+resolving 'deb.debian.org'`: containers on this box have no working DNS (`/etc/resolv.conf`
+  carries 169.254.1.1), which is a box problem, not the Containerfile.
+
 ## Unverified
 
 Each item still needs a run on the box.
