@@ -536,6 +536,44 @@ branch, `reused`, failure `kind` and `reason`), never the environment or a secre
 - The transcript is a view, not the truth. A write that fails is logged and otherwise ignored, so a
   full disk or a bad folder can never fail or change a job.
 
+### 32. A Linear write client behind an allow list
+
+`src/linear-write.ts` is the first code that can write to Linear. Nothing calls it yet, so this
+changes no behaviour. It has two operations:
+
+- `moveToState(issueId, stateName)` refuses any `stateName` that is not in `allowedStatuses` before
+  any network call. The caller passes the parsed `ALLOWED_STATUSES`, so the config list is the guard.
+  It resolves the state id by name for `TEAM_KEY` (cached per writer), reads the issue's current
+  state, and returns `'already'` with no mutation when it matches. Otherwise it runs `issueUpdate`
+  and checks `success`.
+- `attachPullRequest(issueId, url, title)` lists the issue's attachments and returns `'already'`
+  when the url is there. Otherwise it runs `attachmentCreate` and checks `success`.
+
+Idempotence: every write is preceded by a read, so a repeated call does not write twice.
+
+Retry: 429 and 5xx, up to five tries, `Retry-After` honoured, otherwise `backoffDelayMs` from
+`src/retry-policy.ts` (exponential, 20% jitter, capped at 60 s). This reuses the pure function
+rather than copying it. `src/linear.ts` keeps its own copy of the status rule, so the copy count
+is two; extract the rule on the third use.
+
+Verified by read-only introspection on 2026-11-08 with the investing instance's key. No mutation
+was run.
+
+- Confirmed: `Mutation.issueUpdate(id: String!, input: IssueUpdateInput!)`,
+  `Mutation.attachmentCreate(input: AttachmentCreateInput!)`, `IssueUpdateInput.stateId`,
+  `AttachmentCreateInput.{issueId,url,title}`, `IssuePayload.success`, `AttachmentPayload.success`,
+  `Query.workflowStates` with `WorkflowStateFilter.{team,name}`, `StringComparator.eq`,
+  `TeamFilter.key`, `WorkflowState.id`, `Issue.state`, `Issue.attachments`,
+  `AttachmentConnection.nodes`, `Attachment.url`.
+- `UNVERIFIED:` the argument type of `Query.issue(id:)` (the code assumes `String!`), that `issue(id:)`
+  accepts an identifier such as `CRM-19`, and any real write.
+- `UNVERIFIED:` the attachment lookup reads only the first page, because the query takes no `first`.
+  A ticket with more attachments than one page could miss an existing url and get a duplicate.
+  Add paging before the first caller.
+
+Open for the maintainer: the 20% jitter band, the 60 s cap, and five tries are my choices, not
+taken from a measured Linear limit.
+
 ## Unverified
 
 Each item still needs a run on the box.
