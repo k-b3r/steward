@@ -91,9 +91,27 @@ Whichever is chosen, record it in `decisions.md` item 6 and align the name or th
 
 1. Build script, so the systemd units can start (`decisions.md` open item 1).
 2. Phase 2: the container runner, resume from `ci_failed`, handing a merge conflict to the agent.
-3. Phase 3: the validator.
-4. Phase 4: the claim, the draft PR, push, Linear writes with approval, notifications.
-5. Phase 5: the GitHub poller (reviews, checks, merge), which is what makes `ci_failed` meaningful,
+3. Show steward's own steps in a job's log. Today the transcript holds only the agent's lines, so
+   the slot, worktree, claim, validate and push steps show only as state changes. Write each step
+   as an `orchestrator` line (the transcript writer already supports the kind), so a person who
+   opens a running job sees every process.
+4. Show sub-agents in a job (after the Pi runner, before dashboard work on it). Today only the
+   pure policy exists (`src/subagent-policy.ts`); nothing records or displays a sub-agent. Steps:
+   - **Probe first.** Run Pi on a throwaway task, make it spawn a sub-agent, and record the event
+     shapes. Open: how the lead asks steward to spawn (custom tool, extension or Pi's own feature),
+     since steward spawns and reaps and the lead never does.
+   - **Record.** A `subagents` table: id, job, run, parent, depth, start, end, and the end reason
+     (done, or reaped for runtime, silence, tool timeout or job end).
+   - **Attribute.** Leaning to one transcript stream per run with an `agentId` and `parentId` on
+     each line, so `seq` stays one sequence. The alternative is one transcript per sub-agent.
+   - **Serve and show.** An API list of a run's sub-agents and an optional log filter by agent; a
+     dashboard tree on the job page with each one's status and reason, and a click filters the log.
+   - Decide and record it in `decisions.md` before the table is built.
+5. Phase 3: the validator.
+6. Phase 4: the claim, the draft PR, push, Linear writes with approval, notifications. Decided:
+   one daily digest of everything waiting on a person (proposals, drafts in review, failures)
+   instead of a reminder per item. `failed` still notifies once per new failure.
+7. Phase 5: the GitHub poller (reviews, checks, merge), which is what makes `ci_failed` meaningful,
    then retention and branch cleanup.
-6. Phase 6: the second agent adapter and the box-wide test semaphore, which is when the slots Redis
+8. Phase 6: the second agent adapter and the box-wide test semaphore, which is when the slots Redis
    (`REDIS_SLOT_URL`) is used for the first time.
