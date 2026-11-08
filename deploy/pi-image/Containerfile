@@ -1,0 +1,19 @@
+# The agent image one steward job runs in. Build it with:
+#   podman build -t steward-pi:1.5.0 deploy/pi-image
+# The job's git worktree is mounted at /workspace, this run's sessions at /session. The model
+# key arrives by name (`-e ANTHROPIC_API_KEY`), never baked into the image; see deploy/pi-image/README.md.
+FROM node:22-bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends bash ca-certificates git ripgrep \
+  && rm -rf /var/lib/apt/lists/*
+
+# Pi is pinned: the flags in src/runner/pi-command.ts are the ones this version documents.
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.5.0
+
+RUN npm install -g pnpm@10
+
+# No user is created: `--userns=keep-id` maps the host user into the container, so files the
+# agent writes in /workspace come out owned by whoever started the run.
+WORKDIR /workspace
+ENTRYPOINT ["pi"]
