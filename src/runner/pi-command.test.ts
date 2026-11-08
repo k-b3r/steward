@@ -30,6 +30,7 @@ describe('buildPiRunArgs', () => {
       '--pids-limit=512',
       '--cap-drop=ALL',
       '--security-opt=no-new-privileges',
+      '--network=slirp4netns',
       '-v',
       '/home/kim/steward-instances/personal/runs/BUY-41/1/worktree:/workspace:rw',
       '-v',
@@ -63,6 +64,7 @@ describe('buildPiRunArgs', () => {
       '--pids-limit=512',
       '--cap-drop=ALL',
       '--security-opt=no-new-privileges',
+      '--network=slirp4netns',
       '-v',
       '/home/kim/steward-instances/personal/runs/BUY-41/1/worktree:/workspace:rw',
       '-v',
@@ -100,7 +102,8 @@ describe('buildPiRunArgs', () => {
 
   it('keeps outbound network: the model API needs it', () => {
     // A container without network cannot reach the provider, so no --network=none.
-    expect(pi().some((arg) => arg.startsWith('--network'))).toBe(false)
+    expect(pi()).not.toContain('--network=none')
+    expect(pi()).not.toContain('--network=host')
   })
 
   it('is a pure function of its input', () => {
@@ -162,5 +165,11 @@ describe('buildPiRunArgs guards', () => {
     { pidsLimit: 2.5 },
   ])('refuses the limits %j', (bad) => {
     expect(() => pi({ limits: { ...BASE.limits, ...bad } })).toThrow(RangeError)
+  })
+
+  it('uses slirp4netns, never host networking or the default pasta', () => {
+    const args = buildPiRunArgs(BASE)
+    expect(args).toContain('--network=slirp4netns')
+    expect(args.filter((arg) => arg.startsWith('--network'))).toEqual(['--network=slirp4netns'])
   })
 })

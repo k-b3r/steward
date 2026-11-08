@@ -94,7 +94,7 @@ function assertInput(input: PiRunInput): void {
 
 /**
  * The `podman run` arguments for one Pi job. The container keeps outbound network (the model
- * API needs it), so there is no `--network=none`; the boundary is the mounts and the args.
+ * API needs it) through slirp4netns, so there is no `--network=none` and no host networking.
  */
 export function buildPiRunArgs(input: PiRunInput): string[] {
   assertInput(input)
@@ -112,6 +112,10 @@ export function buildPiRunArgs(input: PiRunInput): string[] {
     `--pids-limit=${input.limits.pidsLimit}`,
     '--cap-drop=ALL',
     '--security-opt=no-new-privileges',
+    // The model API needs outbound network. slirp4netns, not host networking: a host-networked
+    // container could reach steward's Postgres, Redis and API on 127.0.0.1. It is also not the
+    // default (pasta), which gets no traffic out on this box (verified 2026-11-08).
+    '--network=slirp4netns',
     '-v',
     `${worktreePath}:/workspace:rw`,
     '-v',

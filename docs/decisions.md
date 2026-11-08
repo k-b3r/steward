@@ -672,7 +672,12 @@ when set, `--session <id>` when resuming, and the prompt last, after `--`.
 - `--cap-drop=ALL` and `no-new-privileges`: the agent needs no capabilities, and a setuid binary
   in the image must not raise them.
 - No `--network=none`: the container must reach the model API. The boundary is the mounts and the
-  environment, not the network.
+  environment, not the network. `--network=slirp4netns`, not host networking and not the default:
+  a host-networked container could reach steward's Postgres, both Redis servers and the API on
+  `127.0.0.1`, and slirp4netns does not map the host loopback by default. The default rootless
+  backend here, pasta, passes no traffic (verified 2026-11-08: DNS and plain TCP to `1.1.1.1` time
+  out from a container, and both work with `--network=slirp4netns`). `UNVERIFIED:` why pasta fails
+  on this box (ufw allows outgoing and is not the cause; NordLayer is running).
 - The environment is a list of NAMES (`-e ANTHROPIC_API_KEY`), never values, so no secret is in
   the argument list or a file. Names must be upper case, and `GITHUB`, `GH_`, `LINEAR`, `SSH` and
   `GIT_` are refused: the model key is the only credential allowed in. A GitHub token, a `GH_`
