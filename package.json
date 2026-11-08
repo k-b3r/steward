@@ -37,7 +37,8 @@
       "src/intake-policy.ts",
       "src/subagent-policy.ts",
       "src/runs.ts",
-      "src/validation-policy.ts"
+      "src/validation-policy.ts",
+      "src/runner/pi-command.ts"
     ],
     "generatedPaths": [
       "src/db/migrations/**",
