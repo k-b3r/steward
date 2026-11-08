@@ -79,7 +79,7 @@ A person watches and acts through the Hono API (`src/api/`) and the dashboard (`
    - status `In Progress` → queue it, **except**:
      - first poll for a source (the baseline) → `proposed`, not run
      - more new `In Progress` tickets than `MAX_ENQUEUE_PER_POLL` in one poll → **all** of them
-       become `proposed` (all-or-nothing; this is open item 4)
+       become `proposed` (all-or-nothing; to be decided, `next-work.md` section 4)
    - status `Todo` or `Backlog` → `proposed`
    - any other status → skip
    - proposals stop once `MAX_OPEN_PROPOSALS` are open
