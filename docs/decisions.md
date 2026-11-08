@@ -676,8 +676,13 @@ when set, `--session <id>` when resuming, and the prompt last, after `--`.
   a host-networked container could reach steward's Postgres, both Redis servers and the API on
   `127.0.0.1`, and slirp4netns does not map the host loopback by default. The default rootless
   backend here, pasta, passes no traffic (verified 2026-11-08: DNS and plain TCP to `1.1.1.1` time
-  out from a container, and both work with `--network=slirp4netns`). `UNVERIFIED:` why pasta fails
-  on this box (ufw allows outgoing and is not the cause; NordLayer is running).
+  out from a container, and both work with `--network=slirp4netns`). `UNVERIFIED:` why pasta fails on this box. Checked 2026-11-08 (Ubuntu 26.04, kernel 7.0.0-43,
+  pasta 0.0~git20260120): pasta's own outbound TCP and UDP fail to every destination, including the
+  LAN gateway, in a Podman container, in the rootless netns and in a bare `pasta --config-net`; its ICMP works and
+  the host's own traffic works. Not the cause: DNS only, `ufw` (outgoing allowed), an AppArmor denial (none logged for
+  the pasta profile), NordLayer (running, not connected), a Tailscale exit node (none). The next step needs root:
+  `sudo tcpdump -ni wlp0s20f3 host 1.1.1.1` during `pasta --config-net -- curl -m5 http://1.1.1.1` to see
+  whether the SYN leaves the machine.
 - The environment is a list of NAMES (`-e ANTHROPIC_API_KEY`), never values, so no secret is in
   the argument list or a file. Names must be upper case, and `GITHUB`, `GH_`, `LINEAR`, `SSH` and
   `GIT_` are refused: the model key is the only credential allowed in. A GitHub token, a `GH_`
