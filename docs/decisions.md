@@ -470,6 +470,52 @@ decision 7 and the worktree rule.
   starts a new branch named for the ticket.
 - Case matters to git: `INV-12` and `inv-12` are two branches.
 
+### 30. Pi's JSON stream is mapped by a pure function, not by the runner
+
+`src/runner/pi-events.ts` reads `pi --mode json` output (Pi 1.5.0, `docs/json.md`). It starts no
+process, reads no clock and does no I/O, so the mapping is tested from fixtures and the runner
+that follows only wires a pipe to it.
+
+- `createPiLineSplitter()` splits on LF only and strips one preceding CR. Node's `readline` also
+  splits on U+2028 and U+2029, which are legal inside a JSON string, so a message containing them
+  would be cut in half. A Buffer chunk goes through a UTF-8 decoder that holds a character split
+  across chunks; `flush()` returns a last line that arrived without LF.
+- `mapPiLine(line)` parses one record and returns `{ type: 'event', kind, event }`, `{ type:
+'skip' }` or `{ type: 'invalid', reason }`. It never throws, and `event` is the record exactly as
+  parsed, because the transcript stores the agent event unmodified and the raw line beside it.
+
+| Pi record                                                      | Transcript `kind` |
+| -------------------------------------------------------------- | ----------------- |
+| `session` (the header)                                         | `system`          |
+| `message_end`, message role `assistant`                        | `assistant`       |
+| `message_end`, message role `assistant`, `stopReason: "error"` | `error`           |
+| `message_end`, message role `toolResult`                       | `tool`            |
+| `agent_settled`, `aborted: false`                              | `result`          |
+| `agent_settled`, `aborted: true`                               | `error`           |
+| anything else, and blank lines                                 | skipped           |
+
+- One record carries one tool result, so the result envelope comes from `message_end`, not from
+  `turn_end.toolResults`, which repeats the same messages and would double every result.
+- An assistant message whose `stopReason` is `aborted` stays `assistant`: the `agent_settled`
+  record that ends the run already produces the `error` envelope.
+- `turn_end` is mapped to `skip` but `countTurn(record)` reports it, so a runner can enforce a
+  turn cap without reading the stream twice.
+- The default is skip, so a record type added by a newer Pi cannot break a run. It is not
+  recorded as `invalid` either; only unusable JSON is.
+
+Not yet checked against a real run:
+
+- `UNVERIFIED:` That every tool result arrives as a `message_end` with `role: "toolResult"`. The
+  docs list tool results on `turn_end` and show a `toolResult` message type, but the event sequence
+  example has no tool call. If a real run shows results only in `turn_end.toolResults`, emit them
+  there and drop the `message_end` branch.
+- `UNVERIFIED:` That Pi writes no more than one tool result per `message_end`. The mapper returns
+  one envelope per record, so a batched result would need a list instead.
+- `UNVERIFIED:` That `agent_settled` is always the last record of a one-shot run, with `aborted`
+  present. A record without the flag is skipped and the run would end with no `result` envelope.
+- `UNVERIFIED:` That the session header (`type: "session"`) is the first record in `-p --mode
+json` output and carries `id`, since `sessionIdFromHeader` reads only that field.
+
 ## Unverified
 
 Each item still needs a run on the box.
