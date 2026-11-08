@@ -14,4 +14,13 @@ describe('branchName', () => {
   it('replaces a character git does not allow in a branch name', () => {
     expect(branchName('INV 12:x')).toBe('INV-12-x')
   })
+
+  it('drops a leading dash, which git would read as an option', () => {
+    expect(branchName('-INV-12')).toBe('INV-12')
+    expect(branchName('--INV-12')).toBe('INV-12')
+  })
+
+  it('throws when no name is left', () => {
+    expect(() => branchName(' -: ')).toThrow(/no usable branch name/)
+  })
 })
