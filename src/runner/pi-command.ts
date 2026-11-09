@@ -39,13 +39,14 @@ export type PiRunInput = {
   model?: string
 }
 
-// Same shape as the config's instance name, plus the length cap on the container name.
-const INSTANCE = /^[a-z][a-z0-9-]{0,30}$/
-const JOB_ID = /^[A-Za-z0-9-]+$/
+// Same shape as the config's instance name, plus the length cap on the container name. Shared with
+// the validation argv builder (src/validate-command.ts): both build a Podman argv.
+export const INSTANCE = /^[a-z][a-z0-9-]{0,30}$/
+export const JOB_ID = /^[A-Za-z0-9-]+$/
 const ENV_NAME = /^[A-Z][A-Z0-9_]*$/
 // The image reference and the Pi model share a shape: a letter or digit first, then letters, digits
 // and `._/:@-`. Starting with a letter or digit keeps either one from reading as an option.
-const IMAGE_OR_MODEL = /^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/
+export const IMAGE_OR_MODEL = /^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
 // The agent container's only credential is the model key. Everything else is refused by default:
@@ -59,13 +60,13 @@ export const MODEL_KEY_ENV_NAMES: readonly string[] = ['OPENCODE_API_KEY', 'ANTH
 const FORBIDDEN_EXTRA_PREFIXES = ['GH_', 'GIT_', 'SSH_']
 const FORBIDDEN_EXTRA_PARTS = ['GITHUB', 'LINEAR', 'DATABASE', 'REDIS', 'STEWARD', 'TOKEN', 'SECRET', 'PASSWORD']
 
-function assertPattern(field: string, value: string, pattern: RegExp, expected: string): void {
+export function assertPattern(field: string, value: string, pattern: RegExp, expected: string): void {
   if (!pattern.test(value)) {
     throw new RangeError(`${field} must be ${expected}, got ${JSON.stringify(value)}`)
   }
 }
 
-function assertPath(field: string, value: string): void {
+export function assertPath(field: string, value: string): void {
   if (!value.startsWith('/')) {
     throw new RangeError(`${field} must be an absolute path, got ${JSON.stringify(value)}`)
   }
@@ -75,7 +76,7 @@ function assertPath(field: string, value: string): void {
   }
 }
 
-function assertPositiveInteger(field: string, value: number): void {
+export function assertPositiveInteger(field: string, value: number): void {
   if (!Number.isInteger(value) || value < 1) {
     throw new RangeError(`${field} must be a positive integer, got ${String(value)}`)
   }
