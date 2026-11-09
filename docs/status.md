@@ -44,8 +44,8 @@ Counts move with every pull request, so run `pnpm check`, `pnpm test:integration
   poll is a baseline, and a burst over `MAX_ENQUEUE_PER_POLL` becomes proposals too.
 - A pure sub-agent policy (`src/subagent-policy.ts`): spawn limits and when steward must stop an
   agent. Nothing spawns one yet.
-- A pure validation policy (`src/validation-policy.ts`): config and the diff rules. Nothing runs
-  the commands yet.
+- A pure validation policy (`src/validation-policy.ts`): config, the diff rules and the retry
+  decision. Nothing runs the commands yet.
 
 ### Data and queue
 

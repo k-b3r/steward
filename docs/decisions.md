@@ -595,6 +595,22 @@ pushed. It reads no file and runs no command: the caller passes in the diff. Not
     or its old path. Adding one is fine.
   - `lockfile-without-manifest`: a lockfile changed, and no `package.json` changed in the same diff.
 
+### 34. The validation retry decision
+
+The retry rules for `src/validation-policy.ts`, after the config and diff rules in
+decision 33 above. `decideValidation` takes the command results and the violations from one
+run and returns pass, retry or fail.
+
+- Pass only when every command exits 0 without timing out and there are no violations.
+- Retry: a failing command, or a `too-large` or `lockfile-without-manifest` violation. Attempt 1 is
+  the first run. Retry while `attempt <= maxRetries` (default 2, 0 to 5), so three runs at most.
+- The feedback gives each failing command's exit code and last 40 lines, then the violations. It is
+  capped at 8000 characters, cutting the oldest output first.
+- Never retried: `forbidden-path` and `contract-test-changed`. The run fails at once with kind
+  `agent`. Why: a retry hands the violation back to the agent, which then has a reason to rework the
+  diff until the check no longer sees it (delete the test, move the secret). Rules the agent could
+  fix by changing its code keep the retry. Rules it must not work around do not get one.
+
 ## Unverified
 
 Each item still needs a run on the box.
