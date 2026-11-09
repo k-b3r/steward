@@ -97,7 +97,7 @@ Counts move with every pull request, so run `pnpm check`, `pnpm test:integration
 
 | Area                                            | State                           |
 | ----------------------------------------------- | ------------------------------- |
-| Real agent run in a container                   | not started (phase 2)           |
+| Real agent run in a container                   | runner built (phase 2)          |
 | Validator: typecheck, lint, test, diff policy   | rules only (phase 3)            |
 | Claim, empty commit, draft PR, push             | building blocks, not wired yet  |
 | Linear writes, notifications                    | not started (phase 4)           |

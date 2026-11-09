@@ -53,8 +53,8 @@ interface AgentRunner {
 
 - `WorkFeed` is the only way work enters the system. The tracker adapter implements it.
 - A status reporter (tracker and chat writes) is added in phase 4, when something implements it.
-- `AgentRunner` starts, resumes and cancels one agent run. The echo runner is built
-  (`src/runner/echo.ts`) and stands in for a real agent. The container runner is phase 2.
+- `AgentRunner` starts, resumes and cancels one agent run. The Pi runner (`src/runner/pi.ts`,
+  decision TBD-pi-runner) is built but not wired yet; `src/runner/echo.ts` stays the stand-in.
 
 ## Job states and transitions
 
@@ -160,9 +160,10 @@ The startup reconciler runs before the worker takes new work:
 
 ## Transcripts
 
-Each run has its own folder: `~/steward-instances/<instance>/runs/<job-id>/<run-number>/`, mode 0700. A retry or a resume is a new run, so each execution's transcript stays apart and `seq`
-restarts at 1 in each. A job that ran before runs existed keeps its flat
-`runs/<job-id>/transcript.jsonl`, and the API still serves it when the job has no runs.
+Each run has its own folder: `~/steward-instances/<instance>/runs/<job-id>/<run-number>/`, mode 0700. A retry is a new run, so each attempt's transcript stays apart and `seq` restarts at 1 in
+each. A resume re-runs the same Pi session and appends to the run's transcript, so `seq` continues.
+A job that ran before runs existed keeps its flat `runs/<job-id>/transcript.jsonl`, which the API
+still serves when the job has no runs.
 
 - `transcript.jsonl`: one envelope per line, `{ seq, ts, kind, data }`. `kind` is one of
   `system`, `assistant`, `tool`, `result`, `error`, `orchestrator`. `seq` increases
