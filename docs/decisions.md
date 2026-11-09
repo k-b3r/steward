@@ -722,7 +722,7 @@ when set, `--session <id>` when resuming, and the prompt last, after `--`.
   that build step alone; never for `podman run`, where host networking would expose the host
   loopback.
 
-### TBD-pi-runner. The Pi runner
+### 37. The Pi runner
 
 `src/runner/pi.ts` implements `AgentRunner` over `buildPiRunArgs` and the event mapper. Nothing wires
 it in yet (`bootstrap.ts`, `src/composition/` and `process-job.ts` untouched), so the echo runner
