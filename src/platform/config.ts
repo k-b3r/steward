@@ -9,6 +9,7 @@ const SECRET_KEYS = [
   'REDIS_SLOT_URL',
   'LINEAR_API_KEY',
   'API_TOKEN',
+  'PI_API_KEY',
 ] as const
 
 const SECRET_KEY_SET: ReadonlySet<string> = new Set(SECRET_KEYS)
@@ -46,7 +47,26 @@ export type Config = {
   /** Tracker statuses the orchestrator may move a ticket into. */
   ALLOWED_STATUSES: string[]
   RUNS_DIR: string
+  /** Which agent runner the worker builds: `echo` (the stub) or `pi` (the real agent). */
+  RUNNER: RunnerKind
+  /** Pi image the agent container runs, pinned by tag. */
+  PI_IMAGE: string
+  /** Pi model pattern, e.g. `opencode-go/deepseek-v4.1-flash`. Unset uses Pi's own default. */
+  PI_MODEL?: string
+  /** Assistant turns one Pi run may take before it is stopped. */
+  PI_TURN_CAP: number
+  /** Wall-clock limit for one agent container. */
+  PI_TIMEOUT_MS: number
+  /** The model provider's key, passed into the agent container by name only. Never logged. */
+  PI_API_KEY?: string
+  /** Open a draft pull request as the claim, before the agent starts. */
+  CLAIM_ENABLED: boolean
+  /** Run the config's checks after the agent and before any push. */
+  VALIDATION_ENABLED: boolean
 }
+
+const RUNNER_KINDS = ['echo', 'pi'] as const
+type RunnerKind = (typeof RUNNER_KINDS)[number]
 
 function parseInteger(value: unknown): unknown {
   if (typeof value === 'number') return value
@@ -98,11 +118,15 @@ function parseStatuses(value: unknown): unknown {
     .filter((entry) => entry !== '')
 }
 
-function parseDryRun(value: unknown): unknown {
-  if (value === undefined) return true
+function parseBoolean(value: unknown, fallback: boolean): unknown {
+  if (value === undefined) return fallback
   if (value === 'true' || value === '1' || value === true) return true
   if (value === 'false' || value === '0' || value === false) return false
   return value
+}
+
+function parseDryRun(value: unknown): unknown {
+  return parseBoolean(value, true)
 }
 
 function pick(name: string, env: Record<string, string | undefined>, file: Record<string, unknown>): unknown {
@@ -176,6 +200,23 @@ const configSchema = z.object({
   ),
   ALLOWED_STATUSES: z.preprocess(parseStatuses, z.array(z.string().min(1)).min(1)),
   RUNS_DIR: z.string().min(1, 'must not be empty'),
+  RUNNER: z.enum(RUNNER_KINDS).default('echo'),
+  PI_IMAGE: z.preprocess(
+    (value) => (value === undefined || value === '' ? 'steward-pi:1.5.0' : value),
+    z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/, 'must be an image reference, not an option'),
+  ),
+  PI_MODEL: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/, 'must be a model pattern, not an option')
+      .optional(),
+  ),
+  PI_TURN_CAP: integerField({ min: 1, max: 500, fallback: 40 }),
+  PI_TIMEOUT_MS: integerField({ min: 10_000, max: 3_600_000, fallback: 20 * 60 * 1000 }),
+  PI_API_KEY: z.preprocess((value) => (value === '' ? undefined : value), z.string().min(1).optional()),
+  CLAIM_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
+  VALIDATION_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
 })
 
 /**
@@ -226,6 +267,14 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     DASHBOARD_DIR: pick('DASHBOARD_DIR', env, file),
     ALLOWED_STATUSES: pick('ALLOWED_STATUSES', env, file),
     RUNS_DIR: explicitRunsDir ?? defaultRunsDir,
+    RUNNER: pick('RUNNER', env, file),
+    PI_IMAGE: pick('PI_IMAGE', env, file),
+    PI_MODEL: pick('PI_MODEL', env, file),
+    PI_TURN_CAP: pick('PI_TURN_CAP', env, file),
+    PI_TIMEOUT_MS: pick('PI_TIMEOUT_MS', env, file),
+    PI_API_KEY: pick('PI_API_KEY', env, file),
+    CLAIM_ENABLED: pick('CLAIM_ENABLED', env, file),
+    VALIDATION_ENABLED: pick('VALIDATION_ENABLED', env, file),
   }
 
   const parsed = configSchema.safeParse(raw)
@@ -241,6 +290,9 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
   const config = parsed.data
   if (config.REDIS_QUEUE_URL === config.REDIS_SLOT_URL) {
     throw new Error('REDIS_QUEUE_URL and REDIS_SLOT_URL must point to different Redis instances')
+  }
+  if (config.RUNNER === 'pi' && config.PI_API_KEY === undefined) {
+    throw new Error('PI_API_KEY must be set when RUNNER=pi: the agent container needs the model key')
   }
   return config
 }

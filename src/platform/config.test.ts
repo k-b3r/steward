@@ -10,6 +10,7 @@ const SECRET_KEYS = [
   'REDIS_SLOT_URL',
   'LINEAR_API_KEY',
   'API_TOKEN',
+  'PI_API_KEY',
 ]
 
 const BASE_ENV: Record<string, string> = {
@@ -56,6 +57,44 @@ describe('loadConfig', () => {
     expect(config.MAX_ATTEMPTS).toBe(3)
     expect(config.DRY_RUN).toBe(true)
     expect(config.RUNS_DIR).toBe('/home/you/steward-instances/personal/runs')
+  })
+
+  it('defaults to the echo runner with the claim and validation off', () => {
+    const config = loadConfig(env())
+
+    expect(config.RUNNER).toBe('echo')
+    expect(config.PI_IMAGE).toBe('steward-pi:1.5.0')
+    expect(config.PI_MODEL).toBeUndefined()
+    expect(config.PI_TURN_CAP).toBe(40)
+    expect(config.PI_TIMEOUT_MS).toBe(20 * 60 * 1000)
+    expect(config.CLAIM_ENABLED).toBe(false)
+    expect(config.VALIDATION_ENABLED).toBe(false)
+  })
+
+  it('refuses the pi runner without a model key, and accepts one with it', () => {
+    expect(errorMessage(() => loadConfig(env({ RUNNER: 'pi' })))).toContain('PI_API_KEY must be set')
+
+    const config = loadConfig(env({ RUNNER: 'pi', PI_API_KEY: 'sk-test-0123456789', PI_MODEL: 'opencode-go/x' }))
+
+    expect(config.RUNNER).toBe('pi')
+    expect(config.PI_API_KEY).toBe('sk-test-0123456789')
+    expect(config.PI_MODEL).toBe('opencode-go/x')
+  })
+
+  it('refuses an unknown runner and values that could read as options', () => {
+    expect(errorMessage(() => loadConfig(env({ RUNNER: 'claude' })))).toContain('RUNNER')
+    expect(errorMessage(() => loadConfig(env({ PI_IMAGE: '--privileged' })))).toContain('PI_IMAGE')
+    expect(errorMessage(() => loadConfig(env({ RUNNER: 'pi', PI_API_KEY: 'k', PI_MODEL: '-x' })))).toContain('PI_MODEL')
+  })
+
+  it('redacts the model key and never prints it in an error', () => {
+    const config = loadConfig(env({ RUNNER: 'pi', PI_API_KEY: 'sk-secret-0123456789' }))
+
+    expect(redactConfig(config).PI_API_KEY).toBe('[REDACTED]')
+    const message = errorMessage(() =>
+      loadConfig(env({ RUNNER: 'pi', PI_API_KEY: 'sk-secret-0123456789', PI_TURN_CAP: 'x' })),
+    )
+    expect(message).not.toContain('sk-secret-0123456789')
   })
 
   it('coerces numeric strings and trims origins', () => {
@@ -254,7 +293,7 @@ describe('loadConfig', () => {
   })
 
   it('redacts every secret in redactConfig and leaves the rest intact', () => {
-    const config = loadConfig(env())
+    const config = loadConfig(env({ PI_API_KEY: 'sk-redaction-0123456789' }))
     const redacted = redactConfig(config)
 
     for (const key of SECRET_KEYS) {
@@ -274,6 +313,7 @@ describe('loadConfig', () => {
       config.REDIS_SLOT_URL,
       config.LINEAR_API_KEY,
       config.API_TOKEN,
+      config.PI_API_KEY,
     ]) {
       expect(secret).toBeDefined()
       expect(serialized).not.toContain(secret as string)
