@@ -763,6 +763,50 @@ stays the stand-in. Effects are injected, so the rules are tested from fixtures.
   that run's transcript (`seq` continues). A retry is still a new run. Unknown session: `agent`.
 - `cancel` writes `cancelled`, kills the child and runs `podman kill`; no active child, nothing.
 
+### 38. The validation executor
+
+The executor for the policy in decisions 33 and 34. `src/validate-git.ts` and
+`src/validate-command.ts` are pure, like `src/validation-policy.ts`; `src/validate.ts` does the I/O
+through an injected `Exec` (git), `RunExec` (Podman), `clock`, `sleep` and `redact`. Nothing calls it
+yet; the phase-4 worker wires it in.
+
+- **The diff.** `collectChangedFiles` runs `git -C <worktree> add -A`, then
+  `git diff --cached -M --name-status -z <baseRef>` and `--numstat -z`, and joins them into
+  `ChangedFile[]`. `git add -A` writes the worktree's own index and nothing else: the orchestrator
+  commits and pushes, and staging is what brings an untracked file the agent created into the diff
+  the policy judges. `-z` fields are NUL-separated, so a path with a space, a tab or a newline stays
+  one path. A rename (`R100\0old\0new\0`) is judged on both paths, a copy is an addition of the new
+  path, and any other code (`T` included) is a modification; a record cut short throws, and a binary
+  file counts as 0/0. `--userns=keep-id` leaves the worktree owned by the host user, so no
+  `safe.directory` entry is needed.
+- **The checks.** One container per command, in config order, with the image, caps and slirp4netns
+  network of the agent container (decision 36) plus `--entrypoint sh`, since the image's entrypoint
+  is Pi. The name is `steward-<instance>-check-<jobId>-<runNumber>-<index>` and the command is one
+  argument after `-c`, so `&&`, pipes and quotes in the config's `run` stay intact.
+- **No `-e` at all.** The agent container forwards the model key by allowlist; a check gets no
+  environment variable whatsoever. It runs after the agent had free rein in the worktree, so nothing
+  it prints should be able to carry a credential.
+- **In order, stopping at the first failure.** A later check would only add noise to the one that
+  broke, and a skipped check is not reported, so `decideValidation` sees exactly what ran. Each
+  check has its own timeout (`timeoutSec`, default 600); on a timeout the executor runs
+  `podman kill <name>`, which is why the name is unique per check, and reports `timedOut: true` with
+  the killed run's exit code (137); if the attached run still never returns, the check reports -1
+  after a 10 second grace instead of hanging the job.
+- **The tail is redacted and then cut to the last 64 KB**, so a secret split by the cut never
+  survives; `redact` is injected, so the composition root decides what a secret is. Time is injected
+  too: the executor polls `clock` and waits on `sleep`, so the tests need no fake timers.
+- **A forbidden path or a changed contract test skips the checks.** Those rules fail at once whatever
+  the attempt (decision 34), and the checks are commands the agent itself wrote. Otherwise
+  `decideValidation` runs with the config's `maxRetries`, and `validateWorktree` returns the decision
+  with the results and the violations, which is everything the job log needs.
+
+Verified on the box on 2026-11-09 with a throwaway `tsx` script, the real adapters and
+`steward-pi:1.5.0`: `node --version` and `pnpm --version` in a copy of an instance checkout returned
+exit 0 and `v22.23.4` / `10.34.9` in config order; `sleep 30` with `timeoutSec: 3` came back
+`exitCode 137`, `timedOut: true`, with no container left behind; `collectChangedFiles` read a
+synthetic repo's real `-z` diff correctly (a rename, a binary file, a space and a newline in paths).
+Not in CI: it needs Podman.
+
 ## Unverified
 
 Each item still needs a run on the box.
