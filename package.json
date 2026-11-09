@@ -36,7 +36,8 @@
       "src/retry-policy.ts",
       "src/intake-policy.ts",
       "src/subagent-policy.ts",
-      "src/runs.ts"
+      "src/runs.ts",
+      "src/validation-policy.ts"
     ],
     "generatedPaths": [
       "src/db/migrations/**",
