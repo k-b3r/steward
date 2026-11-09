@@ -33,8 +33,8 @@ function config(overrides: Partial<Config> = {}): Config {
     PI_IMAGE: 'steward-pi:1.5.0',
     PI_TURN_CAP: 40,
     PI_TIMEOUT_MS: 1_200_000,
-    PI_API_KEY: 'sk-model-0123456789',
-    PI_API_KEY_ENV: 'OPENCODE_API_KEY',
+    PI_MODEL_API_KEY: 'sk-model-0123456789',
+    PI_MODEL_API_KEY_ENV: 'OPENCODE_API_KEY',
     CLAIM_ENABLED: false,
     VALIDATION_ENABLED: false,
     ...overrides,
@@ -44,13 +44,13 @@ function config(overrides: Partial<Config> = {}): Config {
 describe('runnerEnv', () => {
   it('maps the model key to the provider variable name, and nothing else', () => {
     expect(runnerEnv(config())).toEqual({ OPENCODE_API_KEY: 'sk-model-0123456789' })
-    expect(runnerEnv(config({ PI_API_KEY_ENV: 'ANTHROPIC_API_KEY' }))).toEqual({
+    expect(runnerEnv(config({ PI_MODEL_API_KEY_ENV: 'ANTHROPIC_API_KEY' }))).toEqual({
       ANTHROPIC_API_KEY: 'sk-model-0123456789',
     })
   })
 
   it('is empty when no key is configured, as with the echo runner', () => {
-    expect(runnerEnv(config({ PI_API_KEY: undefined, RUNNER: 'echo' }))).toEqual({})
+    expect(runnerEnv(config({ PI_MODEL_API_KEY: undefined, RUNNER: 'echo' }))).toEqual({})
   })
 })
 

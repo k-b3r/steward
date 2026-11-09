@@ -10,7 +10,7 @@ const SECRET_KEYS = [
   'REDIS_SLOT_URL',
   'LINEAR_API_KEY',
   'API_TOKEN',
-  'PI_API_KEY',
+  'PI_MODEL_API_KEY',
 ]
 
 const BASE_ENV: Record<string, string> = {
@@ -72,33 +72,39 @@ describe('loadConfig', () => {
   })
 
   it('refuses the pi runner without a model key, and accepts one with it', () => {
-    expect(errorMessage(() => loadConfig(env({ RUNNER: 'pi' })))).toContain('PI_API_KEY must be set')
+    expect(errorMessage(() => loadConfig(env({ RUNNER: 'pi' })))).toContain('PI_MODEL_API_KEY must be set')
 
-    const config = loadConfig(env({ RUNNER: 'pi', PI_API_KEY: 'sk-test-0123456789', PI_MODEL: 'opencode-go/x' }))
+    const config = loadConfig(env({ RUNNER: 'pi', PI_MODEL_API_KEY: 'sk-test-0123456789', PI_MODEL: 'opencode-go/x' }))
 
     expect(config.RUNNER).toBe('pi')
-    expect(config.PI_API_KEY).toBe('sk-test-0123456789')
+    expect(config.PI_MODEL_API_KEY).toBe('sk-test-0123456789')
     expect(config.PI_MODEL).toBe('opencode-go/x')
   })
 
   it('maps the model key to a provider variable the container allowlist accepts', () => {
-    expect(loadConfig(env()).PI_API_KEY_ENV).toBe('OPENCODE_API_KEY')
-    expect(loadConfig(env({ PI_API_KEY_ENV: 'ANTHROPIC_API_KEY' })).PI_API_KEY_ENV).toBe('ANTHROPIC_API_KEY')
-    expect(errorMessage(() => loadConfig(env({ PI_API_KEY_ENV: 'DATABASE_URL' })))).toContain('PI_API_KEY_ENV')
+    expect(loadConfig(env()).PI_MODEL_API_KEY_ENV).toBe('OPENCODE_API_KEY')
+    expect(loadConfig(env({ PI_MODEL_API_KEY_ENV: 'ANTHROPIC_API_KEY' })).PI_MODEL_API_KEY_ENV).toBe(
+      'ANTHROPIC_API_KEY',
+    )
+    expect(errorMessage(() => loadConfig(env({ PI_MODEL_API_KEY_ENV: 'DATABASE_URL' })))).toContain(
+      'PI_MODEL_API_KEY_ENV',
+    )
   })
 
   it('refuses an unknown runner and values that could read as options', () => {
     expect(errorMessage(() => loadConfig(env({ RUNNER: 'claude' })))).toContain('RUNNER')
     expect(errorMessage(() => loadConfig(env({ PI_IMAGE: '--privileged' })))).toContain('PI_IMAGE')
-    expect(errorMessage(() => loadConfig(env({ RUNNER: 'pi', PI_API_KEY: 'k', PI_MODEL: '-x' })))).toContain('PI_MODEL')
+    expect(errorMessage(() => loadConfig(env({ RUNNER: 'pi', PI_MODEL_API_KEY: 'k', PI_MODEL: '-x' })))).toContain(
+      'PI_MODEL',
+    )
   })
 
   it('redacts the model key and never prints it in an error', () => {
-    const config = loadConfig(env({ RUNNER: 'pi', PI_API_KEY: 'sk-secret-0123456789' }))
+    const config = loadConfig(env({ RUNNER: 'pi', PI_MODEL_API_KEY: 'sk-secret-0123456789' }))
 
-    expect(redactConfig(config).PI_API_KEY).toBe('[REDACTED]')
+    expect(redactConfig(config).PI_MODEL_API_KEY).toBe('[REDACTED]')
     const message = errorMessage(() =>
-      loadConfig(env({ RUNNER: 'pi', PI_API_KEY: 'sk-secret-0123456789', PI_TURN_CAP: 'x' })),
+      loadConfig(env({ RUNNER: 'pi', PI_MODEL_API_KEY: 'sk-secret-0123456789', PI_TURN_CAP: 'x' })),
     )
     expect(message).not.toContain('sk-secret-0123456789')
   })
@@ -299,7 +305,7 @@ describe('loadConfig', () => {
   })
 
   it('redacts every secret in redactConfig and leaves the rest intact', () => {
-    const config = loadConfig(env({ PI_API_KEY: 'sk-redaction-0123456789' }))
+    const config = loadConfig(env({ PI_MODEL_API_KEY: 'sk-redaction-0123456789' }))
     const redacted = redactConfig(config)
 
     for (const key of SECRET_KEYS) {
@@ -319,7 +325,7 @@ describe('loadConfig', () => {
       config.REDIS_SLOT_URL,
       config.LINEAR_API_KEY,
       config.API_TOKEN,
-      config.PI_API_KEY,
+      config.PI_MODEL_API_KEY,
     ]) {
       expect(secret).toBeDefined()
       expect(serialized).not.toContain(secret as string)

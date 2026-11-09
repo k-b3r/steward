@@ -11,7 +11,7 @@ const SECRET_KEYS = [
   'REDIS_SLOT_URL',
   'LINEAR_API_KEY',
   'API_TOKEN',
-  'PI_API_KEY',
+  'PI_MODEL_API_KEY',
 ] as const
 
 const SECRET_KEY_SET: ReadonlySet<string> = new Set(SECRET_KEYS)
@@ -59,10 +59,15 @@ export type Config = {
   PI_TURN_CAP: number
   /** Wall-clock limit for one agent container. */
   PI_TIMEOUT_MS: number
-  /** The model provider's key, passed into the agent container by name only. Never logged. */
-  PI_API_KEY?: string
-  /** The variable name the container reads the key from. One of the runner's allowlist. */
-  PI_API_KEY_ENV: string
+  /**
+   * The model provider's API key: the LLM credential the agent uses to think, for example an
+   * OpenCode Go key (which serves DeepSeek) or an Anthropic key. It is the only credential the agent
+   * container receives, passed by name and never logged. Not the Linear key and not the GitHub token:
+   * those stay on the host.
+   */
+  PI_MODEL_API_KEY?: string
+  /** The provider's own variable name the container reads that key from, e.g. `OPENCODE_API_KEY`. */
+  PI_MODEL_API_KEY_ENV: string
   /** Open a draft pull request as the claim, before the agent starts. */
   CLAIM_ENABLED: boolean
   /** Run the config's checks after the agent and before any push. */
@@ -218,10 +223,11 @@ const configSchema = z.object({
   ),
   PI_TURN_CAP: integerField({ min: 1, max: 500, fallback: 40 }),
   PI_TIMEOUT_MS: integerField({ min: 10_000, max: 3_600_000, fallback: 20 * 60 * 1000 }),
-  PI_API_KEY: z.preprocess((value) => (value === '' ? undefined : value), z.string().min(1).optional()),
+  // The LLM provider key. Required by RUNNER=pi; unset is fine for the echo runner.
+  PI_MODEL_API_KEY: z.preprocess((value) => (value === '' ? undefined : value), z.string().min(1).optional()),
   // Pi reads the key from the provider's own variable, so the config key is mapped to one of the
   // names the container allowlist accepts (src/runner/pi-command.ts, MODEL_KEY_ENV_NAMES).
-  PI_API_KEY_ENV: z.preprocess(
+  PI_MODEL_API_KEY_ENV: z.preprocess(
     (value) => (value === undefined || value === '' ? 'OPENCODE_API_KEY' : value),
     z.enum(MODEL_KEY_ENV_NAMES as [string, ...string[]]),
   ),
@@ -282,8 +288,8 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     PI_MODEL: pick('PI_MODEL', env, file),
     PI_TURN_CAP: pick('PI_TURN_CAP', env, file),
     PI_TIMEOUT_MS: pick('PI_TIMEOUT_MS', env, file),
-    PI_API_KEY: pick('PI_API_KEY', env, file),
-    PI_API_KEY_ENV: pick('PI_API_KEY_ENV', env, file),
+    PI_MODEL_API_KEY: pick('PI_MODEL_API_KEY', env, file),
+    PI_MODEL_API_KEY_ENV: pick('PI_MODEL_API_KEY_ENV', env, file),
     CLAIM_ENABLED: pick('CLAIM_ENABLED', env, file),
     VALIDATION_ENABLED: pick('VALIDATION_ENABLED', env, file),
   }
@@ -302,8 +308,11 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
   if (config.REDIS_QUEUE_URL === config.REDIS_SLOT_URL) {
     throw new Error('REDIS_QUEUE_URL and REDIS_SLOT_URL must point to different Redis instances')
   }
-  if (config.RUNNER === 'pi' && config.PI_API_KEY === undefined) {
-    throw new Error('PI_API_KEY must be set when RUNNER=pi: the agent container needs the model key')
+  if (config.RUNNER === 'pi' && config.PI_MODEL_API_KEY === undefined) {
+    throw new Error(
+      'PI_MODEL_API_KEY must be set when RUNNER=pi: the agent container needs the model provider key ' +
+        '(the LLM API key, for example an OpenCode Go key)',
+    )
   }
   return config
 }
