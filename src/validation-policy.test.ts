@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { type ChangedFile, checkDiff, globMatch, parseValidationConfig } from './validation-policy'
+import {
+  type ChangedFile,
+  checkDiff,
+  type CommandResult,
+  decideValidation,
+  globMatch,
+  parseValidationConfig,
+  type ValidationInput,
+} from './validation-policy'
 
 const COMMAND = { name: 'typecheck', run: 'pnpm typecheck' }
 
@@ -10,6 +18,14 @@ function policy() {
 
 function file(path: string, overrides: Partial<ChangedFile> = {}): ChangedFile {
   return { path, status: 'M', added: 1, deleted: 0, ...overrides }
+}
+
+function result(name: string, overrides: Partial<CommandResult> = {}): CommandResult {
+  return { name, exitCode: 0, timedOut: false, outputTail: '', ...overrides }
+}
+
+function input(overrides: Partial<ValidationInput> = {}): ValidationInput {
+  return { results: [result('typecheck')], violations: [], attempt: 1, maxRetries: 2, ...overrides }
 }
 
 describe('parseValidationConfig', () => {
@@ -339,5 +355,147 @@ describe('checkDiff', () => {
       ['contract-test-changed', 'z.contract.test.ts'],
       ['lockfile-without-manifest', 'pnpm-lock.yaml'],
     ])
+  })
+})
+
+describe('decideValidation', () => {
+  it('passes when every command exits 0 and nothing is violated', () => {
+    expect(decideValidation(input({ results: [result('typecheck'), result('lint')] }))).toEqual({ action: 'pass' })
+  })
+
+  it('retries on a non-zero exit and feeds the failure back', () => {
+    const decision = decideValidation(
+      input({ results: [result('typecheck', { exitCode: 2, outputTail: 'error TS2322: bad type' })] }),
+    )
+
+    expect(decision.action).toBe('retry')
+    if (decision.action !== 'retry') return
+    expect(decision.feedback).toContain('`typecheck`')
+    expect(decision.feedback).toContain('code 2')
+    expect(decision.feedback).toContain('error TS2322: bad type')
+  })
+
+  it('retries on a timeout even when the exit code is 0', () => {
+    const decision = decideValidation(input({ results: [result('test', { timedOut: true, exitCode: 0 })] }))
+
+    expect(decision.action).toBe('retry')
+    if (decision.action !== 'retry') return
+    expect(decision.feedback).toContain('`test` timed out')
+  })
+
+  it('retries on a diff violation that may be fixed', () => {
+    const decision = decideValidation(
+      input({ violations: [{ rule: 'too-large', detail: '900 changed lines, the limit is 800' }] }),
+    )
+
+    expect(decision.action).toBe('retry')
+    if (decision.action !== 'retry') return
+    expect(decision.feedback).toContain('too-large')
+    expect(decision.feedback).toContain('900 changed lines')
+  })
+
+  it('leaves out the passing commands from the feedback', () => {
+    const decision = decideValidation(
+      input({ results: [result('lint'), result('typecheck', { exitCode: 1, outputTail: 'boom' })] }),
+    )
+
+    expect(decision.action).toBe('retry')
+    if (decision.action !== 'retry') return
+    expect(decision.feedback).toContain('typecheck')
+    expect(decision.feedback).not.toContain('lint')
+  })
+
+  it('keeps the last 40 lines of a failing command output', () => {
+    const outputTail = Array.from({ length: 100 }, (_, i) => `line ${i + 1}`).join('\n')
+    const decision = decideValidation(input({ results: [result('typecheck', { exitCode: 1, outputTail })] }))
+
+    expect(decision.action).toBe('retry')
+    if (decision.action !== 'retry') return
+    expect(decision.feedback).toContain('line 100')
+    expect(decision.feedback).toContain('line 61')
+    expect(decision.feedback).not.toContain('line 60')
+  })
+
+  it('stops retrying after the last allowed retry', () => {
+    const failing = [result('typecheck', { exitCode: 1 })]
+
+    expect(decideValidation(input({ results: failing, attempt: 1, maxRetries: 2 })).action).toBe('retry')
+    expect(decideValidation(input({ results: failing, attempt: 2, maxRetries: 2 })).action).toBe('retry')
+    expect(decideValidation(input({ results: failing, attempt: 3, maxRetries: 2 }))).toEqual({
+      action: 'fail',
+      kind: 'agent',
+      reason: expect.stringContaining('after 3 runs'),
+    })
+  })
+
+  it('fails at once when no retries are allowed', () => {
+    const decision = decideValidation(input({ results: [result('typecheck', { exitCode: 1 })], maxRetries: 0 }))
+
+    expect(decision.action).toBe('fail')
+  })
+
+  it('never retries a forbidden path, even with retries left', () => {
+    const decision = decideValidation(
+      input({
+        results: [result('typecheck', { exitCode: 1 })],
+        violations: [{ rule: 'forbidden-path', path: '.env', detail: '.env matches a forbidden path' }],
+        attempt: 1,
+        maxRetries: 2,
+      }),
+    )
+
+    expect(decision).toEqual({ action: 'fail', kind: 'agent', reason: expect.stringContaining('.env') })
+  })
+
+  it('never retries a changed contract test', () => {
+    const decision = decideValidation(
+      input({
+        violations: [{ rule: 'contract-test-changed', path: 'src/a.contract.test.ts', detail: 'M on a contract test' }],
+      }),
+    )
+
+    expect(decision.action).toBe('fail')
+    if (decision.action !== 'fail') return
+    expect(decision.kind).toBe('agent')
+    expect(decision.reason).toContain('contract-test-changed')
+  })
+
+  it('rejects an attempt below 1 or a negative maxRetries', () => {
+    expect(() => decideValidation(input({ attempt: 0 }))).toThrow(RangeError)
+    expect(() => decideValidation(input({ maxRetries: -1 }))).toThrow(RangeError)
+  })
+
+  it('caps the feedback at 8000 characters and cuts the oldest output first', () => {
+    const block = (tag: string) =>
+      Array.from({ length: 40 }, (_, i) =>
+        i === 0 ? `${tag}-START` : i === 39 ? `${tag}-END` : 'x'.repeat(1000),
+      ).join('\n')
+    const decision = decideValidation(
+      input({
+        results: [
+          result('first', { exitCode: 1, outputTail: block('A') }),
+          result('second', { exitCode: 1, outputTail: block('B') }),
+        ],
+      }),
+    )
+
+    expect(decision.action).toBe('retry')
+    if (decision.action !== 'retry') return
+    expect(decision.feedback.length).toBeLessThanOrEqual(8000)
+    expect(decision.feedback).toContain('B-END')
+    expect(decision.feedback).not.toContain('A-START')
+  })
+
+  it('caps the feedback even when the violations alone are too long', () => {
+    const violations = Array.from({ length: 300 }, (_, i) => ({
+      rule: 'too-large' as const,
+      detail: `${i} ${'y'.repeat(100)}`,
+    }))
+    const decision = decideValidation(input({ violations }))
+
+    expect(decision.action).toBe('retry')
+    if (decision.action !== 'retry') return
+    expect(decision.feedback.length).toBeLessThanOrEqual(8000)
+    expect(decision.feedback).toContain('truncated')
   })
 })

@@ -1,5 +1,6 @@
-// Pure validation policy: which diff rules an agent's worktree must pass before its work may be
-// pushed. No process, no I/O, no clock: the caller reads the diff and passes the files in.
+// Pure validation policy: which checks an agent's worktree must pass before its work may be
+// pushed, and whether a failure goes back to the agent. No process, no I/O, no clock: the caller
+// runs the commands and reads the diff, then passes the results in.
 
 import { z } from 'zod'
 
@@ -36,6 +37,25 @@ type DiffRule = 'too-large' | 'forbidden-path' | 'contract-test-changed' | 'lock
 
 export type DiffViolation = { rule: DiffRule; path?: string; detail: string }
 
+export type CommandResult = {
+  name: string
+  exitCode: number
+  timedOut: boolean
+  /** The end of the command's combined output. */
+  outputTail: string
+}
+
+export type ValidationInput = {
+  results: CommandResult[]
+  violations: DiffViolation[]
+  /** The run being judged. The first run is 1. */
+  attempt: number
+  maxRetries: number
+}
+
+export type ValidationDecision =
+  { action: 'pass' } | { action: 'retry'; feedback: string } | { action: 'fail'; kind: 'agent'; reason: string }
+
 const DEFAULT_MAX_CHANGED_LINES = 800
 const DEFAULT_MAX_RETRIES = 2
 const DEFAULT_FORBIDDEN_PATHS = [
@@ -49,10 +69,17 @@ const DEFAULT_FORBIDDEN_PATHS = [
 ]
 const DEFAULT_ALLOWED_PATHS = ['.env.example', '**/.env.example']
 
+const FEEDBACK_CAP = 8000
+const FEEDBACK_TRUNCATED = '\n[feedback truncated]'
+const TAIL_LINES = 40
+
 const LOCKFILES: ReadonlySet<string> = new Set(['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock'])
 const MANIFEST = 'package.json'
 const CONTRACT_TEST_SUFFIX = '.contract.test.ts'
 const GENERATED_SUFFIX = '.generated.ts'
+
+/** Rules that fail at once: feeding them back would invite the agent to hide the change. */
+const NEVER_RETRIED: ReadonlySet<DiffRule> = new Set(['forbidden-path', 'contract-test-changed'])
 
 const nonBlank = (label: string) =>
   z.string().refine((value) => value.trim().length > 0, { message: `${label} must not be blank` })
@@ -224,4 +251,106 @@ export function checkDiff(files: readonly ChangedFile[], policy: DiffPolicy): Di
   }
 
   return violations
+}
+
+const isFailing = (result: CommandResult): boolean => result.exitCode !== 0 || result.timedOut
+
+function describeViolation(violation: DiffViolation): string {
+  return violation.path === undefined
+    ? `${violation.rule}: ${violation.detail}`
+    : `${violation.rule} (${violation.path}): ${violation.detail}`
+}
+
+/** The last lines of an output, oldest first. */
+function tailLines(outputTail: string): string[] {
+  const trimmed = outputTail.replace(/\s+$/, '')
+  if (trimmed === '') return []
+  return trimmed.split('\n').slice(-TAIL_LINES)
+}
+
+type FeedbackBlock = { header: string; original: number; lines: string[] }
+
+function buildFeedback(failing: CommandResult[], violations: DiffViolation[]): string {
+  const blocks: FeedbackBlock[] = failing.map((result) => {
+    const lines = tailLines(result.outputTail)
+    const outcome = result.timedOut ? 'timed out' : `exited with code ${result.exitCode}`
+    return { header: `Command \`${result.name}\` ${outcome}:`, original: lines.length, lines }
+  })
+
+  const render = (): string => {
+    const parts = ['Validation failed. Fix these problems, then keep the rest of the work.']
+    for (const block of blocks) {
+      parts.push('', block.header)
+      if (block.lines.length > 0) parts.push(...block.lines)
+      else parts.push(block.original === 0 ? '(no output)' : '(output cut to fit)')
+    }
+    if (violations.length > 0) {
+      parts.push('', 'Diff rules:', ...violations.map((violation) => `- ${describeViolation(violation)}`))
+    }
+    return parts.join('\n')
+  }
+
+  // Drop the oldest output first: the earliest command's earliest line, until the text fits.
+  let text = render()
+  while (text.length > FEEDBACK_CAP) {
+    const oldest = blocks.find((block) => block.lines.length > 0)
+    if (!oldest) break
+    oldest.lines.shift()
+    text = render()
+  }
+
+  return text.length <= FEEDBACK_CAP
+    ? text
+    : `${text.slice(0, FEEDBACK_CAP - FEEDBACK_TRUNCATED.length)}${FEEDBACK_TRUNCATED}`
+}
+
+/**
+ * Decides what happens after a validation run.
+ *
+ * - A `forbidden-path` or `contract-test-changed` violation fails at once, whatever the attempt.
+ * - Pass only when every command exits 0 without timing out and there are no violations.
+ * - Otherwise retry while `attempt <= maxRetries`. `attempt` counts from 1, so `maxRetries: 2`
+ *   allows three runs in total.
+ * - Otherwise fail with kind `agent`.
+ *
+ * The retry `feedback` is plain text: each failing command with its exit code and the last 40 lines
+ * of its output, then each violation. It is capped at 8000 characters, cutting the oldest output first.
+ */
+export function decideValidation(input: ValidationInput): ValidationDecision {
+  if (!Number.isInteger(input.attempt) || input.attempt < 1) {
+    throw new RangeError(`attempt must be an integer >= 1, got ${input.attempt}`)
+  }
+  if (!Number.isInteger(input.maxRetries) || input.maxRetries < 0) {
+    throw new RangeError(`maxRetries must be an integer >= 0, got ${input.maxRetries}`)
+  }
+
+  const neverRetried = input.violations.filter((violation) => NEVER_RETRIED.has(violation.rule))
+  if (neverRetried.length > 0) {
+    return {
+      action: 'fail',
+      kind: 'agent',
+      reason: `never retried: ${neverRetried.map(describeViolation).join('; ')}`,
+    }
+  }
+
+  const failing = input.results.filter(isFailing)
+  if (failing.length === 0 && input.violations.length === 0) {
+    return { action: 'pass' }
+  }
+
+  if (input.attempt <= input.maxRetries) {
+    return { action: 'retry', feedback: buildFeedback(failing, input.violations) }
+  }
+
+  const problems = [
+    ...failing.map((result) =>
+      result.timedOut ? `${result.name} timed out` : `${result.name} exit ${result.exitCode}`,
+    ),
+    ...input.violations.map((violation) => violation.rule),
+  ]
+  return {
+    action: 'fail',
+    kind: 'agent',
+    reason: `still failing after ${input.attempt} runs: ${problems.join(', ')}`,
+  }
 }
