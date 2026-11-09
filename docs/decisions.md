@@ -722,6 +722,47 @@ when set, `--session <id>` when resuming, and the prompt last, after `--`.
   that build step alone; never for `podman run`, where host networking would expose the host
   loopback.
 
+### TBD-pi-runner. The Pi runner
+
+`src/runner/pi.ts` implements `AgentRunner` over `buildPiRunArgs` and the event mapper. Nothing wires
+it in yet (`bootstrap.ts`, `src/composition/` and `process-job.ts` untouched), so the echo runner
+stays the stand-in. Effects are injected, so the rules are tested from fixtures.
+
+- `start` opens `runs/<jobId>/<runNumber>/`, creates `session/` (0700), writes `started`, and runs
+  `podman` with the worktree at `/workspace` and the session at `/session`. stdout goes through the
+  splitter and mapper (`writeAgent` per event, `invalid agent line` for unusable JSON); the session
+  id comes from the header.
+- `buildPrompt(job)`: ticket identifier and title, the body cut at 4000 characters, then the rules
+  (work only in `/workspace`, smallest change, no `git push`, no `.env*` or `.github/`, local
+  commits allowed, one-paragraph summary). `Job` gained an optional `body`, filled by `toJob`.
+- The last 4096 stderr characters become a synthetic `error` envelope on failure; its raw line is
+  that envelope's JSON, so `raw.jsonl` stays one record per line. `writeAgent` stores agent data
+  unmodified, so stderr is redacted before writing; key values never reach argv or the transcript.
+
+`infra` retries with backoff, `agent` does not.
+
+| What happened                                            | Kind      |
+| -------------------------------------------------------- | --------- |
+| spawn of `podman` throws                                 | `infra`   |
+| run timeout                                              | `infra`   |
+| exited 0 but the stream carried no `agent_settled`       | `infra`   |
+| exited 0, settled, no error                              | success   |
+| exited 0, settled, assistant `message_end` with an error | see below |
+| exited non-zero, error text absent or a provider hiccup  | `infra`   |
+| exited non-zero, error that is not a provider hiccup     | `agent`   |
+| `agent_settled` with `aborted: true`                     | `agent`   |
+| turn cap passed                                          | `agent`   |
+| cancelled                                                | `agent`   |
+
+- A provider hiccup is overloaded, rate limit, 429, an HTTP 5xx, a timeout or ECONN. Pi used its own
+  retries first, so steward tries a fresh container. Any other error repeats itself and is `agent`.
+  An aborted settle wins over the text: `aborted.jsonl` says `529 overloaded` and is still `agent`.
+- Defaults: turn cap 40, timeout 20 minutes (a cancellable race with the injected `sleep`); either
+  one kills the child and the container.
+- `resume` re-runs the same run number with `--session <id>`, writes `resumed`, and appends to
+  that run's transcript (`seq` continues). A retry is still a new run. Unknown session: `agent`.
+- `cancel` writes `cancelled`, kills the child and runs `podman kill`; no active child, nothing.
+
 ## Unverified
 
 Each item still needs a run on the box.
