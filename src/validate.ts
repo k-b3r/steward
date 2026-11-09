@@ -1,5 +1,5 @@
 // The validation executor: stages the worktree, reads the diff into the policy's shape and runs the
-// config's checks in the Pi image. Nothing calls it yet (docs/decisions.md, TBD-validate-exec).
+// config's checks in the Pi image. Nothing calls it yet (docs/decisions.md, decision 38).
 
 import type { Exec } from './platform/github'
 import { assertPath } from './runner/pi-command'
