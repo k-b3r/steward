@@ -54,7 +54,7 @@ interface AgentRunner {
 - `WorkFeed` is the only way work enters the system. The tracker adapter implements it.
 - A status reporter (tracker and chat writes) is added in phase 4, when something implements it.
 - `AgentRunner` starts, resumes and cancels one agent run. The Pi runner (`src/runner/pi.ts`,
-  decision TBD-pi-runner) is built but not wired yet; `src/runner/echo.ts` stays the stand-in.
+  decision 37) is built but not wired yet; `src/runner/echo.ts` stays the stand-in.
 
 ## Job states and transitions
 
