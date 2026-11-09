@@ -674,16 +674,19 @@ when set, `--session <id>` when resuming, and the prompt last, after `--`.
 - No `--network=none`: the container must reach the model API. The boundary is the mounts and the
   environment, not the network. `--network=slirp4netns`, not host networking and not the default:
   a host-networked container could reach steward's Postgres, both Redis servers and the API on
-  `127.0.0.1`, and slirp4netns does not map the host loopback by default. The default rootless
-  backend here, pasta, passes no traffic (verified 2026-11-08: DNS and plain TCP to `1.1.1.1` time
-  out from a container, and both work with `--network=slirp4netns`). `UNVERIFIED:` the root cause of the pasta failure on this box. Checked 2026-11-08 (Ubuntu 26.04,
-  kernel 7.0.0-43, pasta 0.0~git20260120): pasta's own outbound TCP and UDP fail to every destination, including the
-  LAN gateway, in a Podman container, in the rootless netns and in a bare `pasta --config-net`; its ICMP and the
-  host's own traffic work. `strace` shows pasta's host-side socket gets `connect()` = `EINPROGRESS` after a
-  `bind()` that fails with `EADDRNOTAVAIL`, yet `tcpdump -i any` sees no packet on any interface, so the SYN is
-  dropped inside the kernel. Not the cause: DNS only, `ufw` or any nft rule (the only matched drops are
-  input and forward policy and broadcast skips; output is accept), AppArmor (no denial logged), NordLayer (not
-  connected), a Tailscale exit node (none). Left open: a pasta or kernel 7.0 bug. Retest after a pasta or kernel update.
+  `127.0.0.1`, and slirp4netns does not map the host loopback by default.
+  - The default rootless backend here, pasta, passes no traffic (verified 2026-11-08: DNS and
+    plain TCP to `1.1.1.1` time out from a container, and both work with
+    `--network=slirp4netns`). `UNVERIFIED:` the root cause of the pasta failure on this box.
+    Checked 2026-11-08 (Ubuntu 26.04, kernel 7.0.0-43, pasta 0.0~git20260120): pasta's own
+    outbound TCP and UDP fail to every destination, including the LAN gateway, in a Podman
+    container, in the rootless netns and in a bare `pasta --config-net`; its ICMP and the host's
+    own traffic work. `strace` shows pasta's host-side socket gets `connect()` = `EINPROGRESS`
+    after a `bind()` that fails with `EADDRNOTAVAIL`, yet `tcpdump -i any` sees no packet on any
+    interface, so the SYN is dropped inside the kernel. Not the cause: DNS only, `ufw` or any nft
+    rule (the only matched drops are input and forward policy and broadcast skips; output is
+    accept), AppArmor (no denial logged), NordLayer (not connected), a Tailscale exit node (none).
+    Left open: a pasta or kernel 7.0 bug. Retest after a pasta or kernel update.
 - The environment is a list of NAMES (`-e ANTHROPIC_API_KEY`), never values, so no secret is in
   the argument list or a file. Names must be upper case, and they must be on an ALLOWLIST: the
   model keys `OPENCODE_API_KEY` and `ANTHROPIC_API_KEY` (`MODEL_KEY_ENV_NAMES`), plus any name the
@@ -694,21 +697,30 @@ when set, `--session <id>` when resuming, and the prompt last, after `--`.
   `DATABASE`, `REDIS`, `STEWARD`, `TOKEN`, `SECRET` or `PASSWORD`. The agent container's only
   credential is the model key. A GitHub token, an SSH socket or a git identity would let the agent
   push, open pull requests, write to the tracker or rewrite its own author, and those writes belong
-  to the orchestrator alone (docs/security.md).
+  to the orchestrator alone (docs/security.md). The name filter is a backstop, not a guarantee: it
+  cannot catch a credential whose name says nothing, like `DB_PASS` or `AWS_ACCESS_KEY_ID`. So
+  `extraAllowedEnv` must stay empty in the wiring PR, and a name goes in only with a reason
+  recorded there.
 - The image reference must start with a letter or digit and use only `A-Za-z0-9._/:@-`, so a
-  value like `--privileged` cannot be read as a podman option. The prompt is protected by `--`.
+  value like `--privileged` cannot be read as a podman option. The Pi `model` follows `--model`
+  and `resumeSessionId` follows `--session`, and Pi decides whether a leading `-` is a flag, so
+  both use the same rule (`resumeSessionId` allows `A-Za-z0-9._-` after its first character). The
+  prompt is protected by `--`.
 - The image is pinned in `deploy/pi-image/Containerfile`: `node:22-bookworm-slim`, Pi 1.5.0 from
   npm, pnpm 10, and the tag `steward-pi:1.5.0`. A new Pi version is a new tag, so its flags are read
   before they are used.
 - The Pi flags `-p --mode json --session-dir /session --model` were checked against a real run on
   2026-11-08 with `opencode-go/deepseek-v4.1-flash`, which passed them (`tests/fixtures/pi/real-run.jsonl`,
   on branch `pi-event-mapper`). `UNVERIFIED:` `--session <id>` (resume) is not yet checked by a run.
-  The flags first came from Pi 1.5.0 `docs/cli.md` and `pi --help`. Verified on the box: the image builds with `podman build
---network=host -t steward-pi:test deploy/pi-image`, `podman run --rm steward-pi:test --version`
-  prints `1.5.0`, and the flags with `--userns=keep-id` gave uid 1000 and left 1000:1000 files in
-  the mount. A plain `podman build` fails here at `apt-get update` with `Temporary failure
-resolving 'deb.debian.org'`: containers on this box have no working DNS (`/etc/resolv.conf`
-  carries 169.254.1.1), which is a box problem, not the Containerfile.
+  The flags first came from Pi 1.5.0 `docs/cli.md` and `pi --help`. Verified on the box: the image
+  builds with `podman build --network=slirp4netns -t steward-pi:test deploy/pi-image`,
+  `podman run --rm steward-pi:test --version` prints `1.5.0`, and the flags with `--userns=keep-id`
+  gave uid 1000 and left 1000:1000 files in the mount. A plain `podman build` fails here at
+  `apt-get update` with `Temporary failure resolving 'deb.debian.org'`: containers on this box have
+  no working DNS (`/etc/resolv.conf` carries 169.254.1.1), which is a box problem, not the
+  Containerfile. If slirp4netns fails for a build, `podman build --network=host` is the fallback for
+  that build step alone; never for `podman run`, where host networking would expose the host
+  loopback.
 
 ## Unverified
 

@@ -195,6 +195,31 @@ describe('buildPiRunArgs guards', () => {
     },
   )
 
+  // `model` follows `--model`, so Pi decides whether a leading dash is a flag or a value.
+  it.each(['-x', '--help', '--model', ' anthropic/claude-sonnet-5-5', 'anthropic/claude sonnet', ''])(
+    'refuses the model %j, which Pi could read as a flag or is malformed',
+    (model) => {
+      expect(() => pi({ model })).toThrow(RangeError)
+    },
+  )
+
+  it('accepts a provider/model pattern', () => {
+    expect(pi({ model: 'opencode-go/deepseek-v4.1-flash' })).toContain('opencode-go/deepseek-v4.1-flash')
+  })
+
+  it.each(['-x', '--session', '-01J8Z3Q4X0', ' 01J8Z3Q4X0', '01J8Z3Q4X0 ', '01J8Z3/Q4', ''])(
+    'refuses the resume session id %j, which Pi could read as a flag or is malformed',
+    (resumeSessionId) => {
+      expect(() => pi({ resumeSessionId })).toThrow(RangeError)
+    },
+  )
+
+  it('accepts a uuid as the resume session id', () => {
+    expect(pi({ resumeSessionId: '0193f2c1-7b4e-7a3c-9d21-6f8b0e5a2c47' })).toContain(
+      '0193f2c1-7b4e-7a3c-9d21-6f8b0e5a2c47',
+    )
+  })
+
   it.each(['runs/BUY-41/worktree', './worktree'])('refuses the relative worktree path %s', (path) => {
     expect(() => pi({ worktreePath: path })).toThrow(RangeError)
   })
