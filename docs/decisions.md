@@ -584,7 +584,7 @@ pushed. It reads no file and runs no command: the caller passes in the diff. Not
   `maxRetries` 2 (0 to 5).
 - Diff rules (`checkDiff`), in this order:
   - `too-large`: added and deleted lines together exceed `maxChangedLines`. Lockfiles, paths
-    containing `/generated/` and `*.generated.ts` do not count.
+    under a `generated/` directory (top level or nested) and `*.generated.ts` do not count.
   - `forbidden-path`: a changed path matches `forbiddenPaths` and no `allowedPaths` glob. Matches on
     add, modify and delete. A rename is checked on its new and its old path; the violation names
     the path that matched. Defaults: `.env`, `.env.*`, the same two at any depth

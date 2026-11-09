@@ -190,6 +190,22 @@ describe('checkDiff', () => {
     expect(checkDiff(files, policy()).map((v) => v.rule)).not.toContain('too-large')
   })
 
+  it('leaves a generated/ directory out of the line count at the top level too', () => {
+    const files = [
+      file('generated/client.ts', { added: 3000, deleted: 0 }),
+      file('src/a.ts', { added: 10, deleted: 0 }),
+    ]
+
+    expect(checkDiff(files, policy())).toEqual([])
+    expect(checkDiff([file('generated/client.ts', { added: 801, deleted: 0 })], policy())).toEqual([])
+  })
+
+  it('still counts a file that only mentions generated/ in its name', () => {
+    expect(checkDiff([file('src/generated-notes.ts', { added: 801, deleted: 0 })], policy())).toEqual([
+      { rule: 'too-large', detail: '801 changed lines, the limit is 800' },
+    ])
+  })
+
   it('reports forbidden paths, but not the allowed .env.example', () => {
     const violations = checkDiff(
       [

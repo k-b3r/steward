@@ -137,7 +137,7 @@ const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
 function countsTowardSize(path: string): boolean {
   return (
     !LOCKFILES.has(baseName(path)) &&
-    !path.includes('/generated/') &&
+    !(path.startsWith('generated/') || path.includes('/generated/')) &&
     !path.endsWith(GENERATED_SUFFIX)
   )
 }
