@@ -45,7 +45,8 @@ Counts move with every pull request, so run `pnpm check`, `pnpm test:integration
 - A pure sub-agent policy (`src/subagent-policy.ts`): spawn limits and when steward must stop an
   agent. Nothing spawns one yet.
 - A pure validation policy (`src/validation-policy.ts`): config, the diff rules and the retry
-  decision. Nothing runs the commands yet.
+  decision. Its executor (`src/validate.ts`, with `src/validate-git.ts` and `src/validate-command.ts`)
+  exists and nothing calls it yet.
 
 ### Data and queue
 
@@ -98,7 +99,7 @@ Counts move with every pull request, so run `pnpm check`, `pnpm test:integration
 | Area                                            | State                           |
 | ----------------------------------------------- | ------------------------------- |
 | Real agent run in a container                   | runner built (phase 2)          |
-| Validator: typecheck, lint, test, diff policy   | rules only (phase 3)            |
+| Validator: typecheck, lint, test, diff policy   | executor, not wired (phase 3)   |
 | Claim, empty commit, draft PR, push             | building blocks, not wired yet  |
 | Linear writes, notifications                    | not started (phase 4)           |
 | GitHub poller: reviews, comments, checks, merge | not started (phase 5)           |
@@ -157,7 +158,7 @@ touch Linear or GitHub.
 
 ### Later
 
-- Phase 3: validator, retries at most 2.
+- Phase 3: wire the validator into the worker, retries at most 2.
 - Phase 4: claim, draft PR, push, Linear writes with approval, notifications, `jobs.branch`,
   a git identity check before every push.
 - Phase 5: GitHub poller, retention sweep (`RUN_RETENTION_DAYS`), branch cleanup.

@@ -238,6 +238,9 @@ src/
   runs.ts            pure rules for when a run opens, closes and how it ended
   subagent-policy.ts pure sub-agent spawn limits and reap rules
   validation-policy.ts pure validator: diff rules, retry or fail after a run
+  validate-git.ts    pure diff parsers: name-status and numstat records
+  validate-command.ts pure argv for one validation check in the Pi image
+  validate.ts        the validation executor: stage, read the diff, run the checks, decide
   types.ts           WorkItem, Job, JobState, FailureKind, the interfaces
   intake.ts          one poll: read the tracker, apply the policy, write jobs
   linear.ts          WorkFeed implementation: the Linear client (read only)
