@@ -78,8 +78,11 @@ const MANIFEST = 'package.json'
 const CONTRACT_TEST_SUFFIX = '.contract.test.ts'
 const GENERATED_SUFFIX = '.generated.ts'
 
-/** Rules that fail at once: feeding them back would invite the agent to hide the change. */
-const NEVER_RETRIED: ReadonlySet<DiffRule> = new Set(['forbidden-path', 'contract-test-changed'])
+/**
+ * Rules that fail at once: feeding them back would invite the agent to hide the change. The executor
+ * also skips the checks for them, since running the agent's own commands cannot rescue such a diff.
+ */
+export const NEVER_RETRIED: ReadonlySet<DiffRule> = new Set(['forbidden-path', 'contract-test-changed'])
 
 const nonBlank = (label: string) =>
   z.string().refine((value) => value.trim().length > 0, { message: `${label} must not be blank` })
