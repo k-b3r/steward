@@ -10,7 +10,8 @@ import { createJobQueue } from './worker/queue'
 /** First retry waits 30 s; the delay doubles up to 10 minutes. */
 export const BACKOFF: BackoffOptions = { baseMs: 30_000, maxMs: 600_000 }
 
-function secretsOf(config: Config): string[] {
+/** Config values that must never appear in a log line or a transcript step. */
+export function secretsOf(config: Config): string[] {
   return [
     config.DATABASE_URL,
     config.TEST_DATABASE_URL,

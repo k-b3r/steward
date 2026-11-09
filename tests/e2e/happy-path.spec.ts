@@ -439,13 +439,37 @@ describe.skipIf(redisUrl === undefined)('steward, phase 1: from a tracker ticket
     const runDir = join(runsDir, job.id, '1')
     expect(readdirSync(runDir).sort()).toEqual(['raw.jsonl', 'transcript.jsonl'])
     const envelopes = readTranscript(runDir, 0)
+    // The worker writes its own steps as `orchestrator` lines, in the order they happened, so a
+    // person watching a run sees the whole story and not only the agent's events between them.
     expect(envelopes.map((envelope) => [envelope.seq, envelope.kind])).toEqual([
-      [1, 'orchestrator'],
-      [2, 'system'],
-      [3, 'assistant'],
-      [4, 'result'],
+      [1, 'orchestrator'], // claiming
+      [2, 'orchestrator'], // base fetched
+      [3, 'orchestrator'], // worktree ready
+      [4, 'orchestrator'], // running
+      [5, 'orchestrator'], // started (the echo runner announces itself)
+      [6, 'system'],
+      [7, 'assistant'],
+      [8, 'result'],
+      [9, 'orchestrator'], // finished
+      [10, 'orchestrator'], // worktree removed
+      [11, 'orchestrator'], // slot released
     ])
-    expect(envelopes[2]?.data).toMatchObject({ message: { content: [{ type: 'text', text: 'echo TST-1' }] } })
+    const steps = envelopes
+      .filter((envelope) => envelope.kind === 'orchestrator')
+      .map((envelope) => (envelope.data as { msg: string }).msg)
+    expect(steps).toEqual([
+      'claiming',
+      'base fetched',
+      'worktree ready',
+      'running',
+      'started',
+      'finished',
+      'worktree removed',
+      'slot released',
+    ])
+    expect(envelopes[2]?.data).toMatchObject({ msg: 'worktree ready', branch: 'TST-1', reused: false })
+    const assistant = envelopes.find((envelope) => envelope.kind === 'assistant')
+    expect(assistant?.data).toMatchObject({ message: { content: [{ type: 'text', text: 'echo TST-1' }] } })
 
     // Git: the branch stays (a retry continues it); the worktree was removed in `finally`.
     expect(git(repoPath, 'branch', '--list', 'TST-1')).toContain('TST-1')
