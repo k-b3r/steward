@@ -107,6 +107,7 @@ export function parseValidationConfig(input: unknown): ValidationConfig {
 /**
  * True when `path` matches `pattern`. `*` matches within one segment, `?` one character other than
  * `/`, `**` any run of characters, and `**` plus a slash zero or more directories. Paths are relative and use `/`.
+ * Character classes such as `[ab]` are not supported: `[` and `]` match literally.
  */
 export function globMatch(pattern: string, path: string): boolean {
   let source = ''
