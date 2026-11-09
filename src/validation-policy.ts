@@ -92,7 +92,7 @@ const configSchema = z.object({
 
 /**
  * Parses and validates a validation config. Defaults: `maxChangedLines` 800, `maxRetries` 2,
- * `forbiddenPaths` as in the docs, `allowedPaths` `['.env.example']`.
+ * `forbiddenPaths` as in the docs, `allowedPaths` `.env.example` at the root and at any depth.
  * Throws an Error that lists every problem, each with its path in the config.
  */
 export function parseValidationConfig(input: unknown): ValidationConfig {
