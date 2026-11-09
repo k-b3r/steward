@@ -574,6 +574,26 @@ was run.
 Open for the maintainer: the 20% jitter band, the 60 s cap, and five tries are my choices, not
 taken from a measured Linear limit.
 
+### 33. The validation policy
+
+Phase 3 starts with its rules. `src/validation-policy.ts` decides whether an agent's work may be
+pushed. It reads no file and runs no command: the caller passes in the diff. Nothing calls it yet.
+
+- Config (`parseValidationConfig`): an ordered list of commands, at least one, names unique and
+  non-blank, `run` non-blank. `timeoutSec` is optional and positive. Defaults: `maxChangedLines` 800,
+  `maxRetries` 2 (0 to 5).
+- Diff rules (`checkDiff`), in this order:
+  - `too-large`: added and deleted lines together exceed `maxChangedLines`. Lockfiles, paths
+    containing `/generated/` and `*.generated.ts` do not count.
+  - `forbidden-path`: a changed path matches `forbiddenPaths` and no `allowedPaths` glob. Matches on
+    add, modify and delete. Defaults: `.env`, `.env.*`, the same two at any depth
+    (`**/.env`, `**/.env.*`, since a monorepo keeps `app/.env`), `**/*.pem`, `**/id_rsa*`,
+    `.github/workflows/**`. `allowedPaths` defaults to `.env.example` and `**/.env.example`, so
+    overriding `forbiddenPaths` does not drop that exception.
+  - `contract-test-changed`: a `*.contract.test.ts` that is modified, deleted or renamed. Adding one
+    is fine.
+  - `lockfile-without-manifest`: a lockfile changed, and no `package.json` changed in the same diff.
+
 ## Unverified
 
 Each item still needs a run on the box.
