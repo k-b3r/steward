@@ -75,6 +75,8 @@ export type Job = {
   slot: number | null
   nextRunAt: Date | null
   failureKind: FailureKind | null
+  /** The branch the claim pushed. Null until a claim runs (CLAIM_ENABLED). */
+  branch: string | null
 }
 
 export interface WorkFeed {

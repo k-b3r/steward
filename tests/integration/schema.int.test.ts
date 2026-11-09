@@ -100,4 +100,21 @@ describe('schema', () => {
       db.insert(runs).values({ jobId: job!.id, runNumber: 2, startedAt, outcome: 'bogus' as never }),
     ).rejects.toThrow()
   })
+
+  it('carries the branch on a job and the session id on a run, both nullable', async () => {
+    const [job] = await db.insert(jobs).values(row()).returning()
+    await db.insert(runs).values({ jobId: job!.id, runNumber: 1, startedAt: new Date('2025-01-01T00:00:00.000Z') })
+
+    const [fresh] = await db.select({ branch: jobs.branch }).from(jobs)
+    expect(fresh?.branch).toBeNull()
+    const [noSession] = await db.select({ sessionId: runs.sessionId }).from(runs)
+    expect(noSession?.sessionId).toBeNull()
+
+    await db.update(jobs).set({ branch: 'TST-1' })
+    await db.update(runs).set({ sessionId: 'session-one' })
+    const [stored] = await db.select({ branch: jobs.branch }).from(jobs)
+    const [withSession] = await db.select({ sessionId: runs.sessionId }).from(runs)
+    expect(stored?.branch).toBe('TST-1')
+    expect(withSession?.sessionId).toBe('session-one')
+  })
 })

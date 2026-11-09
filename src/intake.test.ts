@@ -74,6 +74,7 @@ function fakeStore(
         slot: null,
         nextRunAt: null,
         failureKind: null,
+        branch: null,
       }
       return { job, created }
     },

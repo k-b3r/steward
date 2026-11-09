@@ -49,6 +49,8 @@ export const jobs = pgTable(
     failureKind: text('failure_kind').$type<FailureKind>(),
     createdAt: timestamptz('created_at').notNull(),
     updatedAt: timestamptz('updated_at').notNull(),
+    /** The branch the claim pushed, set once at claim time; never recomputed from the identifier. */
+    branch: text('branch'),
   },
   (table) => [
     uniqueIndex('jobs_source_external_id_key').on(table.source, table.externalId),
@@ -93,6 +95,8 @@ export const runs = pgTable(
     endedAt: timestamptz('ended_at'),
     outcome: text('outcome').$type<RunOutcome>(),
     failureKind: text('failure_kind').$type<FailureKind>(),
+    /** Pi's session id for this run, kept so a resume after a worker restart can continue it. */
+    sessionId: text('session_id'),
   },
   (table) => [
     primaryKey({ columns: [table.jobId, table.runNumber] }),
