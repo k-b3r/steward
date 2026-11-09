@@ -17,7 +17,7 @@ nothing a person sees; the last three change what a confirmed ticket does.
 
 - Config keys, all with defaults that keep today's behavior: `RUNNER` (`echo` | `pi`), `PI_IMAGE`
   (`steward-pi:1.5.0`), `PI_MODEL`, `PI_TURN_CAP` (40), `PI_TIMEOUT_MS` (20 min), `CLAIM_ENABLED`
-  (false), `VALIDATION_ENABLED` (false). `PI_API_KEY` is a secret: environment only, like the others,
+  (false), `VALIDATION_ENABLED` (false). `PI_MODEL_API_KEY` is a secret: environment only, like the others,
   redacted and never logged.
 - Slices 3 and 4 add what only they need: `WORKSPACE_REPO` (the `owner/name` a claim opens the PR
   on) in slice 3, and `VALIDATION_CONFIG_FILE` plus `VALIDATION_IMAGE` in slice 4.

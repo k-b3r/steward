@@ -812,9 +812,11 @@ Not in CI: it needs Podman.
 The pieces of decisions 30-38 exist but nothing joins them. This adds the keys that will, each
 with the value that keeps today's behavior, so merging it changes nothing a person sees:
 
-- `RUNNER` (`echo` or `pi`, default `echo`). `pi` requires `PI_API_KEY`, a secret accepted only
-  from the environment and redacted like the others; the worker refuses to start without it.
-  `PI_API_KEY_ENV` names the variable the container reads it from, default `OPENCODE_API_KEY` and
+- `RUNNER` (`echo` or `pi`, default `echo`). `pi` requires `PI_MODEL_API_KEY`, the **model provider
+  key** the agent calls the LLM with (an OpenCode Go key for DeepSeek, or an Anthropic key; never the
+  Linear key or the GitHub token). It is a secret, accepted only from the environment and redacted
+  like the others; the worker refuses to start without it.
+  `PI_MODEL_API_KEY_ENV` names the variable the container reads it from, default `OPENCODE_API_KEY` and
   restricted to the runner's own allowlist (`MODEL_KEY_ENV_NAMES`): Pi reads the provider's variable,
   so the config key is mapped rather than forwarded under its own name. `runnerEnv` in
   `src/bootstrap.ts` is the one place that mapping happens, and `secretsOf` now carries the key so

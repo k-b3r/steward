@@ -25,10 +25,14 @@ does not do.
 
 - Secrets come from the environment only. `loadConfig` throws if a secret key appears in the
   JSON config file. The secret keys are `DATABASE_URL`, `TEST_DATABASE_URL`,
-  `REDIS_QUEUE_URL`, `REDIS_SLOT_URL`, `LINEAR_API_KEY`, `API_TOKEN`, and `PI_API_KEY` (the model
-  key). `PI_API_KEY_ENV` names the variable the agent container reads it from (default
-  `OPENCODE_API_KEY`, and it must be one of `MODEL_KEY_ENV_NAMES`), so the config key is mapped to
-  the provider's own name before the container starts.
+  `REDIS_QUEUE_URL`, `REDIS_SLOT_URL`, `LINEAR_API_KEY`, `API_TOKEN`, and `PI_MODEL_API_KEY`.
+
+- `PI_MODEL_API_KEY` is the **model provider key**: the LLM credential the agent uses to think (an
+  OpenCode Go key, which serves DeepSeek, or an Anthropic key). It is not the Linear key, not the
+  GitHub token and not `API_TOKEN`; those never leave the host. `PI_MODEL_API_KEY_ENV` names the
+  provider's own variable that the container reads it from (default `OPENCODE_API_KEY`, restricted
+  to `MODEL_KEY_ENV_NAMES`), so the config key is mapped to that name and never forwarded under its
+  own name. Use a key with a spend cap, and rotate it if anything looks wrong.
 - Each instance has one env file outside the repo: `~/steward-instances/<instance>/.env`,
   mode 0600 in a 0700 folder. The systemd units read it with `EnvironmentFile=`.
 - `API_TOKEN` must be at least 32 characters.
