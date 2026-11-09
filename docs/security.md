@@ -17,14 +17,16 @@ does not do.
   `ANTHROPIC_API_KEY` are forwarded, and any other name is refused. A name added later must be
   listed on purpose. The agent works in a local worktree and commits locally. A short-lived,
   scoped credential in the container is not part of the design.
-- Nothing in an agent container can read the API token, the database URLs, or the tracker
-  key, because none of them are passed in.
+- Nothing in an agent container can read the API token, the database URLs, or the tracker key: the
+  container gets the model key only, by an allowlist (`MODEL_KEY_ENV_NAMES`), and any other name is
+  refused before the container starts.
 
 ## Secrets
 
 - Secrets come from the environment only. `loadConfig` throws if a secret key appears in the
   JSON config file. The secret keys are `DATABASE_URL`, `TEST_DATABASE_URL`,
-  `REDIS_QUEUE_URL`, `REDIS_SLOT_URL`, `LINEAR_API_KEY`, and `API_TOKEN`.
+  `REDIS_QUEUE_URL`, `REDIS_SLOT_URL`, `LINEAR_API_KEY`, `API_TOKEN`, and `PI_API_KEY` (the model
+  key, which only the agent container receives, by name).
 - Each instance has one env file outside the repo: `~/steward-instances/<instance>/.env`,
   mode 0600 in a 0700 folder. The systemd units read it with `EnvironmentFile=`.
 - `API_TOKEN` must be at least 32 characters.

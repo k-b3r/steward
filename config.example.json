@@ -18,5 +18,11 @@
   "GIT_USER_EMAIL": "you@example.com",
   "BASE_BRANCH": "main",
   "ALLOWED_STATUSES": "In Progress",
-  "DASHBOARD_DIR": ""
+  "DASHBOARD_DIR": "",
+  "RUNNER": "echo",
+  "PI_IMAGE": "steward-pi:1.5.0",
+  "PI_TURN_CAP": 40,
+  "PI_TIMEOUT_MS": 1200000,
+  "CLAIM_ENABLED": false,
+  "VALIDATION_ENABLED": false
 }
