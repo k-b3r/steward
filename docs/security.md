@@ -18,15 +18,17 @@ does not do.
   listed on purpose. The agent works in a local worktree and commits locally. A short-lived,
   scoped credential in the container is not part of the design.
 - Nothing in an agent container can read the API token, the database URLs, or the tracker key: the
-  container gets the model key only, by an allowlist (`MODEL_KEY_ENV_NAMES`), and any other name is
-  refused before the container starts.
+  container gets the model key only, under the provider variable name, and any other name is
+  refused before the container starts (`MODEL_KEY_ENV_NAMES`).
 
 ## Secrets
 
 - Secrets come from the environment only. `loadConfig` throws if a secret key appears in the
   JSON config file. The secret keys are `DATABASE_URL`, `TEST_DATABASE_URL`,
   `REDIS_QUEUE_URL`, `REDIS_SLOT_URL`, `LINEAR_API_KEY`, `API_TOKEN`, and `PI_API_KEY` (the model
-  key, which only the agent container receives, by name).
+  key). `PI_API_KEY_ENV` names the variable the agent container reads it from (default
+  `OPENCODE_API_KEY`, and it must be one of `MODEL_KEY_ENV_NAMES`), so the config key is mapped to
+  the provider's own name before the container starts.
 - Each instance has one env file outside the repo: `~/steward-instances/<instance>/.env`,
   mode 0600 in a 0700 folder. The systemd units read it with `EnvironmentFile=`.
 - `API_TOKEN` must be at least 32 characters.

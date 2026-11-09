@@ -814,6 +814,11 @@ with the value that keeps today's behavior, so merging it changes nothing a pers
 
 - `RUNNER` (`echo` or `pi`, default `echo`). `pi` requires `PI_API_KEY`, a secret accepted only
   from the environment and redacted like the others; the worker refuses to start without it.
+  `PI_API_KEY_ENV` names the variable the container reads it from, default `OPENCODE_API_KEY` and
+  restricted to the runner's own allowlist (`MODEL_KEY_ENV_NAMES`): Pi reads the provider's variable,
+  so the config key is mapped rather than forwarded under its own name. `runnerEnv` in
+  `src/bootstrap.ts` is the one place that mapping happens, and `secretsOf` now carries the key so
+  logs and transcripts redact it.
 - `PI_IMAGE` (default `steward-pi:1.5.0`), `PI_MODEL` (unset uses Pi's own default),
   `PI_TURN_CAP` (40), `PI_TIMEOUT_MS` (20 minutes).
 - `CLAIM_ENABLED` (false) and `VALIDATION_ENABLED` (false).

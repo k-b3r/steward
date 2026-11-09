@@ -146,7 +146,7 @@ Three more keys, all non-secret. `BASE_BRANCH` is the branch each job starts fro
 
 ### Which agent runs a job
 
-The agent runner is chosen by `RUNNER`: `echo` (the default, a stub that writes a fixed transcript) or `pi`, which runs the real agent in a Podman container. `pi` requires `PI_API_KEY` (a secret: environment only, never the config file) and takes `PI_IMAGE` (default `steward-pi:1.5.0`), `PI_MODEL` (unset means Pi's own default), `PI_TURN_CAP` (default 40 turns) and `PI_TIMEOUT_MS` (default 20 minutes). Two switches are off by default and change what a confirmed ticket does: `CLAIM_ENABLED` opens a draft pull request before the agent starts, and `VALIDATION_ENABLED` runs the configured checks after the agent and before any push.
+The agent runner is chosen by `RUNNER`: `echo` (the default, a stub that writes a fixed transcript) or `pi`, which runs the real agent in a Podman container. `pi` requires `PI_API_KEY` (a secret: environment only, never the config file), which reaches the container as `PI_API_KEY_ENV` (default `OPENCODE_API_KEY`) and takes `PI_IMAGE` (default `steward-pi:1.5.0`), `PI_MODEL` (unset means Pi's own default), `PI_TURN_CAP` (default 40 turns) and `PI_TIMEOUT_MS` (default 20 minutes). Two switches are off by default and change what a confirmed ticket does: `CLAIM_ENABLED` opens a draft pull request before the agent starts, and `VALIDATION_ENABLED` runs the configured checks after the agent and before any push.
 
 ### Point an instance at a repo
 
