@@ -2,8 +2,8 @@
 // reads, no clock: the caller passes the paths, the limits and the names of the variables to
 // forward, and gets back the arguments that follow `podman` (never the binary itself).
 //
-// UNVERIFIED: the Pi flags below are taken from the Pi 1.5.0 docs (`docs/cli.md`) and
-// `pi --help`, not from a real run inside this image.
+// The Pi flags `-p --mode json --session-dir --model` were checked by a real run on 2026-11-08.
+// UNVERIFIED: `--session <id>` (resume) has no real run yet (docs/decisions.md, 36).
 
 export type PiRunInput = {
   /** The instance name, already validated by config: lower-case, like `personal`. */

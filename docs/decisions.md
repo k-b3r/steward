@@ -685,16 +685,25 @@ when set, `--session <id>` when resuming, and the prompt last, after `--`.
   input and forward policy and broadcast skips; output is accept), AppArmor (no denial logged), NordLayer (not
   connected), a Tailscale exit node (none). Left open: a pasta or kernel 7.0 bug. Retest after a pasta or kernel update.
 - The environment is a list of NAMES (`-e ANTHROPIC_API_KEY`), never values, so no secret is in
-  the argument list or a file. Names must be upper case, and `GITHUB`, `GH_`, `LINEAR`, `SSH` and
-  `GIT_` are refused: the model key is the only credential allowed in. A GitHub token, a `GH_`
-  token or an SSH socket would let the agent push, open pull requests and write to the tracker from
-  inside the container, and `GIT_*` would let it rewrite its own author identity, while those
-  writes belong to the orchestrator alone (docs/security.md).
+  the argument list or a file. Names must be upper case, and they must be on an ALLOWLIST: the
+  model keys `OPENCODE_API_KEY` and `ANTHROPIC_API_KEY` (`MODEL_KEY_ENV_NAMES`), plus any name the
+  caller lists in `extraAllowedEnv`. Anything else throws, naming the variable. An allowlist, not a
+  denylist, because a denylist misses names nobody thought of (`DATABASE_URL`, `NPM_TOKEN`,
+  `STEWARD_API_TOKEN` were all forwardable under the old one). A name in `extraAllowedEnv` is still
+  checked: it must not start with `GH_`, `GIT_` or `SSH_`, nor contain `GITHUB`, `LINEAR`,
+  `DATABASE`, `REDIS`, `STEWARD`, `TOKEN`, `SECRET` or `PASSWORD`. The agent container's only
+  credential is the model key. A GitHub token, an SSH socket or a git identity would let the agent
+  push, open pull requests, write to the tracker or rewrite its own author, and those writes belong
+  to the orchestrator alone (docs/security.md).
+- The image reference must start with a letter or digit and use only `A-Za-z0-9._/:@-`, so a
+  value like `--privileged` cannot be read as a podman option. The prompt is protected by `--`.
 - The image is pinned in `deploy/pi-image/Containerfile`: `node:22-bookworm-slim`, Pi 1.5.0 from
   npm, pnpm 10, and the tag `steward-pi:1.5.0`. A new Pi version is a new tag, so its flags are read
   before they are used.
-- `UNVERIFIED:` the Pi flags came from Pi 1.5.0 `docs/cli.md` and `pi --help` inside the image,
-  not from a run against a model. Verified on the box: the image builds with `podman build
+- The Pi flags `-p --mode json --session-dir /session --model` were checked against a real run on
+  2026-11-08 with `opencode-go/deepseek-v4.1-flash`, which passed them (`tests/fixtures/pi/real-run.jsonl`,
+  on branch `pi-event-mapper`). `UNVERIFIED:` `--session <id>` (resume) is not yet checked by a run.
+  The flags first came from Pi 1.5.0 `docs/cli.md` and `pi --help`. Verified on the box: the image builds with `podman build
 --network=host -t steward-pi:test deploy/pi-image`, `podman run --rm steward-pi:test --version`
   prints `1.5.0`, and the flags with `--userns=keep-id` gave uid 1000 and left 1000:1000 files in
   the mount. A plain `podman build` fails here at `apt-get update` with `Temporary failure
@@ -709,6 +718,8 @@ Each item still needs a run on the box.
 - `UNVERIFIED:` The host units (`steward-api@`, `steward-worker@`) starting under systemd. `dist/` does not exist yet, so only the `tsx` run above was tested.
 - `UNVERIFIED:` Container readiness ordering. A container service is active as soon as `podman run -d` returns, which is before Postgres accepts connections. In the test the services were started several seconds before the app, so the race was not exercised. Add a readiness check or a retry before relying on boot order.
 - `UNVERIFIED:` The AOF persistence of the queue Redis after a hard kill (only a clean restart was tested).
+- `UNVERIFIED:` The root cause of the pasta outbound failure on this box (kernel 7.0, pasta 0.0~git20260120). Container traffic works with `--network=slirp4netns`; see decision 36.
+- `UNVERIFIED:` `--session <id>` (Pi resume) against a real model run. Decision 36 has the detail.
 
 ## Open items
 
