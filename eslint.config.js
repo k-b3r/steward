@@ -19,6 +19,7 @@ export default [
       'src/subagent-policy.ts',
       'src/runs.ts',
       'src/runner/pi-events.ts',
+      'src/validation-policy.ts',
     ],
   }),
   // Repo-specific blocks (framework plugins, extra bans) go here.

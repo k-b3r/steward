@@ -44,6 +44,8 @@ Counts move with every pull request, so run `pnpm check`, `pnpm test:integration
   poll is a baseline, and a burst over `MAX_ENQUEUE_PER_POLL` becomes proposals too.
 - A pure sub-agent policy (`src/subagent-policy.ts`): spawn limits and when steward must stop an
   agent. Nothing spawns one yet.
+- A pure validation policy (`src/validation-policy.ts`): config and the diff rules. Nothing runs
+  the commands yet.
 
 ### Data and queue
 
@@ -96,7 +98,7 @@ Counts move with every pull request, so run `pnpm check`, `pnpm test:integration
 | Area                                            | State                           |
 | ----------------------------------------------- | ------------------------------- |
 | Real agent run in a container                   | not started (phase 2)           |
-| Validator: typecheck, lint, test, diff policy   | not started (phase 3)           |
+| Validator: typecheck, lint, test, diff policy   | rules only (phase 3)            |
 | Claim, empty commit, draft PR, push             | not started (phase 4)           |
 | Linear writes, notifications                    | not started (phase 4)           |
 | GitHub poller: reviews, comments, checks, merge | not started (phase 5)           |

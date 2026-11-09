@@ -236,6 +236,7 @@ src/
   linear-map.ts      pure tracker JSON to WorkItem
   runs.ts            pure rules for when a run opens, closes and how it ended
   subagent-policy.ts pure sub-agent spawn limits and reap rules
+  validation-policy.ts pure validator: config and diff rules
   types.ts           WorkItem, Job, JobState, FailureKind, the interfaces
   intake.ts          one poll: read the tracker, apply the policy, write jobs
   linear.ts          WorkFeed implementation: the Linear client (read only)
