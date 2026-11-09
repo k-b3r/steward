@@ -249,6 +249,44 @@ describe('checkDiff', () => {
     ])
   })
 
+  it('reports a contract test renamed to a normal name, by its old path', () => {
+    const violations = checkDiff(
+      [file('src/a.ts', { status: 'R', oldPath: 'src/a.contract.test.ts', added: 0, deleted: 0 })],
+      policy(),
+    )
+
+    expect(violations).toEqual([
+      {
+        rule: 'contract-test-changed',
+        path: 'src/a.contract.test.ts',
+        detail: 'src/a.ts was renamed from src/a.contract.test.ts; contract tests may only be added',
+      },
+    ])
+  })
+
+  it('reports a contract test renamed to another contract test once', () => {
+    const violations = checkDiff(
+      [file('src/b.contract.test.ts', { status: 'R', oldPath: 'src/a.contract.test.ts', added: 0, deleted: 0 })],
+      policy(),
+    )
+
+    expect(violations.map((v) => [v.rule, v.path])).toEqual([['contract-test-changed', 'src/b.contract.test.ts']])
+  })
+
+  it('reports a forbidden file renamed to an allowed name, by its old path', () => {
+    const violations = checkDiff([file('env.txt', { status: 'R', oldPath: '.env', added: 0, deleted: 0 })], policy())
+
+    expect(violations).toEqual([
+      { rule: 'forbidden-path', path: '.env', detail: 'env.txt was renamed from .env; .env is a forbidden path' },
+    ])
+  })
+
+  it('reports a rename into a forbidden path by its new path', () => {
+    const violations = checkDiff([file('.env', { status: 'R', oldPath: 'env.txt', added: 0, deleted: 0 })], policy())
+
+    expect(violations).toEqual([{ rule: 'forbidden-path', path: '.env', detail: '.env is a forbidden path' }])
+  })
+
   it('reports a lockfile changed without a package.json in the same diff', () => {
     expect(checkDiff([file('pnpm-lock.yaml')], policy())).toEqual([
       {

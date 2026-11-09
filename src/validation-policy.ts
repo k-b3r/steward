@@ -153,8 +153,8 @@ const byPath = (a: ChangedFile, b: ChangedFile): number => (a.path < b.path ? -1
 
 /**
  * Checks a diff against the policy. Rules, in this order: `too-large`, `forbidden-path`,
- * `contract-test-changed`, `lockfile-without-manifest`. Within a rule, violations sort by path.
- * A contract test may be added but not modified, deleted or renamed.
+ * `contract-test-changed`, `lockfile-without-manifest`. Within a rule, violations sort by the file's
+ * new path. A contract test may be added but not modified, deleted or renamed, on either path.
  */
 export function checkDiff(files: readonly ChangedFile[], policy: DiffPolicy): DiffViolation[] {
   const sorted = [...files].sort(byPath)
@@ -170,18 +170,33 @@ export function checkDiff(files: readonly ChangedFile[], policy: DiffPolicy): Di
     })
   }
 
+  // A rename is judged on its new path and its old path. The violation names the path that matched.
   for (const file of sorted) {
     if (isForbidden(file.path, policy)) {
       violations.push({ rule: 'forbidden-path', path: file.path, detail: `${file.path} is a forbidden path` })
+    } else if (file.oldPath !== undefined && isForbidden(file.oldPath, policy)) {
+      violations.push({
+        rule: 'forbidden-path',
+        path: file.oldPath,
+        detail: `${file.path} was renamed from ${file.oldPath}; ${file.oldPath} is a forbidden path`,
+      })
     }
   }
 
   for (const file of sorted) {
-    if (file.path.endsWith(CONTRACT_TEST_SUFFIX) && file.status !== 'A') {
+    if (file.status === 'A') continue
+    const verb = file.status === 'M' ? 'modified' : file.status === 'D' ? 'deleted' : 'renamed'
+    if (file.path.endsWith(CONTRACT_TEST_SUFFIX)) {
       violations.push({
         rule: 'contract-test-changed',
         path: file.path,
-        detail: `${file.path} was ${file.status === 'M' ? 'modified' : file.status === 'D' ? 'deleted' : 'renamed'}; contract tests may only be added`,
+        detail: `${file.path} was ${verb}; contract tests may only be added`,
+      })
+    } else if (file.oldPath?.endsWith(CONTRACT_TEST_SUFFIX)) {
+      violations.push({
+        rule: 'contract-test-changed',
+        path: file.oldPath,
+        detail: `${file.path} was renamed from ${file.oldPath}; contract tests may only be added`,
       })
     }
   }
