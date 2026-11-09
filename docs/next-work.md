@@ -91,10 +91,9 @@ Whichever is chosen, record it in `decisions.md` item 6 and align the name or th
 
 1. Build script, so the systemd units can start (`decisions.md` open item 1).
 2. Phase 2: the container runner, resume from `ci_failed`, handing a merge conflict to the agent.
-3. Show steward's own steps in a job's log. Today the transcript holds only the agent's lines, so
-   the slot, worktree, claim, validate and push steps show only as state changes. Write each step
-   as an `orchestrator` line (the transcript writer already supports the kind), so a person who
-   opens a running job sees every process.
+3. Log the claim, validate and push steps in a job's log as they are built. The worker's own steps
+   (claiming, base fetched, worktree, merge, running, finished, cleanup) are already written as
+   `orchestrator` lines; a step that does not exist yet writes its line when it lands.
 4. Show sub-agents in a job (after the Pi runner, before dashboard work on it). Today only the
    pure policy exists (`src/subagent-policy.ts`); nothing records or displays a sub-agent. Steps:
    - **Probe first.** Run Pi on a throwaway task, make it spawn a sub-agent, and record the event
