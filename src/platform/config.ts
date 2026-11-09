@@ -2,6 +2,8 @@ import { isAbsolute } from 'node:path'
 
 import { z } from 'zod'
 
+import { MODEL_KEY_ENV_NAMES } from '../runner/pi-command'
+
 const SECRET_KEYS = [
   'DATABASE_URL',
   'TEST_DATABASE_URL',
@@ -59,6 +61,8 @@ export type Config = {
   PI_TIMEOUT_MS: number
   /** The model provider's key, passed into the agent container by name only. Never logged. */
   PI_API_KEY?: string
+  /** The variable name the container reads the key from. One of the runner's allowlist. */
+  PI_API_KEY_ENV: string
   /** Open a draft pull request as the claim, before the agent starts. */
   CLAIM_ENABLED: boolean
   /** Run the config's checks after the agent and before any push. */
@@ -215,6 +219,12 @@ const configSchema = z.object({
   PI_TURN_CAP: integerField({ min: 1, max: 500, fallback: 40 }),
   PI_TIMEOUT_MS: integerField({ min: 10_000, max: 3_600_000, fallback: 20 * 60 * 1000 }),
   PI_API_KEY: z.preprocess((value) => (value === '' ? undefined : value), z.string().min(1).optional()),
+  // Pi reads the key from the provider's own variable, so the config key is mapped to one of the
+  // names the container allowlist accepts (src/runner/pi-command.ts, MODEL_KEY_ENV_NAMES).
+  PI_API_KEY_ENV: z.preprocess(
+    (value) => (value === undefined || value === '' ? 'OPENCODE_API_KEY' : value),
+    z.enum(MODEL_KEY_ENV_NAMES as [string, ...string[]]),
+  ),
   CLAIM_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
   VALIDATION_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
 })
@@ -273,6 +283,7 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     PI_TURN_CAP: pick('PI_TURN_CAP', env, file),
     PI_TIMEOUT_MS: pick('PI_TIMEOUT_MS', env, file),
     PI_API_KEY: pick('PI_API_KEY', env, file),
+    PI_API_KEY_ENV: pick('PI_API_KEY_ENV', env, file),
     CLAIM_ENABLED: pick('CLAIM_ENABLED', env, file),
     VALIDATION_ENABLED: pick('VALIDATION_ENABLED', env, file),
   }

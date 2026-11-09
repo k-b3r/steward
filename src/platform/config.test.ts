@@ -81,6 +81,12 @@ describe('loadConfig', () => {
     expect(config.PI_MODEL).toBe('opencode-go/x')
   })
 
+  it('maps the model key to a provider variable the container allowlist accepts', () => {
+    expect(loadConfig(env()).PI_API_KEY_ENV).toBe('OPENCODE_API_KEY')
+    expect(loadConfig(env({ PI_API_KEY_ENV: 'ANTHROPIC_API_KEY' })).PI_API_KEY_ENV).toBe('ANTHROPIC_API_KEY')
+    expect(errorMessage(() => loadConfig(env({ PI_API_KEY_ENV: 'DATABASE_URL' })))).toContain('PI_API_KEY_ENV')
+  })
+
   it('refuses an unknown runner and values that could read as options', () => {
     expect(errorMessage(() => loadConfig(env({ RUNNER: 'claude' })))).toContain('RUNNER')
     expect(errorMessage(() => loadConfig(env({ PI_IMAGE: '--privileged' })))).toContain('PI_IMAGE')
