@@ -23,7 +23,7 @@ One instance per context (work, personal). Nothing is a global singleton.
 
 - `INSTANCE` env var (zod-validated) prefixes systemd units (`steward@<instance>`), Quadlet containers, ports, database names, and the runs dir (`~/steward-instances/<instance>/runs/<job-id>/`).
 - Each instance has its own Postgres and two Redis containers (BullMQ, per-slot test use). Never share Redis between roles or instances.
-- Each instance has its own git author name/email and `gh` account in config. Before any push, check `git config` and `gh auth status` match the instance. Mismatch fails the job with kind `setup`.
+- Each instance has its own git author name/email and `gh` account in config. Before any push, the clone's local `user.name`, `user.email` and `steward.account` must match the instance, and gh must hold a token for `GH_ACCOUNT` (`checkIdentity` in `src/platform/github.ts`). A mismatch fails the job with kind `setup`.
 - Work config and env live outside the repo.
 - `SLOT_COUNT` per instance (zod, default 3). The allocator takes the count as an argument. A box-wide test semaphore (`flock` under `/run/steward/`) comes in phase 6.
 

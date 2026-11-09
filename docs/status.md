@@ -99,7 +99,7 @@ Counts move with every pull request, so run `pnpm check`, `pnpm test:integration
 | ----------------------------------------------- | ------------------------------- |
 | Real agent run in a container                   | not started (phase 2)           |
 | Validator: typecheck, lint, test, diff policy   | rules only (phase 3)            |
-| Claim, empty commit, draft PR, push             | not started (phase 4)           |
+| Claim, empty commit, draft PR, push             | building blocks, not wired yet  |
 | Linear writes, notifications                    | not started (phase 4)           |
 | GitHub poller: reviews, comments, checks, merge | not started (phase 5)           |
 | Retention sweep, branch cleanup                 | not started (phase 5)           |
