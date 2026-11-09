@@ -41,6 +41,7 @@ export type PiRunInput = {
 const INSTANCE = /^[a-z][a-z0-9-]{0,30}$/
 const JOB_ID = /^[A-Za-z0-9-]+$/
 const ENV_NAME = /^[A-Z][A-Z0-9_]*$/
+const IMAGE = /^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/
 
 // The agent container's only credential is the model key. Everything else is refused by default:
 // an allowlist, not a denylist, so a new variable on the orchestrator (a database URL, an npm
@@ -104,6 +105,12 @@ function assertInput(input: PiRunInput): void {
   assertPattern('jobId', input.jobId, JOB_ID, 'letters, digits or hyphens')
   assertPositiveInteger('runNumber', input.runNumber)
   assertPath('worktreePath', input.worktreePath)
+  assertPattern(
+    'image',
+    input.image,
+    IMAGE,
+    'an image reference that starts with a letter or digit, so it cannot read as a podman option',
+  )
   assertPath('sessionDir', input.sessionDir)
   const extraAllowedEnv = input.extraAllowedEnv ?? []
   for (const name of extraAllowedEnv) {

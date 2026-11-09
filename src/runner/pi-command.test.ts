@@ -104,6 +104,11 @@ describe('buildPiRunArgs', () => {
     expect(pi({ passEnv: ['DIGIT_COUNT'], extraAllowedEnv: ['DIGIT_COUNT'] })).toContain('DIGIT_COUNT')
   })
 
+  it('accepts a pinned image reference with a registry, a digest and a tag', () => {
+    expect(pi({ image: 'ghcr.io/k-b3r/steward-pi:1.5.0' })).toContain('ghcr.io/k-b3r/steward-pi:1.5.0')
+    expect(pi({ image: 'localhost/steward-pi@sha256:abc123' })).toContain('localhost/steward-pi@sha256:abc123')
+  })
+
   it('omits --model when no model is given', () => {
     expect(pi({ model: undefined })).not.toContain('--model')
   })
@@ -180,6 +185,13 @@ describe('buildPiRunArgs guards', () => {
     'refuses the extraAllowedEnv name %s, which is not an upper-case variable name',
     (name) => {
       expect(() => pi({ extraAllowedEnv: [name] })).toThrow(RangeError)
+    },
+  )
+
+  it.each(['-rm', ' steward-pi', 'steward pi', '', '--privileged', 'steward-pi;rm', 'steward\npi'])(
+    'refuses the image %j, which would be read as a podman option or is malformed',
+    (image) => {
+      expect(() => pi({ image })).toThrow(RangeError)
     },
   )
 
