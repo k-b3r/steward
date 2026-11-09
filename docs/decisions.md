@@ -654,6 +654,62 @@ returned its number; `listOpenPrsForTicket("INV-77")` found it and `"INV-7"` fou
 `updatePrBody` changed the body. The PR was closed with `--delete-branch` and the temp clone
 deleted. Not in CI: it needs a real account and network.
 
+### 36. The agent runs in a rootless Podman container, argv built in one pure function
+
+`buildPiRunArgs` (`src/runner/pi-command.ts`) turns one job into the arguments after `podman`.
+Nothing calls it yet, and nothing reads env, the clock or the filesystem: the caller passes the
+paths, the limits and the variable names.
+
+`run --rm --name steward-<instance>-job-<jobId>-<runNumber> --userns=keep-id --cpus=<n>
+--memory=<n>m --pids-limit=<n> --cap-drop=ALL --security-opt=no-new-privileges`, the worktree at
+`/workspace` and this run's sessions at `/session` (both read-write), `-w /workspace`, one `-e
+NAME` per forwarded variable, the image, then `-p --mode json --session-dir /session`, `--model`
+when set, `--session <id>` when resuming, and the prompt last, after `--`.
+
+- `keep-id`, not `--user`: files the agent writes in the worktree stay owned by the host user, so
+  the orchestrator commits and removes it without a chown. `--rm` plus the per-attempt name leaves
+  no container behind and keeps two attempts apart.
+- `--cap-drop=ALL` and `no-new-privileges`: the agent needs no capabilities, and a setuid binary
+  in the image must not raise them.
+- No `--network=none`: the container must reach the model API. The boundary is the mounts and the
+  environment, not the network. `--network=slirp4netns`, not host networking and not the default:
+  a host-networked container could reach steward's Postgres, both Redis servers and the API on
+  `127.0.0.1`, and slirp4netns does not map the host loopback by default. The default rootless
+  backend here, pasta, passes no traffic (verified 2026-11-08: DNS and plain TCP to `1.1.1.1` time
+  out from a container, and both work with `--network=slirp4netns`). `UNVERIFIED:` the root cause of the pasta failure on this box. Checked 2026-11-08 (Ubuntu 26.04,
+  kernel 7.0.0-43, pasta 0.0~git20260120): pasta's own outbound TCP and UDP fail to every destination, including the
+  LAN gateway, in a Podman container, in the rootless netns and in a bare `pasta --config-net`; its ICMP and the
+  host's own traffic work. `strace` shows pasta's host-side socket gets `connect()` = `EINPROGRESS` after a
+  `bind()` that fails with `EADDRNOTAVAIL`, yet `tcpdump -i any` sees no packet on any interface, so the SYN is
+  dropped inside the kernel. Not the cause: DNS only, `ufw` or any nft rule (the only matched drops are
+  input and forward policy and broadcast skips; output is accept), AppArmor (no denial logged), NordLayer (not
+  connected), a Tailscale exit node (none). Left open: a pasta or kernel 7.0 bug. Retest after a pasta or kernel update.
+- The environment is a list of NAMES (`-e ANTHROPIC_API_KEY`), never values, so no secret is in
+  the argument list or a file. Names must be upper case, and they must be on an ALLOWLIST: the
+  model keys `OPENCODE_API_KEY` and `ANTHROPIC_API_KEY` (`MODEL_KEY_ENV_NAMES`), plus any name the
+  caller lists in `extraAllowedEnv`. Anything else throws, naming the variable. An allowlist, not a
+  denylist, because a denylist misses names nobody thought of (`DATABASE_URL`, `NPM_TOKEN`,
+  `STEWARD_API_TOKEN` were all forwardable under the old one). A name in `extraAllowedEnv` is still
+  checked: it must not start with `GH_`, `GIT_` or `SSH_`, nor contain `GITHUB`, `LINEAR`,
+  `DATABASE`, `REDIS`, `STEWARD`, `TOKEN`, `SECRET` or `PASSWORD`. The agent container's only
+  credential is the model key. A GitHub token, an SSH socket or a git identity would let the agent
+  push, open pull requests, write to the tracker or rewrite its own author, and those writes belong
+  to the orchestrator alone (docs/security.md).
+- The image reference must start with a letter or digit and use only `A-Za-z0-9._/:@-`, so a
+  value like `--privileged` cannot be read as a podman option. The prompt is protected by `--`.
+- The image is pinned in `deploy/pi-image/Containerfile`: `node:22-bookworm-slim`, Pi 1.5.0 from
+  npm, pnpm 10, and the tag `steward-pi:1.5.0`. A new Pi version is a new tag, so its flags are read
+  before they are used.
+- The Pi flags `-p --mode json --session-dir /session --model` were checked against a real run on
+  2026-11-08 with `opencode-go/deepseek-v4.1-flash`, which passed them (`tests/fixtures/pi/real-run.jsonl`,
+  on branch `pi-event-mapper`). `UNVERIFIED:` `--session <id>` (resume) is not yet checked by a run.
+  The flags first came from Pi 1.5.0 `docs/cli.md` and `pi --help`. Verified on the box: the image builds with `podman build
+--network=host -t steward-pi:test deploy/pi-image`, `podman run --rm steward-pi:test --version`
+  prints `1.5.0`, and the flags with `--userns=keep-id` gave uid 1000 and left 1000:1000 files in
+  the mount. A plain `podman build` fails here at `apt-get update` with `Temporary failure
+resolving 'deb.debian.org'`: containers on this box have no working DNS (`/etc/resolv.conf`
+  carries 169.254.1.1), which is a box problem, not the Containerfile.
+
 ## Unverified
 
 Each item still needs a run on the box.
@@ -662,6 +718,8 @@ Each item still needs a run on the box.
 - `UNVERIFIED:` The host units (`steward-api@`, `steward-worker@`) starting under systemd. `dist/` does not exist yet, so only the `tsx` run above was tested.
 - `UNVERIFIED:` Container readiness ordering. A container service is active as soon as `podman run -d` returns, which is before Postgres accepts connections. In the test the services were started several seconds before the app, so the race was not exercised. Add a readiness check or a retry before relying on boot order.
 - `UNVERIFIED:` The AOF persistence of the queue Redis after a hard kill (only a clean restart was tested).
+- `UNVERIFIED:` The root cause of the pasta outbound failure on this box (kernel 7.0, pasta 0.0~git20260120). Container traffic works with `--network=slirp4netns`; see decision 36.
+- `UNVERIFIED:` `--session <id>` (Pi resume) against a real model run. Decision 36 has the detail.
 
 ## Open items
 

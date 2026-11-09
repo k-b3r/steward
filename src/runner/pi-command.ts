@@ -1,0 +1,175 @@
+// Pure argv builder for a Pi coding-agent run inside a rootless Podman container. No I/O, no env
+// reads, no clock: the caller passes the paths, the limits and the names of the variables to
+// forward, and gets back the arguments that follow `podman` (never the binary itself).
+//
+// The Pi flags `-p --mode json --session-dir --model` were checked by a real run on 2026-11-08.
+// UNVERIFIED: `--session <id>` (resume) has no real run yet (docs/decisions.md, 36).
+
+export type PiRunInput = {
+  /** The instance name, already validated by config: lower-case, like `personal`. */
+  instance: string
+  /** Tracker-derived job id. It goes into the container name, so it stays a slug. */
+  jobId: string
+  /** 1 for the first run of a job; it keeps container names unique per attempt. */
+  runNumber: number
+  /** The image tag, pinned by the caller (e.g. `steward-pi:1.5.0`). */
+  image: string
+  /** Absolute host path of the job's git worktree. Mounted read-write at `/workspace`. */
+  worktreePath: string
+  /** Absolute host path of this run's session folder. Mounted read-write at `/session`. */
+  sessionDir: string
+  /** The first prompt. It goes in after `--`, so a prompt starting with `-` is safe. */
+  prompt: string
+  /** Pi session id to resume; absent for a fresh run. */
+  resumeSessionId?: string
+  /** Environment variable NAMES to forward. Only the names, never the values. Each must be in
+   * `MODEL_KEY_ENV_NAMES` or `extraAllowedEnv`. */
+  passEnv: string[]
+  /** Extra names the caller allows in `passEnv`, on top of `MODEL_KEY_ENV_NAMES`. Default none.
+   * They are checked too: see `assertExtraAllowedEnv`. */
+  extraAllowedEnv?: readonly string[]
+  limits: {
+    cpus: number
+    memoryMb: number
+    pidsLimit: number
+  }
+  /** Pi model pattern, e.g. `anthropic/claude-sonnet-5-5`; omitted means Pi's own default. */
+  model?: string
+}
+
+// Same shape as the config's instance name, plus the length cap on the container name.
+const INSTANCE = /^[a-z][a-z0-9-]{0,30}$/
+const JOB_ID = /^[A-Za-z0-9-]+$/
+const ENV_NAME = /^[A-Z][A-Z0-9_]*$/
+const IMAGE = /^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/
+
+// The agent container's only credential is the model key. Everything else is refused by default:
+// an allowlist, not a denylist, so a new variable on the orchestrator (a database URL, an npm
+// token, a tracker key) cannot leak into the agent by being forwarded by mistake. The GitHub, SSH
+// and tracker writes belong to the orchestrator alone (docs/security.md).
+export const MODEL_KEY_ENV_NAMES: readonly string[] = ['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY']
+
+// Defense in depth for `extraAllowedEnv`: a caller that lists one of these names is still refused.
+// Prefixes are anchored to the start; the substrings catch credential-like names anywhere.
+const FORBIDDEN_EXTRA_PREFIXES = ['GH_', 'GIT_', 'SSH_']
+const FORBIDDEN_EXTRA_PARTS = ['GITHUB', 'LINEAR', 'DATABASE', 'REDIS', 'STEWARD', 'TOKEN', 'SECRET', 'PASSWORD']
+
+function assertPattern(field: string, value: string, pattern: RegExp, expected: string): void {
+  if (!pattern.test(value)) {
+    throw new RangeError(`${field} must be ${expected}, got ${JSON.stringify(value)}`)
+  }
+}
+
+function assertPath(field: string, value: string): void {
+  if (!value.startsWith('/')) {
+    throw new RangeError(`${field} must be an absolute path, got ${JSON.stringify(value)}`)
+  }
+  // A colon is Podman's volume separator and a newline would split the argument on re-parse.
+  if (/[:\n\r]/.test(value)) {
+    throw new RangeError(`${field} must not contain a colon or a newline, got ${JSON.stringify(value)}`)
+  }
+}
+
+function assertPositiveInteger(field: string, value: number): void {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new RangeError(`${field} must be a positive integer, got ${String(value)}`)
+  }
+}
+
+function assertExtraAllowedEnv(name: string): void {
+  assertPattern('extraAllowedEnv name', name, ENV_NAME, 'an upper-case variable name like HIGH_LEVEL')
+  const prefix = FORBIDDEN_EXTRA_PREFIXES.find((p) => name.startsWith(p))
+  const part = FORBIDDEN_EXTRA_PARTS.find((p) => name.includes(p))
+  const matched = prefix ?? part
+  if (matched !== undefined) {
+    throw new RangeError(
+      `extraAllowedEnv must not allow ${JSON.stringify(name)}: the agent container gets no GitHub, ` +
+        `SSH, git identity, database, queue or tracker credentials (matched ${JSON.stringify(matched)})`,
+    )
+  }
+}
+
+function assertPassEnvName(name: string, extraAllowedEnv: readonly string[]): void {
+  assertPattern('passEnv name', name, ENV_NAME, 'an upper-case variable name like ANTHROPIC_API_KEY')
+  if (MODEL_KEY_ENV_NAMES.includes(name) || extraAllowedEnv.includes(name)) {
+    return
+  }
+  throw new RangeError(
+    `passEnv must not forward ${JSON.stringify(name)}: only the model key ` +
+      `(${MODEL_KEY_ENV_NAMES.join(', ')}) and names in extraAllowedEnv may be passed into the agent container`,
+  )
+}
+
+function assertInput(input: PiRunInput): void {
+  assertPattern('instance', input.instance, INSTANCE, 'lower-case letters, digits or hyphens, starting with a letter')
+  assertPattern('jobId', input.jobId, JOB_ID, 'letters, digits or hyphens')
+  assertPositiveInteger('runNumber', input.runNumber)
+  assertPath('worktreePath', input.worktreePath)
+  assertPattern(
+    'image',
+    input.image,
+    IMAGE,
+    'an image reference that starts with a letter or digit, so it cannot read as a podman option',
+  )
+  assertPath('sessionDir', input.sessionDir)
+  const extraAllowedEnv = input.extraAllowedEnv ?? []
+  for (const name of extraAllowedEnv) {
+    assertExtraAllowedEnv(name)
+  }
+  for (const name of input.passEnv) {
+    assertPassEnvName(name, extraAllowedEnv)
+  }
+  assertPositiveInteger('limits.cpus', input.limits.cpus)
+  assertPositiveInteger('limits.memoryMb', input.limits.memoryMb)
+  assertPositiveInteger('limits.pidsLimit', input.limits.pidsLimit)
+}
+
+/**
+ * The `podman run` arguments for one Pi job. The container keeps outbound network (the model
+ * API needs it) through slirp4netns, so there is no `--network=none` and no host networking.
+ */
+export function buildPiRunArgs(input: PiRunInput): string[] {
+  assertInput(input)
+
+  const { instance, jobId, runNumber, image, worktreePath, sessionDir, prompt } = input
+  const args = [
+    'run',
+    '--rm',
+    '--name',
+    `steward-${instance}-job-${jobId}-${runNumber}`,
+    // keep-id maps the host user inside the container, so files it writes are not root-owned.
+    '--userns=keep-id',
+    `--cpus=${input.limits.cpus}`,
+    `--memory=${input.limits.memoryMb}m`,
+    `--pids-limit=${input.limits.pidsLimit}`,
+    '--cap-drop=ALL',
+    '--security-opt=no-new-privileges',
+    // The model API needs outbound network. slirp4netns, not host networking: a host-networked
+    // container could reach steward's Postgres, Redis and API on 127.0.0.1. It is also not the
+    // default (pasta), which gets no traffic out on this box (verified 2026-11-08).
+    '--network=slirp4netns',
+    '-v',
+    `${worktreePath}:/workspace:rw`,
+    '-v',
+    `${sessionDir}:/session:rw`,
+    '-w',
+    '/workspace',
+  ]
+
+  // Names only: Podman reads the value from the orchestrator's environment, so no secret is
+  // written into the argument list or a file.
+  for (const name of input.passEnv) {
+    args.push('-e', name)
+  }
+
+  args.push(image, '-p', '--mode', 'json', '--session-dir', '/session')
+  if (input.model !== undefined) {
+    args.push('--model', input.model)
+  }
+  if (input.resumeSessionId !== undefined) {
+    args.push('--session', input.resumeSessionId)
+  }
+  args.push('--', prompt)
+
+  return args
+}

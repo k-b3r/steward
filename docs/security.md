@@ -11,9 +11,12 @@ does not do.
   requests, or write to the tracker.
 - The orchestrator alone pushes commits, opens pull requests, and writes to the tracker.
   Those writes are phase 4. The API and worker hold the credentials; agent containers do not.
-- The phase 2 container launch must pass no host environment into the container. The agent
-  works in a local worktree and commits locally. A short-lived, scoped credential in the
-  container is not part of the design.
+- The phase 2 container launch passes no host environment into the container, with one
+  exception: the model keys, and only by name (`-e ANTHROPIC_API_KEY`, never a value in the
+  argument list). The launch uses an allowlist, not a denylist: only `OPENCODE_API_KEY` and
+  `ANTHROPIC_API_KEY` are forwarded, and any other name is refused. A name added later must be
+  listed on purpose. The agent works in a local worktree and commits locally. A short-lived,
+  scoped credential in the container is not part of the design.
 - Nothing in an agent container can read the API token, the database URLs, or the tracker
   key, because none of them are passed in.
 

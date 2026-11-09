@@ -20,6 +20,7 @@ export default [
       'src/runs.ts',
       'src/runner/pi-events.ts',
       'src/validation-policy.ts',
+      'src/runner/pi-command.ts',
     ],
   }),
   // Repo-specific blocks (framework plugins, extra bans) go here.
