@@ -1,0 +1,3 @@
+{"type":"session","version":3,"id":"4d5e6f70-8192-43a4-b5c6-d7e8f9012345","timestamp":"2026-11-08T16:31:00.000Z","cwd":"/workspace"}
+{"type":"message_end","message":{"role":"assistant","content":[],"api":"openai-completions","provider":"opencode-go","model":"deepseek-v4.1-flash","stopReason":"error","errorMessage":"context window exceeded","timestamp":1762619461000}}
+{"type":"agent_settled","aborted":false}
