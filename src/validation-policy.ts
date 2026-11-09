@@ -151,6 +151,27 @@ function isForbidden(path: string, policy: DiffPolicy): boolean {
 
 const byPath = (a: ChangedFile, b: ChangedFile): number => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
 
+/** A contract test may be added. Modifying, deleting or renaming one (on either path) is a violation. */
+function contractTestViolation(file: ChangedFile): DiffViolation | undefined {
+  if (file.status === 'A') return undefined
+  const verb = file.status === 'M' ? 'modified' : file.status === 'D' ? 'deleted' : 'renamed'
+  if (file.path.endsWith(CONTRACT_TEST_SUFFIX)) {
+    return {
+      rule: 'contract-test-changed',
+      path: file.path,
+      detail: `${file.path} was ${verb}; contract tests may only be added`,
+    }
+  }
+  if (file.oldPath?.endsWith(CONTRACT_TEST_SUFFIX)) {
+    return {
+      rule: 'contract-test-changed',
+      path: file.oldPath,
+      detail: `${file.path} was renamed from ${file.oldPath}; contract tests may only be added`,
+    }
+  }
+  return undefined
+}
+
 /**
  * Checks a diff against the policy. Rules, in this order: `too-large`, `forbidden-path`,
  * `contract-test-changed`, `lockfile-without-manifest`. Within a rule, violations sort by the file's
@@ -184,21 +205,8 @@ export function checkDiff(files: readonly ChangedFile[], policy: DiffPolicy): Di
   }
 
   for (const file of sorted) {
-    if (file.status === 'A') continue
-    const verb = file.status === 'M' ? 'modified' : file.status === 'D' ? 'deleted' : 'renamed'
-    if (file.path.endsWith(CONTRACT_TEST_SUFFIX)) {
-      violations.push({
-        rule: 'contract-test-changed',
-        path: file.path,
-        detail: `${file.path} was ${verb}; contract tests may only be added`,
-      })
-    } else if (file.oldPath?.endsWith(CONTRACT_TEST_SUFFIX)) {
-      violations.push({
-        rule: 'contract-test-changed',
-        path: file.oldPath,
-        detail: `${file.path} was renamed from ${file.oldPath}; contract tests may only be added`,
-      })
-    }
+    const violation = contractTestViolation(file)
+    if (violation) violations.push(violation)
   }
 
   const manifestChanged = sorted.some((file) => baseName(file.path) === MANIFEST)
