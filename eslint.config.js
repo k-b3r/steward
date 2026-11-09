@@ -21,6 +21,7 @@ export default [
       'src/runner/pi-events.ts',
       'src/validation-policy.ts',
       'src/validate-git.ts',
+      'src/validate-command.ts',
       'src/runner/pi-command.ts',
     ],
   }),
