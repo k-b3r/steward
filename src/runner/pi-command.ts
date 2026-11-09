@@ -20,7 +20,8 @@ export type PiRunInput = {
   sessionDir: string
   /** The first prompt. It goes in after `--`, so a prompt starting with `-` is safe. */
   prompt: string
-  /** Pi session id to resume; absent for a fresh run. */
+  /** Pi session id to resume; absent for a fresh run. It follows `--session`, so it must start
+   * with a letter or digit: Pi decides whether a leading `-` is a flag or a value. */
   resumeSessionId?: string
   /** Environment variable NAMES to forward. Only the names, never the values. Each must be in
    * `MODEL_KEY_ENV_NAMES` or `extraAllowedEnv`. */
@@ -33,7 +34,8 @@ export type PiRunInput = {
     memoryMb: number
     pidsLimit: number
   }
-  /** Pi model pattern, e.g. `anthropic/claude-sonnet-5-5`; omitted means Pi's own default. */
+  /** Pi model pattern, e.g. `anthropic/claude-sonnet-5-5`; omitted means Pi's own default. Same
+   * rule: it follows `--model`, so it must start with a letter or digit. */
   model?: string
 }
 
@@ -41,7 +43,10 @@ export type PiRunInput = {
 const INSTANCE = /^[a-z][a-z0-9-]{0,30}$/
 const JOB_ID = /^[A-Za-z0-9-]+$/
 const ENV_NAME = /^[A-Z][A-Z0-9_]*$/
-const IMAGE = /^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/
+// The image reference and the Pi model share a shape: a letter or digit first, then letters, digits
+// and `._/:@-`. Starting with a letter or digit keeps either one from reading as an option.
+const IMAGE_OR_MODEL = /^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/
+const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
 // The agent container's only credential is the model key. Everything else is refused by default:
 // an allowlist, not a denylist, so a new variable on the orchestrator (a database URL, an npm
@@ -108,9 +113,26 @@ function assertInput(input: PiRunInput): void {
   assertPattern(
     'image',
     input.image,
-    IMAGE,
+    IMAGE_OR_MODEL,
     'an image reference that starts with a letter or digit, so it cannot read as a podman option',
   )
+  if (input.model !== undefined) {
+    assertPattern(
+      'model',
+      input.model,
+      IMAGE_OR_MODEL,
+      'a model that starts with a letter or digit, like anthropic/claude-sonnet-5-5, ' +
+        'so it cannot read as a Pi option',
+    )
+  }
+  if (input.resumeSessionId !== undefined) {
+    assertPattern(
+      'resumeSessionId',
+      input.resumeSessionId,
+      SESSION_ID,
+      'a session id that starts with a letter or digit, so it cannot read as a Pi option',
+    )
+  }
   assertPath('sessionDir', input.sessionDir)
   const extraAllowedEnv = input.extraAllowedEnv ?? []
   for (const name of extraAllowedEnv) {
