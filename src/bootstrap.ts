@@ -19,7 +19,17 @@ export function secretsOf(config: Config): string[] {
     config.REDIS_SLOT_URL,
     config.LINEAR_API_KEY,
     config.API_TOKEN,
+    config.PI_MODEL_API_KEY,
   ].filter((value): value is string => value !== undefined && value.length > 0)
+}
+
+/**
+ * The environment the agent container gets: the model key, under the provider's own variable name.
+ * Nothing else. `buildPiRunArgs` refuses any other name, so this cannot grow by accident.
+ */
+export function runnerEnv(config: Config): Record<string, string> {
+  if (config.PI_MODEL_API_KEY === undefined) return {}
+  return { [config.PI_MODEL_API_KEY_ENV]: config.PI_MODEL_API_KEY }
 }
 
 export function createContext(config: Config, write: (line: string) => void) {

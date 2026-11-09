@@ -12,6 +12,9 @@ import {
   heldSlots,
   insertJob,
   latestRunNumber,
+  latestSessionId,
+  setJobBranch,
+  setRunSessionId,
   listJobEvents,
   listActions,
   listJobs,
@@ -118,6 +121,7 @@ describe('insertJob', () => {
       slot: null,
       nextRunAt: null,
       failureKind: null,
+      branch: null,
     })
     expect(await eventsFor(job.id)).toMatchObject([{ fromState: null, toState: 'proposed', at: T0 }])
   })
@@ -584,5 +588,34 @@ describe('list limits', () => {
 
     expect(await listActions(db, { status: 'pending', limit: 2 })).toHaveLength(2)
     expect(await listActions(db, { status: 'pending' })).toHaveLength(3)
+  })
+
+  it('stores the branch once for a job and reads it back', async () => {
+    const job = await createJob()
+
+    await setJobBranch(db, job.id, 'TST-1')
+
+    expect((await getJob(db, job.id))?.branch).toBe('TST-1')
+  })
+
+  it("keeps the newest run's session id for a resume, ignoring runs without one", async () => {
+    const job = await createJob()
+    await transitionJob(db, job.id, 'queued', { now: at(0), reason: 'confirmed' })
+    await transitionJob(db, job.id, 'claiming', { now: at(1) })
+    await setRunSessionId(db, job.id, 1, 'session-one')
+    expect(await latestSessionId(db, job.id)).toBe('session-one')
+
+    await transitionJob(db, job.id, 'running', { now: at(2) })
+    await transitionJob(db, job.id, 'queued', { now: at(3), failureKind: 'infra', reason: 'lost' })
+    await transitionJob(db, job.id, 'claiming', { now: at(4) })
+    expect(await latestSessionId(db, job.id)).toBe('session-one')
+
+    await setRunSessionId(db, job.id, 2, 'session-two')
+    expect(await latestSessionId(db, job.id)).toBe('session-two')
+  })
+
+  it('has no session id for a job that never stored one', async () => {
+    const job = await createJob()
+    expect(await latestSessionId(db, job.id)).toBeNull()
   })
 })

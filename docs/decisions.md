@@ -807,6 +807,31 @@ exit 0 and `v22.23.4` / `10.34.9` in config order; `sleep 30` with `timeoutSec: 
 synthetic repo's real `-z` diff correctly (a rename, a binary file, a space and a newline in paths).
 Not in CI: it needs Podman.
 
+### 39. The wiring keys, off by default
+
+The pieces of decisions 30-38 exist but nothing joins them. This adds the keys that will, each
+with the value that keeps today's behavior, so merging it changes nothing a person sees:
+
+- `RUNNER` (`echo` or `pi`, default `echo`). `pi` requires `PI_MODEL_API_KEY`, the **model provider
+  key** the agent calls the LLM with (an OpenCode Go key for DeepSeek, or an Anthropic key; never the
+  Linear key or the GitHub token). It is a secret, accepted only from the environment and redacted
+  like the others; the worker refuses to start without it.
+  `PI_MODEL_API_KEY_ENV` names the variable the container reads it from, default `OPENCODE_API_KEY` and
+  restricted to the runner's own allowlist (`MODEL_KEY_ENV_NAMES`): Pi reads the provider's variable,
+  so the config key is mapped rather than forwarded under its own name. `runnerEnv` in
+  `src/bootstrap.ts` is the one place that mapping happens, and `secretsOf` now carries the key so
+  logs and transcripts redact it.
+- `PI_IMAGE` (default `steward-pi:1.5.0`), `PI_MODEL` (unset uses Pi's own default),
+  `PI_TURN_CAP` (40), `PI_TIMEOUT_MS` (20 minutes).
+- `CLAIM_ENABLED` (false) and `VALIDATION_ENABLED` (false).
+- `jobs.branch` and `runs.session_id`, with the generated migration: the claim's branch and Pi's
+  session id have nowhere else to live, and a resume after a worker restart needs the id from the
+  database, not from memory.
+- `latestSessionId` reads the newest run that has one, so a run that never stored an id cannot hide
+  an older one.
+
+`docs/wiring-plan.md` holds the rest of the plan.
+
 ## Unverified
 
 Each item still needs a run on the box.

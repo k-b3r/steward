@@ -144,6 +144,12 @@ There is one env file per instance, at `~/steward-instances/<instance>/.env` (fi
 
 Three more keys, all non-secret. `BASE_BRANCH` is the branch each job starts from: a new branch named for the ticket (for example `INV-12`) is cut from `origin/<BASE_BRANCH>`, and it defaults to `main`. `DASHBOARD_DIR` is optional: set it to the absolute path of the built `dashboard/dist` and the API serves it from its own origin; unset means the API answers only `/v1`. `ALLOWED_STATUSES` is a comma-separated list of the tracker statuses the orchestrator may move a ticket into, default `In Progress`, and an empty list is a config error; it is parsed and validated now, but nothing reads it yet, because nothing writes to Linear.
 
+### Which agent runs a job
+
+These keys are parsed and validated now, but **nothing reads them yet**: the worker still builds the echo runner, and the wiring lands in the slices of [docs/wiring-plan.md](docs/wiring-plan.md). Setting `RUNNER=pi` today still runs the stub.
+
+The agent runner will be chosen by `RUNNER`: `echo` (the default, a stub that writes a fixed transcript) or `pi`, which runs the real agent in a Podman container. `pi` requires `PI_MODEL_API_KEY`, the **model provider key** the agent uses to call the LLM (for example an OpenCode Go key, which serves DeepSeek, or an Anthropic key; it is not the Linear key or the GitHub token). It is a secret: set it in the environment only, never in the config file, and it reaches the container as `PI_MODEL_API_KEY_ENV` (default `OPENCODE_API_KEY`). `pi` also takes `PI_IMAGE` (default `steward-pi:1.5.0`), `PI_MODEL` (unset means Pi's own default), `PI_TURN_CAP` (default 40 turns) and `PI_TIMEOUT_MS` (default 20 minutes). Two switches are off by default and will change what a confirmed ticket does once wired: `CLAIM_ENABLED` opens a draft pull request before the agent starts, and `VALIDATION_ENABLED` runs the configured checks after the agent and before any push.
+
 ### Point an instance at a repo
 
 ```bash

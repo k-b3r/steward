@@ -1,6 +1,6 @@
 // Postgres-backed job store. Every function takes the drizzle handle and an
 // explicit `now: Date`; nothing here reads the clock or the environment.
-import { and, asc, desc, eq, inArray, isNull, max } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, isNull, max } from 'drizzle-orm'
 
 import { allocateSlot, findLeakedSlots, holdsSlot } from '../allocate'
 import { endsRun, runOutcomeFor, startsRun } from '../runs'
@@ -33,7 +33,32 @@ function toJob(row: JobWithSlot): Job {
     slot: row.slot,
     nextRunAt: row.job.nextRunAt,
     failureKind: row.job.failureKind,
+    branch: row.job.branch,
   }
+}
+
+/** Records the branch a claim pushed. Set once, and never recomputed from the identifier. */
+export async function setJobBranch(db: Db, jobId: string, branch: string): Promise<void> {
+  await db.update(jobs).set({ branch }).where(eq(jobs.id, jobId))
+}
+
+/** Records Pi's session id for a run, so a resume after a restart can continue it. */
+export async function setRunSessionId(db: Db, jobId: string, runNumber: number, sessionId: string): Promise<void> {
+  await db
+    .update(runs)
+    .set({ sessionId })
+    .where(and(eq(runs.jobId, jobId), eq(runs.runNumber, runNumber)))
+}
+
+/** The session id of a job's newest run that has one, or null: the id a resume continues. */
+export async function latestSessionId(db: Db, jobId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ sessionId: runs.sessionId })
+    .from(runs)
+    .where(and(eq(runs.jobId, jobId), isNotNull(runs.sessionId)))
+    .orderBy(desc(runs.runNumber))
+    .limit(1)
+  return row?.sessionId ?? null
 }
 
 function toPendingAction(row: PendingActionRow): PendingAction {
@@ -111,6 +136,7 @@ export async function insertJob(
         maxAttempts: input.maxAttempts,
         nextRunAt: null,
         failureKind: null,
+        branch: null,
         createdAt: input.now,
         updatedAt: input.now,
       })

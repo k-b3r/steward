@@ -24,6 +24,7 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     slot: 0,
     nextRunAt: null,
     failureKind: null,
+    branch: null,
     ...overrides,
   }
 }
