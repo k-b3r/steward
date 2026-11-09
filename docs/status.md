@@ -13,6 +13,8 @@ Other documents hold the reasons. This one holds the state.
 - `decisions.md`: every decision, with the evidence behind it.
 - `security.md`: what is protected and how.
 - `agent-config-improvements.md`: friction found in the shared standards and templates.
+- `walkthrough.md`: how it works today, step by step, for a person.
+- `glossary.md`: the project's words, one meaning each.
 - `next-work.md`: the agreed plan for the next changes. This page says where things stand; that
   page says what comes next, so check both when they disagree.
 
