@@ -38,6 +38,7 @@
       "src/subagent-policy.ts",
       "src/runs.ts",
       "src/validation-policy.ts",
+      "src/validate-git.ts",
       "src/runner/pi-command.ts"
     ],
     "generatedPaths": [
