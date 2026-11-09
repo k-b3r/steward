@@ -11,6 +11,7 @@ export default [
     // architecture fit check has modules; pure code defaults to a module's domain/ (list files instead if the repo lays it out differently, and record that in CODING_STANDARDS.md).
     pureCorePaths: [
       'src/transitions.ts',
+      'src/branch-name.ts',
       'src/allocate.ts',
       'src/linear-map.ts',
       'src/retry-policy.ts',

@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { holdsSlot } from '../allocate'
+import { branchName } from '../branch-name'
 import { acquireSlot, getJob, latestRunNumber, releaseSlot, transitionJob } from '../db/store'
 import type { Db } from '../platform/db'
 import type {
@@ -37,7 +38,7 @@ export type ProcessJobDeps = {
     mergeIntoWorktree: typeof mergeIntoWorktree
     removeWorktree: typeof removeWorktree
   }
-  /** Base branch a new `agent/*` branch starts from. Defaults to main. */
+  /** Base branch a new job branch starts from. Defaults to main. */
   baseBranch?: string
   log?: (msg: string) => void
 }
@@ -79,10 +80,6 @@ class AgentError extends Error {
     super(message)
     this.name = 'AgentError'
   }
-}
-
-function branchName(identifier: string): string {
-  return `agent/${identifier.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
 }
 
 function errorMessage(error: unknown): string {

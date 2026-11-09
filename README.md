@@ -142,7 +142,7 @@ REPO_PATH=/home/you/steward-instances/personal/repo
 
 There is one env file per instance, at `~/steward-instances/<instance>/.env` (file mode 0600, folder mode 0700, outside the repo). `pnpm dev:api` and `pnpm dev:worker` pick the env file from `STEWARD_ENV_FILE`, else `STEWARD_INSTANCE`, else the only folder under `~/steward-instances`; set `STEWARD_INSTANCES_DIR` to move that root. Several instances and no choice is an error. The systemd units read the same file. `.env.example` is the template.
 
-Three more keys, all non-secret. `BASE_BRANCH` is the branch each job starts from: a new `agent/*` branch is cut from `origin/<BASE_BRANCH>`, and it defaults to `main`. `DASHBOARD_DIR` is optional: set it to the absolute path of the built `dashboard/dist` and the API serves it from its own origin; unset means the API answers only `/v1`. `ALLOWED_STATUSES` is a comma-separated list of the tracker statuses the orchestrator may move a ticket into, default `In Progress`, and an empty list is a config error; it is parsed and validated now, but nothing reads it yet, because nothing writes to Linear.
+Three more keys, all non-secret. `BASE_BRANCH` is the branch each job starts from: a new branch named for the ticket (for example `INV-12`) is cut from `origin/<BASE_BRANCH>`, and it defaults to `main`. `DASHBOARD_DIR` is optional: set it to the absolute path of the built `dashboard/dist` and the API serves it from its own origin; unset means the API answers only `/v1`. `ALLOWED_STATUSES` is a comma-separated list of the tracker statuses the orchestrator may move a ticket into, default `In Progress`, and an empty list is a config error; it is parsed and validated now, but nothing reads it yet, because nothing writes to Linear.
 
 ### Point an instance at a repo
 

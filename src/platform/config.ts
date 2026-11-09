@@ -39,7 +39,7 @@ export type Config = {
   MAX_ATTEMPTS: number
   DRY_RUN: boolean
   REPO_PATH: string
-  /** Branch a new `agent/*` branch starts from. */
+  /** Branch a new job branch starts from. */
   BASE_BRANCH: string
   /** Built dashboard to serve from the API's origin; unset serves only /v1. */
   DASHBOARD_DIR?: string

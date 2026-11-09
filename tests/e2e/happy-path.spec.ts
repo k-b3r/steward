@@ -448,7 +448,7 @@ describe.skipIf(redisUrl === undefined)('steward, phase 1: from a tracker ticket
     expect(envelopes[2]?.data).toMatchObject({ message: { content: [{ type: 'text', text: 'echo TST-1' }] } })
 
     // Git: the branch stays (a retry continues it); the worktree was removed in `finally`.
-    expect(git(repoPath, 'branch', '--list', 'agent/*')).toContain('agent/tst-1')
+    expect(git(repoPath, 'branch', '--list', 'TST-1')).toContain('TST-1')
     expect(git(repoPath, 'worktree', 'list').split('\n')).toHaveLength(1)
     expect(existsSync(join(runsDir, job.id, 'worktree'))).toBe(false)
   })
