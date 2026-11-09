@@ -24,6 +24,7 @@ function toJob(row: JobWithSlot): Job {
     externalId: row.job.externalId,
     identifier: row.job.identifier,
     title: row.job.item.title,
+    body: row.job.item.body,
     url: row.job.item.url,
     createdAt: row.job.createdAt,
     state: row.job.state,

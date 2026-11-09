@@ -65,6 +65,8 @@ export type Job = {
   externalId: string
   identifier: string
   title: string
+  /** The ticket description, when the caller has it. The store keeps it in the job's item. */
+  body?: string
   url: string
   createdAt: Date
   state: JobState
