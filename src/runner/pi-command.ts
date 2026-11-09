@@ -22,8 +22,12 @@ export type PiRunInput = {
   prompt: string
   /** Pi session id to resume; absent for a fresh run. */
   resumeSessionId?: string
-  /** Environment variable NAMES to forward. Only the names, never the values. */
+  /** Environment variable NAMES to forward. Only the names, never the values. Each must be in
+   * `MODEL_KEY_ENV_NAMES` or `extraAllowedEnv`. */
   passEnv: string[]
+  /** Extra names the caller allows in `passEnv`, on top of `MODEL_KEY_ENV_NAMES`. Default none.
+   * They are checked too: see `assertExtraAllowedEnv`. */
+  extraAllowedEnv?: readonly string[]
   limits: {
     cpus: number
     memoryMb: number
@@ -38,12 +42,16 @@ const INSTANCE = /^[a-z][a-z0-9-]{0,30}$/
 const JOB_ID = /^[A-Za-z0-9-]+$/
 const ENV_NAME = /^[A-Z][A-Z0-9_]*$/
 
-// The agent container never gets GitHub, SSH or tracker credentials: the model key is the only
-// credential allowed in. With `GITHUB_TOKEN`, `GH_TOKEN` or an SSH agent socket the agent could
-// push, open pull requests and write to the tracker from inside the container, and with
-// `GIT_*` it could rewrite its own author identity. Those writes belong to the orchestrator
-// alone (docs/security.md), so a forward of one of these names is a bug, not a detail.
-const FORBIDDEN_ENV = ['GITHUB', 'GH_', 'LINEAR', 'SSH', 'GIT_']
+// The agent container's only credential is the model key. Everything else is refused by default:
+// an allowlist, not a denylist, so a new variable on the orchestrator (a database URL, an npm
+// token, a tracker key) cannot leak into the agent by being forwarded by mistake. The GitHub, SSH
+// and tracker writes belong to the orchestrator alone (docs/security.md).
+export const MODEL_KEY_ENV_NAMES: readonly string[] = ['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY']
+
+// Defense in depth for `extraAllowedEnv`: a caller that lists one of these names is still refused.
+// Prefixes are anchored to the start; the substrings catch credential-like names anywhere.
+const FORBIDDEN_EXTRA_PREFIXES = ['GH_', 'GIT_', 'SSH_']
+const FORBIDDEN_EXTRA_PARTS = ['GITHUB', 'LINEAR', 'DATABASE', 'REDIS', 'STEWARD', 'TOKEN', 'SECRET', 'PASSWORD']
 
 function assertPattern(field: string, value: string, pattern: RegExp, expected: string): void {
   if (!pattern.test(value)) {
@@ -67,15 +75,28 @@ function assertPositiveInteger(field: string, value: number): void {
   }
 }
 
-function assertEnvName(name: string): void {
-  assertPattern('passEnv name', name, ENV_NAME, 'an upper-case variable name like ANTHROPIC_API_KEY')
-  const forbidden = FORBIDDEN_ENV.find((part) => name.includes(part))
-  if (forbidden !== undefined) {
-    throw new Error(
-      `passEnv must not forward ${JSON.stringify(name)}: the agent container gets no GitHub, ` +
-        `SSH or tracker credentials (matched ${JSON.stringify(forbidden)})`,
+function assertExtraAllowedEnv(name: string): void {
+  assertPattern('extraAllowedEnv name', name, ENV_NAME, 'an upper-case variable name like HIGH_LEVEL')
+  const prefix = FORBIDDEN_EXTRA_PREFIXES.find((p) => name.startsWith(p))
+  const part = FORBIDDEN_EXTRA_PARTS.find((p) => name.includes(p))
+  const matched = prefix ?? part
+  if (matched !== undefined) {
+    throw new RangeError(
+      `extraAllowedEnv must not allow ${JSON.stringify(name)}: the agent container gets no GitHub, ` +
+        `SSH, git identity, database, queue or tracker credentials (matched ${JSON.stringify(matched)})`,
     )
   }
+}
+
+function assertPassEnvName(name: string, extraAllowedEnv: readonly string[]): void {
+  assertPattern('passEnv name', name, ENV_NAME, 'an upper-case variable name like ANTHROPIC_API_KEY')
+  if (MODEL_KEY_ENV_NAMES.includes(name) || extraAllowedEnv.includes(name)) {
+    return
+  }
+  throw new RangeError(
+    `passEnv must not forward ${JSON.stringify(name)}: only the model key ` +
+      `(${MODEL_KEY_ENV_NAMES.join(', ')}) and names in extraAllowedEnv may be passed into the agent container`,
+  )
 }
 
 function assertInput(input: PiRunInput): void {
@@ -84,8 +105,12 @@ function assertInput(input: PiRunInput): void {
   assertPositiveInteger('runNumber', input.runNumber)
   assertPath('worktreePath', input.worktreePath)
   assertPath('sessionDir', input.sessionDir)
+  const extraAllowedEnv = input.extraAllowedEnv ?? []
+  for (const name of extraAllowedEnv) {
+    assertExtraAllowedEnv(name)
+  }
   for (const name of input.passEnv) {
-    assertEnvName(name)
+    assertPassEnvName(name, extraAllowedEnv)
   }
   assertPositiveInteger('limits.cpus', input.limits.cpus)
   assertPositiveInteger('limits.memoryMb', input.limits.memoryMb)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildPiRunArgs, type PiRunInput } from './pi-command'
+import { buildPiRunArgs, MODEL_KEY_ENV_NAMES, type PiRunInput } from './pi-command'
 
 const BASE: PiRunInput = {
   instance: 'personal',
@@ -89,11 +89,19 @@ describe('buildPiRunArgs', () => {
   })
 
   it('passes every env var by name only, never with a value', () => {
-    const args = pi({ passEnv: ['ANTHROPIC_API_KEY', 'PI_CODING_AGENT_SESSION_DIR'] })
-    expect(args.filter((arg, index) => args[index - 1] === '-e')).toEqual([
-      'ANTHROPIC_API_KEY',
-      'PI_CODING_AGENT_SESSION_DIR',
-    ])
+    const args = pi({ passEnv: ['ANTHROPIC_API_KEY', 'OPENCODE_API_KEY'] })
+    expect(args.filter((arg, index) => args[index - 1] === '-e')).toEqual(['ANTHROPIC_API_KEY', 'OPENCODE_API_KEY'])
+  })
+
+  it('allows the two model keys with no extra allowlist', () => {
+    expect(MODEL_KEY_ENV_NAMES).toEqual(['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY'])
+    expect(() => pi({ passEnv: ['OPENCODE_API_KEY'] })).not.toThrow()
+    expect(() => pi({ passEnv: ['ANTHROPIC_API_KEY'] })).not.toThrow()
+  })
+
+  it('forwards an extra name only when the caller lists it in extraAllowedEnv', () => {
+    expect(pi({ passEnv: ['HIGH_LEVEL'], extraAllowedEnv: ['HIGH_LEVEL'] })).toContain('HIGH_LEVEL')
+    expect(pi({ passEnv: ['DIGIT_COUNT'], extraAllowedEnv: ['DIGIT_COUNT'] })).toContain('DIGIT_COUNT')
   })
 
   it('omits --model when no model is given', () => {
@@ -123,12 +131,55 @@ describe('buildPiRunArgs guards', () => {
     },
   )
 
-  // The agent container never gets tracker or GitHub credentials; only the model key is allowed in.
-  it.each(['GITHUB_TOKEN', 'GH_TOKEN', 'GH_ACCOUNT', 'LINEAR_API_KEY', 'SSH_AUTH_SOCK', 'GIT_AUTHOR_NAME'])(
-    'refuses to pass %s into the agent container',
+  // The agent container's only credential is the model key: any other name is refused.
+  it.each([
+    'DATABASE_URL',
+    'NPM_TOKEN',
+    'GITHUB_TOKEN',
+    'GH_TOKEN',
+    'GH_ACCOUNT',
+    'LINEAR_API_KEY',
+    'SSH_AUTH_SOCK',
+    'GIT_AUTHOR_NAME',
+    'STEWARD_API_TOKEN',
+    'HIGH_LEVEL',
+    'PI_CODING_AGENT_SESSION_DIR',
+  ])('refuses to pass %s into the agent container when it is not allowlisted', (name) => {
+    expect(() => pi({ passEnv: [name] })).toThrow(RangeError)
+    expect(() => pi({ passEnv: [name] })).toThrow(new RegExp(name))
+  })
+
+  it.each([
+    'DATABASE_URL',
+    'NPM_TOKEN',
+    'GITHUB_TOKEN',
+    'STEWARD_API_TOKEN',
+    'GH_TOKEN',
+    'SSH_AUTH_SOCK',
+    'GIT_AUTHOR_NAME',
+  ])('refuses %s even when the caller lists it in extraAllowedEnv', (name) => {
+    expect(() => pi({ passEnv: [name], extraAllowedEnv: [name] })).toThrow(new RegExp(name))
+  })
+
+  it.each([
+    'GH_ACCOUNT',
+    'GIT_SSH',
+    'SSH_KEY',
+    'MY_GITHUB_THING',
+    'LINEAR_KEY',
+    'REDIS_URL',
+    'STEWARD_X',
+    'MY_SECRET',
+    'DB_PASSWORD',
+    'API_TOKEN',
+  ])('refuses the extraAllowedEnv name %s', (name) => {
+    expect(() => pi({ extraAllowedEnv: [name] })).toThrow(RangeError)
+  })
+
+  it.each(['lower_case', 'WITH-DASH', '1DIGIT'])(
+    'refuses the extraAllowedEnv name %s, which is not an upper-case variable name',
     (name) => {
-      expect(() => pi({ passEnv: [name] })).toThrow(Error)
-      expect(() => pi({ passEnv: [name] })).toThrow(new RegExp(name))
+      expect(() => pi({ extraAllowedEnv: [name] })).toThrow(RangeError)
     },
   )
 
