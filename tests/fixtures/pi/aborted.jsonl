@@ -1,0 +1,6 @@
+{"type":"session","version":3,"id":"2b3c4d5e-6f70-4182-93a4-b5c6d7e8f901","timestamp":"2026-11-08T16:20:00.000Z","cwd":"/home/kim/steward-instances/dev/repo"}
+{"type":"turn_start"}
+{"type":"message_end","message":{"role":"assistant","content":[],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-5-5","usage":{"input":80,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":80,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"error","errorMessage":"529 overloaded","timestamp":1762618801000}}
+{"type":"turn_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"529 overloaded","timestamp":1762618801000},"toolResults":[]}
+{"type":"agent_end","messages":[],"willRetry":false}
+{"type":"agent_settled","aborted":true}

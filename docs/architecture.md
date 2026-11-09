@@ -169,6 +169,9 @@ restarts at 1 in each. A job that ran before runs existed keeps its flat
   monotonically, so the SSE tail can resume from `Last-Event-ID`.
 - `raw.jsonl`: the byte-exact runner output, mode 0600. The API never serves this file.
 - One writer handles runner and orchestrator lines. Agent events go into `data` unmodified.
+- `src/runner/pi-events.ts` turns one `pi --mode json` record into a `kind` and the envelope
+  `data`. It is pure: the splitter, the mapper and the turn counter take no clock and start no
+  process. The mapping table is decision 30.
 - Redaction covers orchestrator-originated lines and process logs. It does not cover agent
   output; see [security.md](security.md).
 - Retention is `RUN_RETENTION_DAYS` (default 30). The sweep is phase 5.
@@ -235,7 +238,7 @@ src/
   bootstrap.ts       config, logger, pool: shared start-up
   platform/          config, logger, db pool, delay, git helpers, static file serving
   db/                Drizzle schema, store, migrations, intake queries
-  runner/            transcript writer and the echo runner (stands in for a real agent)
+  runner/            transcript writer, echo runner, and the Pi event mapper (no process, no clock)
   worker/            process-job, the BullMQ queue, the start-up reconciler
   api/               Hono app, auth middleware, and the contract types
   composition/       wires config into the API and the worker

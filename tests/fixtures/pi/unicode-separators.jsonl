@@ -1,0 +1,2 @@
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"before after end"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-5-5","usage":{"input":5,"output":2,"cacheRead":0,"cacheWrite":0,"totalTokens":7,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1762620601000}}
+{"type":"agent_settled","aborted":false}

@@ -1,0 +1,11 @@
+{"type":"session","version":3,"id":"0f6f3a1c-6b0e-4a5e-9f7e-2f8b6c1d4e21","timestamp":"2026-11-08T15:56:42.000Z","cwd":"/home/kim/steward-instances/dev/repo"}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":"Ship BUY-42","timestamp":1762617402000}}
+{"type":"message_end","message":{"role":"user","content":"Ship BUY-42","timestamp":1762617402000}}
+{"type":"message_start","message":{"role":"assistant","content":[],"stopReason":"pending","timestamp":1762617402000}}
+{"type":"message_update","usage":{"input":100,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":101,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Hello "}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Hello"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-5-5","usage":{"input":100,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":101,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1762617409000}}
+{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"Hello"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-5-5","usage":{"input":100,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":101,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1762617409000},"toolResults":[]}
+{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"Hello"}],"stopReason":"stop","timestamp":1762617409000}],"willRetry":false}
+{"type":"agent_settled","aborted":false}
