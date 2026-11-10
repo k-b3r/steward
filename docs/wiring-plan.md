@@ -26,16 +26,18 @@ nothing a person sees; the last three change what a confirmed ticket does.
 - Proven by: `config.test.ts` defaults and refusals; a migration test that the columns exist.
 - Behavior change: none.
 
-## Slice 2: the runner switch and resume across a restart
+## Slice 2: the runner switch and resume across a restart (done, decision 40)
 
 - `bootstrap.ts` builds the runner from `RUNNER`: the echo runner as today, or the Pi runner with a
   real `podman spawn`, `execPodman`, the clock and a cancelable `sleep`.
-- `process-job.ts` passes the runner's `sessionId` to the store, and a resumed job (from
-  `changes_requested` or `ci_failed`) calls `runner.resume(storedSessionId, feedback)` instead of
-  `start`. A missing or unusable session id falls back to `start`.
-- Proven by: an integration test with a fake runner that a resume uses the stored id and appends to
-  the same run.
-- Behavior change: none until `RUNNER=pi` is set.
+- `process-job.ts` stores the session id on the run, and `resumeJob` continues a job waiting in
+  `changes_requested` or `ci_failed`: it restores the branch in a worktree, then `runner.resume`. No
+  stored session means a fresh start inside the same call, never a job parked in `running`.
+- The `podman` client gets an allowlisted environment, not the host's.
+- Proven by: integration tests for a resume, a job that is not waiting, a job with no session, and a
+  resume that fails.
+- Behavior change: none until `RUNNER=pi` is set, and nothing calls `resumeJob` until the API route
+  and the poller land.
 
 ## Slice 3: the claim
 

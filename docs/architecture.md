@@ -161,7 +161,7 @@ The startup reconciler runs before the worker takes new work:
 ## Transcripts
 
 Each run has its own folder: `~/steward-instances/<instance>/runs/<job-id>/<run-number>/`, mode 0700. A retry is a new run, so each attempt's transcript stays apart and `seq` restarts at 1 in
-each. A resume re-runs the same Pi session and appends to the run's transcript, so `seq` continues.
+each. A resume opens a new run, so its transcript is a new folder and `seq` restarts at 1; the Pi session itself continues, because its folder is one per job (`runs/<job-id>/session`) and not per run.
 A job that ran before runs existed keeps its flat `runs/<job-id>/transcript.jsonl`, which the API
 still serves when the job has no runs.
 

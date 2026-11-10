@@ -711,7 +711,7 @@ when set, `--session <id>` when resuming, and the prompt last, after `--`.
   before they are used.
 - The Pi flags `-p --mode json --session-dir /session --model` were checked against a real run on
   2026-11-08 with `opencode-go/deepseek-v4.1-flash`, which passed them (`tests/fixtures/pi/real-run.jsonl`,
-  on branch `pi-event-mapper`). `UNVERIFIED:` `--session <id>` (resume) is not yet checked by a run.
+  on branch `pi-event-mapper`). `--session <id>` (resume) was checked by a real run on 2026-11-10: decision 40.
   The flags first came from Pi 1.5.0 `docs/cli.md` and `pi --help`. Verified on the box: the image
   builds with `podman build --network=slirp4netns -t steward-pi:test deploy/pi-image`,
   `podman run --rm steward-pi:test --version` prints `1.5.0`, and the flags with `--userns=keep-id`
@@ -832,6 +832,48 @@ with the value that keeps today's behavior, so merging it changes nothing a pers
 
 `docs/wiring-plan.md` holds the rest of the plan.
 
+### 40. The runner switch, and a resume that survives a restart
+
+`RUNNER` now picks the runner in `src/bootstrap.ts`: `createEchoRunner` for `echo`, or
+`createPiRunner` for `pi`, wired to the real Podman effects in `src/runner/podman.ts`
+(`createPodmanSpawn` and `execPodman`). The entry points pass `process.env` in as `ambient`; nothing
+else reads it. Nothing downstream knows which runner it has.
+
+- **The `podman` client gets an allowlist, not the host environment.** `createPodmanSpawn` passes
+  only what the client needs to find its binary, socket and config (`PATH`, `HOME`, `XDG_*`, and a
+  few more) plus the variables the runner forwards, which is the model key. `LINEAR_API_KEY`,
+  `API_TOKEN` and the database URLs stay out of the child, and a test pins it.
+- `processJob` stores the session id Pi returns on the run (`runs.session_id`), so a resume can
+  continue the same conversation after the worker restarts. Memory alone would lose it, so the
+  runner no longer remembers sessions at all: `AgentRunner.resume(sessionId, feedback, run)` takes the
+  run the caller opened (`RunRef`), and the runner writes to that run and names its container after
+  it. The first draft looked the id up in an in-memory map and wrote to the run that had started
+  the session; a review caught both.
+- **One Pi session folder per job, `runs/<jobId>/session`, not per run.** A resume opens a new run
+  but continues the same conversation, and Pi finds a session by id only inside the folder it wrote
+  it to. Verified with a real run on 2026-11-10 (Pi 1.5.2, `opencode-go/deepseek-v4.1-flash`): run 1
+  was told a word and wrote a file; a second container with the same folder and `--session <id>`
+  answered the word, and the header carried the same session id. Both streams are recorded as
+  `tests/fixtures/pi/real-run.jsonl` and `real-resume.jsonl`. This closes the `--session` item that
+  decisions 36 and 37 left `UNVERIFIED:`. A resume does not re-emit the system prompt.
+- `resumeJob` handles the states a job waits in after its pull request exists
+  (`changes_requested`, `ci_failed`): it takes a slot, opens a new run, puts the job's branch back
+  in a worktree (the agent's container mounts it, and the last run removed it), calls
+  `runner.resume` with the feedback, then moves the job to `pr_open` and removes the worktree.
+  `running -> in_review` is not an edge in the state machine, and the poller is what later moves a
+  green pull request on.
+- **No stored session starts the agent fresh, inside the same call.** The job is never left in
+  `running`: there is no edge from `changes_requested` or `ci_failed` back to `queued`, and
+  `processJob` ignores any job that is not `queued`, so queueing it would strand it. The fresh run
+  gets the feedback appended to the ticket text.
+- A resume that fails goes through the same failure routing as a first run: `infra` retries with
+  backoff, and the worktree and slot are always released. After an `infra` retry the job is
+  `queued`, so the retry is a first-run start on the existing branch, not a resume. `UNVERIFIED:`
+  that this loses nothing the PR needs; the branch and its commits are kept.
+
+Nothing calls `resumeJob` yet: the API route and the GitHub poller that would are later slices, so
+this changes no behavior until then.
+
 ## Unverified
 
 Each item still needs a run on the box.
@@ -841,7 +883,6 @@ Each item still needs a run on the box.
 - `UNVERIFIED:` Container readiness ordering. A container service is active as soon as `podman run -d` returns, which is before Postgres accepts connections. In the test the services were started several seconds before the app, so the race was not exercised. Add a readiness check or a retry before relying on boot order.
 - `UNVERIFIED:` The AOF persistence of the queue Redis after a hard kill (only a clean restart was tested).
 - `UNVERIFIED:` The root cause of the pasta outbound failure on this box (kernel 7.0, pasta 0.0~git20260120). Container traffic works with `--network=slirp4netns`; see decision 36.
-- `UNVERIFIED:` `--session <id>` (Pi resume) against a real model run. Decision 36 has the detail.
 
 ## Open items
 
