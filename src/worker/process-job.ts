@@ -228,9 +228,10 @@ async function prepareWorktree(
     const outcome = await deps.git.mergeIntoWorktree(worktreePath, `origin/${baseBranch}`)
     if (outcome === 'conflict') {
       logStep(deps, jobId, runNumber, 'merge conflict', { baseBranch })
-      // TODO(phase-2): hand the conflicted tree to the runner to resolve. The echo stub cannot, and
-      // finishing as `done` would report success and then throw the tree away.
-      throw new AgentError(`merge conflict with origin/${baseBranch}; the echo runner cannot resolve it`)
+      // TODO(phase-2): hand the conflicted tree to the runner to resolve. Until then the limit is the
+      // orchestrator's, not the runner's: finishing as `done` would report success and then throw
+      // the tree away.
+      throw new AgentError(`merge conflict with origin/${baseBranch}; resolving it is not wired yet`)
     }
     logStep(deps, jobId, runNumber, 'merged base into branch', { baseBranch })
   } else {

@@ -503,7 +503,7 @@ describe('processJob', () => {
       expect(existsSync(worktreePath)).toBe(false)
     })
 
-    it('fails a merge conflict as an agent failure, because the echo runner cannot resolve it', async () => {
+    it('fails a merge conflict as an agent failure, because no runner is handed a conflicted tree yet', async () => {
       git(repoPath, ['checkout', '-q', '-b', BRANCH])
       writeFileSync(join(repoPath, 'README.md'), 'branch version\n')
       git(repoPath, ['add', 'README.md'])
