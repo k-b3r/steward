@@ -85,7 +85,7 @@ So:
   `quadlet/` folder; `~/.config/containers/systemd` only holds symlinks to them.
 - Secrets are readable by the login user, and the orchestrator runs as that user. The folder
   mode keeps other OS users out, not agents. Agent containers see only their worktree (phase
-  2), and the agent session for a run lives in `runs/<job-id>/<run-number>/`, so it cannot read the env
+  2), and the agent's session for a job lives in `runs/<job-id>/session`, so it cannot read the env
   file unless it is pointed at the instance folder.
 - The agent-config guard hook blocks reads of files named `.env` or `.env.*` only, which is
   why the file is `.env` and not `<instance>.env`. That guard is not present in every agent

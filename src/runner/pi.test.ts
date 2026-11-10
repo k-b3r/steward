@@ -162,9 +162,9 @@ describe('pi runner', () => {
     const args = h.calls[0]?.args ?? []
     expect(args).toContain(`steward-personal-job-${job.id}-1`)
     expect(args).toContain(`${join(h.runsDir, 'worktrees', job.id)}:/workspace:rw`)
-    expect(args).toContain(`${join(dirOf(h, job.id), 'session')}:/session:rw`)
+    expect(args).toContain(`${join(h.runsDir, job.id, 'session')}:/session:rw`)
     expect(args.at(-1)).toBe(buildPrompt(job))
-    expect(statSync(join(dirOf(h, job.id), 'session')).mode & 0o777).toBe(0o700)
+    expect(statSync(join(h.runsDir, job.id, 'session')).mode & 0o777).toBe(0o700)
     expect(h.sleeps[0]?.cancelled).toBe(true)
   })
 
@@ -262,6 +262,10 @@ describe('pi runner', () => {
     expect(readTranscript(join(h.runsDir, job.id, '2'), 0).map((envelope) => envelope.data)).toContainEqual(
       expect.objectContaining({ msg: 'resumed' }),
     )
+    // The conversation stays in one folder, so run 2 finds what run 1 wrote.
+    const mounts = args.filter((arg) => arg.endsWith(':/session:rw'))
+    expect(mounts).toEqual([`${join(h.runsDir, job.id, 'session')}:/session:rw`])
+    expect(h.calls[0]?.args.filter((arg) => arg.endsWith(':/session:rw'))).toEqual(mounts)
   })
 
   it('resumes after a restart: a fresh runner needs only the ids it is handed', async () => {

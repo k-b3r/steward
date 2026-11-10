@@ -223,7 +223,9 @@ export function createPiRunner(deps: PiRunnerDeps): AgentRunner & {
 
   async function execute(spec: RunSpec): Promise<{ sessionId: string }> {
     const dir = transcriptDir(spec.jobId, spec.runNumber)
-    const sessionDir = join(dir, 'session')
+    // One session folder per job, not per run: a resume opens a new run but continues the same
+    // conversation, and Pi finds a session by id only inside the folder it was written to.
+    const sessionDir = join(config.runsDir, spec.jobId, 'session')
     mkdirSync(sessionDir, { recursive: true, mode: 0o700 })
 
     const writer = createTranscriptWriter({ dir, clock, secrets })
