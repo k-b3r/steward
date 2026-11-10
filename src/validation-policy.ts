@@ -242,12 +242,20 @@ export function checkDiff(files: readonly ChangedFile[], policy: DiffPolicy): Di
 
   const manifestChanged = sorted.some((file) => baseName(file.path) === MANIFEST)
   if (!manifestChanged) {
+    // A lockfile is judged by its new path and its old one: a lockfile renamed away from its own
+    // name still changed, and still needs a manifest change in the same diff.
     for (const file of sorted) {
       if (LOCKFILES.has(baseName(file.path))) {
         violations.push({
           rule: 'lockfile-without-manifest',
           path: file.path,
           detail: `${file.path} changed but no ${MANIFEST} changed in this diff`,
+        })
+      } else if (file.oldPath !== undefined && LOCKFILES.has(baseName(file.oldPath))) {
+        violations.push({
+          rule: 'lockfile-without-manifest',
+          path: file.oldPath,
+          detail: `${file.path} was renamed from ${file.oldPath}, a lockfile, but no ${MANIFEST} changed in this diff`,
         })
       }
     }

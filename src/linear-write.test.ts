@@ -29,8 +29,11 @@ function errorResponse(status: number, headers: Record<string, string> = {}): Re
 const stateLookup = (id: string) => () => jsonResponse({ data: { workflowStates: { nodes: [{ id }] } } })
 const issueState = (id: string) => () => jsonResponse({ data: { issue: { state: { id } } } })
 const issueUpdated = (success: boolean) => () => jsonResponse({ data: { issueUpdate: { success } } })
-const issueAttachments = (urls: string[]) => () =>
-  jsonResponse({ data: { issue: { attachments: { nodes: urls.map((url) => ({ url })) } } } })
+const attachmentPage = (urls: string[], pageInfo: { hasNextPage: boolean; endCursor: string | null }) => () =>
+  jsonResponse({
+    data: { issue: { attachments: { nodes: urls.map((url) => ({ url })), pageInfo } } },
+  })
+const issueAttachments = (urls: string[]) => attachmentPage(urls, { hasNextPage: false, endCursor: null })
 const attachmentCreated = (success: boolean) => () => jsonResponse({ data: { attachmentCreate: { success } } })
 
 /** Serves responses in order and records each request body. Running out of responses fails the test. */
@@ -163,6 +166,52 @@ describe('attachPullRequest', () => {
 
     await expect(writer.attachPullRequest(ISSUE_ID, PR_URL, 'Fix things')).resolves.toBe('already')
     expect(fake.calls).toHaveLength(1)
+  })
+
+  it('pages through the attachments and finds the url on a later page', async () => {
+    const fake = fakeFetch([
+      attachmentPage(['https://example.com/other'], { hasNextPage: true, endCursor: 'cursor-1' }),
+      attachmentPage([PR_URL], { hasNextPage: false, endCursor: null }),
+    ])
+    const writer = writerWith({ fetch: fake.fetch })
+
+    await expect(writer.attachPullRequest(ISSUE_ID, PR_URL, 'Fix things')).resolves.toBe('already')
+
+    expect(fake.calls).toHaveLength(2)
+    expect(fake.calls[0]?.body.variables).toEqual({ id: ISSUE_ID, after: null })
+    expect(fake.calls[1]?.body.variables).toEqual({ id: ISSUE_ID, after: 'cursor-1' })
+    expect(fake.calls.map((call) => call.body.query)).not.toContainEqual(expect.stringContaining('attachmentCreate'))
+  })
+
+  it('fails when a page claims more but names no cursor', async () => {
+    const fake = fakeFetch([attachmentPage([], { hasNextPage: true, endCursor: null })])
+    const writer = writerWith({ fetch: fake.fetch })
+
+    await expect(writer.attachPullRequest(ISSUE_ID, PR_URL, 'Fix things')).rejects.toThrow(/without an endCursor/)
+    expect(fake.calls).toHaveLength(1)
+  })
+
+  it('fails instead of looping when the same cursor comes back', async () => {
+    const fake = fakeFetch([
+      attachmentPage([], { hasNextPage: true, endCursor: 'cursor-1' }),
+      attachmentPage([], { hasNextPage: true, endCursor: 'cursor-1' }),
+    ])
+    const writer = writerWith({ fetch: fake.fetch })
+
+    await expect(writer.attachPullRequest(ISSUE_ID, PR_URL, 'Fix things')).rejects.toThrow(/repeated endCursor/)
+    expect(fake.calls).toHaveLength(2)
+  })
+
+  it('attaches once the last page has been read without the url', async () => {
+    const fake = fakeFetch([
+      attachmentPage(['https://example.com/other'], { hasNextPage: true, endCursor: 'cursor-1' }),
+      attachmentPage([], { hasNextPage: false, endCursor: null }),
+      attachmentCreated(true),
+    ])
+    const writer = writerWith({ fetch: fake.fetch })
+
+    await expect(writer.attachPullRequest(ISSUE_ID, PR_URL, 'Fix things')).resolves.toBe('attached')
+    expect(fake.calls).toHaveLength(3)
   })
 
   it('throws when attachmentCreate reports success false', async () => {

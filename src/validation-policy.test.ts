@@ -329,6 +329,27 @@ describe('checkDiff', () => {
     ])
   })
 
+  it('reports a lockfile that was renamed away, unless a package.json changed too', () => {
+    const renamed = file('deps/pnpm-lock.yaml.bak', { status: 'R', oldPath: 'pnpm-lock.yaml', added: 0, deleted: 0 })
+
+    expect(checkDiff([renamed], policy())).toEqual([
+      {
+        rule: 'lockfile-without-manifest',
+        path: 'pnpm-lock.yaml',
+        detail: expect.stringContaining('no package.json'),
+      },
+    ])
+    expect(checkDiff([renamed, file('package.json')], policy())).toEqual([])
+  })
+
+  it('keeps judging a renamed lockfile by its new path too', () => {
+    const renamed = file('yarn.lock', { status: 'R', oldPath: 'notes.txt', added: 1, deleted: 0 })
+
+    expect(checkDiff([renamed], policy())).toEqual([
+      { rule: 'lockfile-without-manifest', path: 'yarn.lock', detail: expect.stringContaining('no package.json') },
+    ])
+  })
+
   it('accepts a lockfile changed together with a package.json, in any directory', () => {
     expect(checkDiff([file('pnpm-lock.yaml'), file('package.json')], policy())).toEqual([])
     expect(

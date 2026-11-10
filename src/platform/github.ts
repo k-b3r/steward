@@ -245,12 +245,14 @@ function mentions(text: string, identifier: string): boolean {
 const prList = z.array(
   z.object({
     number: z.number().int().positive(),
-    headRefName: z.string(),
+    head: z.object({ ref: z.string() }),
     title: z.string(),
-    isDraft: z.boolean(),
-    author: z.object({ login: z.string() }),
+    draft: z.boolean(),
+    user: z.object({ login: z.string() }),
   }),
 )
+
+type RestPullRequest = z.infer<typeof prList>[number]
 
 export type PullRequestSummary = {
   number: number
@@ -263,36 +265,42 @@ export type PullRequestSummary = {
 /**
  * Lists open PRs that mention the ticket in the branch or the title. The caller
  * applies the "not made by this instance" rule, so the author login is returned.
+ *
+ * The REST list pages at 100 per request, so `gh api --paginate` fetches every page:
+ * `gh pr list --limit 100` silently dropped PRs on a busy repository (issue #44).
  */
 export async function listOpenPrsForTicket(
   deps: { exec: Exec },
   input: { repo: string; identifier: string; ghAccount: string },
 ): Promise<PullRequestSummary[]> {
   assertSafe(input.repo, 'repository name', REPO)
-  const args = [
-    'pr',
-    'list',
-    '--repo',
-    input.repo,
-    '--state',
-    'open',
-    '--json',
-    'number,headRefName,title,isDraft,author',
-    '--limit',
-    '100',
-  ]
-  const { stdout } = await runGh(deps, input.ghAccount, args, `gh pr list --repo ${input.repo}`)
+  const path = `repos/${input.repo}/pulls?state=open&per_page=100`
+  // --slurp wraps each page in its own array, so all pages arrive as one valid JSON document.
+  const { stdout } = await runGh(
+    deps,
+    input.ghAccount,
+    ['api', '--paginate', '--slurp', path],
+    `gh api repos/${input.repo}/pulls`,
+  )
 
   let parsed: unknown
   try {
     parsed = JSON.parse(stdout)
   } catch {
-    throw new Error(`gh pr list --repo ${input.repo} did not return JSON`)
+    throw new Error(`gh api repos/${input.repo}/pulls did not return JSON`)
   }
-  const prs = prList.safeParse(parsed)
-  if (!prs.success) throw new Error(`gh pr list --repo ${input.repo} returned an unexpected shape`)
+  if (!Array.isArray(parsed)) throw new Error(`gh api repos/${input.repo}/pulls returned an unexpected shape`)
+  // --slurp gives one array per page; a flat array is one page. One `flat()` covers both.
+  const prs = prList.safeParse(parsed.flat())
+  if (!prs.success) throw new Error(`gh api repos/${input.repo}/pulls returned an unexpected shape`)
 
   return prs.data
-    .filter((pr) => mentions(pr.headRefName, input.identifier) || mentions(pr.title, input.identifier))
-    .map(({ author, ...pr }) => ({ ...pr, author: author.login }))
+    .filter((pr) => mentions(pr.head.ref, input.identifier) || mentions(pr.title, input.identifier))
+    .map((pr: RestPullRequest) => ({
+      number: pr.number,
+      headRefName: pr.head.ref,
+      title: pr.title,
+      isDraft: pr.draft,
+      author: pr.user.login,
+    }))
 }
