@@ -373,8 +373,8 @@ Consequences:
   - The static route is `app.get('*')` in `src/composition/api.ts`, added after `createApp`, so it sits outside `/v1/*` and **skips both the Host check and the bearer auth** (`src/api/app.ts` mounts `createAuthMiddleware` on `/v1/*` only). That is fine for public built assets, but it means **nothing secret may ever be placed in `DASHBOARD_DIR`**: anything readable by the API user can be fetched by anyone who can reach the API port, including over a tailnet.
   - Accepted limitation: `resolveAssetPath` normalises the joined path and rejects `..` and absolute paths, but it does **not** resolve symlinks (`src/platform/static.ts` calls `normalize`, not `realpath`). A symlink inside `DASHBOARD_DIR` can therefore point outside it and be served. Low risk, because `DASHBOARD_DIR` is operator-controlled and the operator is the one creating the symlink.
 - **The orchestrator never moves a ticket past `In Progress`.** `ALLOWED_STATUSES` defaults to `[In Progress]`, so the only tracker status change it may make is Backlog or Todo to In Progress, as part of a confirm. Everything after that is yours.
-  - That limit is only enforced once phase 4 builds the confirm path. **Today intake only reads tickets, and nothing in the code writes to Linear**: no status is moved at all, so the guarantee currently holds by absence, not by a check.
-  - `ALLOWED_STATUSES` is parsed and validated but **not read by anything outside config**: `grep -rn ALLOWED_STATUSES src` returns `src/platform/config.ts` (the type field, the `parseStatuses` preprocess that splits on commas and defaults to `['In Progress']`, and the schema's `.min(1)` that rejects an empty list) and `src/platform/config.test.ts` only. Wired: config loading, defaulting, validation and redaction. Not wired: intake, the confirm command, and the Linear client, which take no status argument. Phase 4 must pass `ALLOWED_STATUSES` to the write path and check the target status against it before any mutation.
+  - Since decision 43 the limit is enforced, not just intended: a confirm moves the ticket to the first entry of `ALLOWED_STATUSES`, and the writer refuses any other name before a network call. It happens only when `LINEAR_WRITES_ENABLED` is on (default off). Before that PR, intake only read tickets and no status was moved at all, so the guarantee held by absence.
+  - `ALLOWED_STATUSES` now reaches the write path: `src/composition/api.ts` passes the list to `createLinearWriter` as `allowedStatuses` and its first entry as the confirm's target. Before decision 43, `grep -rn ALLOWED_STATUSES src` returned `src/platform/config.ts` and `src/platform/config.test.ts` only, and the guard was unenforced.
 - **The build is undecided.** There is no build script yet. `tsconfig.json` uses
   `moduleResolution: Bundler`, and `src/` has about 129 relative imports without a `.js`
   extension, which Node cannot load from plain `tsc` output. Two options, neither chosen: add
@@ -538,8 +538,9 @@ branch, `reused`, failure `kind` and `reason`), never the environment or a secre
 
 ### 32. A Linear write client behind an allow list
 
-`src/linear-write.ts` is the first code that can write to Linear. Nothing calls it yet, so this
-changes no behaviour. It has two operations:
+`src/linear-write.ts` is the first code that can write to Linear. It is built only when
+`LINEAR_WRITES_ENABLED` is on (see decision 43), so the default changes no behaviour. It has
+two operations:
 
 - `moveToState(issueId, stateName)` refuses any `stateName` that is not in `allowedStatuses` before
   any network call. The caller passes the parsed `ALLOWED_STATUSES`, so the config list is the guard.
@@ -935,6 +936,41 @@ them yet. Slice 3 of the wiring plan wires them.
 - **A wrong identity throws `ClaimSetupError`** (`kind: 'setup'`), never retried.
 - **`WORKSPACE_REPO`** (`owner/name`) is required when `CLAIM_ENABLED=true`; the config refuses to
   load without it.
+
+### 43. Confirming a ticket moves it in Linear, when enabled
+
+`LINEAR_WRITES_ENABLED` (default false) is the first switch that changes something outside
+steward's own database.
+
+- **The write is on the command, not on the API.** `confirmJob` queues the job, enqueues it, and
+  then moves `job.externalId` to `targetState` through the optional `CommandDeps.linear`
+  (`{ moveToState, targetState }`). The route does not know Linear exists, and the read models are
+  untouched. Without the dependency the function behaves exactly as before, which is what the
+  composition passes unless the flag is on.
+- **A failed move never fails the confirm.** The job is already queued and enqueued, so rolling it
+  back would lose the person's decision, and the queue message would still be in Redis. The error
+  message becomes a pending action (`kind: 'linear_move'`, payload `{ issueId, state }`, reason the
+  message) that a person can retry. `deps.store.createAction` gained an optional `reason` for that;
+  nothing else writes one. The writer never puts the API key in a message, so the reason holds no
+  secret. One gap: if recording the action itself throws (a database error), the confirm rejects,
+  because a retry nobody recorded would be silently lost. The job is queued either way.
+- **`'already'` is success.** The writer reads the issue's state before writing, so a ticket
+  already in `In Progress` produces no mutation and no action.
+- **The allow list is the config list.** `allowedStatuses` is `config.ALLOWED_STATUSES` and
+  `targetState` is its first entry, so the writer's own guard refuses anything the instance did not
+  allow. The composition is where the two meet.
+- **The only reader of `process.env` is still an entry point.** `composeApi` builds the writer with
+  the config's key, the logger, the injected `sleep` and `Math.random`; `src/linear-write.ts` keeps
+  taking its clock, timers and `fetch` as arguments.
+
+Verified by unit tests with a fake writer (moved, already, a throw, and no writer at all) and an
+integration test that a failed move leaves the job `queued` with one pending action. No real write
+was run: trying one ticket and undoing it by hand is the next step.
+
+Not built: a path that acts on an approved `linear_move` action. The action is the record a person
+reads, and retrying the move by hand is enough for the first real ticket. The dashboard lists any
+pending action with approve and reject (`dashboard/src/pages.tsx`), so a `linear_move` action looks
+actionable there; approving it does not retry the move yet.
 
 ### 44. One summary of what waits on a person, as data only
 

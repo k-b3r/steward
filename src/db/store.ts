@@ -398,7 +398,7 @@ export async function releaseLeakedSlots(db: Db): Promise<number[]> {
 
 export async function createAction(
   db: Db,
-  input: { jobId: string; kind: string; payload: unknown; now: Date },
+  input: { jobId: string; kind: string; payload: unknown; now: Date; reason?: string },
 ): Promise<PendingAction> {
   const [row] = await db
     .insert(pendingActions)
@@ -407,7 +407,7 @@ export async function createAction(
       kind: input.kind,
       payload: input.payload,
       status: 'pending',
-      reason: null,
+      reason: input.reason ?? null,
       createdAt: input.now,
       decidedAt: null,
     })
