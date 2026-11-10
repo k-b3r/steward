@@ -69,6 +69,14 @@ describe('loadConfig', () => {
     expect(config.PI_TIMEOUT_MS).toBe(20 * 60 * 1000)
     expect(config.CLAIM_ENABLED).toBe(false)
     expect(config.VALIDATION_ENABLED).toBe(false)
+    expect(config.LINEAR_WRITES_ENABLED).toBe(false)
+  })
+
+  it('turns the Linear write on only when asked', () => {
+    expect(loadConfig(env({ LINEAR_WRITES_ENABLED: 'true' })).LINEAR_WRITES_ENABLED).toBe(true)
+    expect(loadConfig(env(), { LINEAR_WRITES_ENABLED: true }).LINEAR_WRITES_ENABLED).toBe(true)
+    expect(loadConfig(env({ LINEAR_WRITES_ENABLED: 'false' })).LINEAR_WRITES_ENABLED).toBe(false)
+    expect(errorMessage(() => loadConfig(env({ LINEAR_WRITES_ENABLED: 'yes' })))).toContain('LINEAR_WRITES_ENABLED')
   })
 
   it('refuses the pi runner without a model key, and accepts one with it', () => {

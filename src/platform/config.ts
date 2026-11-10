@@ -74,6 +74,8 @@ export type Config = {
   CLAIM_ENABLED: boolean
   /** Run the config's checks after the agent and before any push. */
   VALIDATION_ENABLED: boolean
+  /** Let a confirm move the ticket in Linear. The first switch that changes the tracker. */
+  LINEAR_WRITES_ENABLED: boolean
 }
 
 const RUNNER_KINDS = ['echo', 'pi'] as const
@@ -242,6 +244,7 @@ const configSchema = z.object({
   ),
   CLAIM_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
   VALIDATION_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
+  LINEAR_WRITES_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
 })
 
 /**
@@ -302,6 +305,7 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     WORKSPACE_REPO: pick('WORKSPACE_REPO', env, file),
     CLAIM_ENABLED: pick('CLAIM_ENABLED', env, file),
     VALIDATION_ENABLED: pick('VALIDATION_ENABLED', env, file),
+    LINEAR_WRITES_ENABLED: pick('LINEAR_WRITES_ENABLED', env, file),
   }
 
   const parsed = configSchema.safeParse(raw)
