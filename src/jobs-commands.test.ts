@@ -34,6 +34,8 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     nextRunAt: null,
     failureKind: null,
     branch: null,
+    prNumber: null,
+    prUrl: null,
     ...overrides,
   }
 }

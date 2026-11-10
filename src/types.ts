@@ -77,6 +77,9 @@ export type Job = {
   failureKind: FailureKind | null
   /** The branch the claim pushed. Null until a claim runs (CLAIM_ENABLED). */
   branch: string | null
+  /** The claim's draft pull request. Null until a claim runs. */
+  prNumber: number | null
+  prUrl: string | null
 }
 
 export interface WorkFeed {

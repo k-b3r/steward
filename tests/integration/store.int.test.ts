@@ -13,7 +13,9 @@ import {
   insertJob,
   latestRunNumber,
   latestSessionId,
+  knownPullRequestNumbers,
   setJobBranch,
+  setJobPullRequest,
   setRunSessionId,
   listJobEvents,
   listActions,
@@ -122,6 +124,8 @@ describe('insertJob', () => {
       nextRunAt: null,
       failureKind: null,
       branch: null,
+      prNumber: null,
+      prUrl: null,
     })
     expect(await eventsFor(job.id)).toMatchObject([{ fromState: null, toState: 'proposed', at: T0 }])
   })
@@ -596,6 +600,28 @@ describe('list limits', () => {
     await setJobBranch(db, job.id, 'TST-1')
 
     expect((await getJob(db, job.id))?.branch).toBe('TST-1')
+  })
+
+  it('stores the branch and the draft PR together, and lists the known PR numbers', async () => {
+    const first = await createJob()
+    const second = await insertJob(db, {
+      item: makeItem({ externalId: 'ext-2', identifier: 'TST-2' }),
+      state: 'queued',
+      maxAttempts: 3,
+      now: T0,
+    })
+    expect(first.prNumber).toBeNull()
+    expect(await knownPullRequestNumbers(db)).toEqual(new Set())
+
+    await setJobPullRequest(db, first.id, { branch: 'TST-1', number: 7, url: 'https://github.com/o/r/pull/7' })
+    await setJobPullRequest(db, second.job.id, { branch: 'TST-2', number: 9, url: 'https://github.com/o/r/pull/9' })
+
+    expect(await getJob(db, first.id)).toMatchObject({
+      branch: 'TST-1',
+      prNumber: 7,
+      prUrl: 'https://github.com/o/r/pull/7',
+    })
+    expect(await knownPullRequestNumbers(db)).toEqual(new Set([7, 9]))
   })
 
   it("keeps the newest run's session id for a resume, ignoring runs without one", async () => {
