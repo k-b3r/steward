@@ -7,7 +7,16 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { migrateDb } from '../../src/db/migrate'
 import { jobEvents } from '../../src/db/schema'
-import { acquireSlot, getJob, heldSlots, insertJob, latestSessionId, listRuns, transitionJob } from '../../src/db/store'
+import {
+  acquireSlot,
+  getJob,
+  heldSlots,
+  insertJob,
+  latestSessionId,
+  listRuns,
+  setRunSessionId,
+  transitionJob,
+} from '../../src/db/store'
 import { closePool, createDb, createPool } from '../../src/platform/db'
 import {
   attachWorktree,
@@ -19,7 +28,7 @@ import {
 } from '../../src/platform/git'
 import { createTranscriptWriter, readTranscript } from '../../src/runner/transcript'
 import type { AgentRunner, Job, WorkItem } from '../../src/types'
-import { processJob, type ProcessJobDeps } from '../../src/worker/process-job'
+import { processJob, resumeJob, type ProcessJobDeps } from '../../src/worker/process-job'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
 if (databaseUrl === undefined) {
@@ -113,11 +122,13 @@ type FakeRunner = AgentRunner & {
   transcriptDir(jobId: string, runNumber?: number): string
   starts: Job[]
   runNumbers: number[]
+  resumes: { sessionId: string; feedback: string }[]
 }
 
 function makeRunner(options: { failStart?: Error } = {}): FakeRunner {
   const starts: Job[] = []
   const runNumbers: number[] = []
+  const resumes: { sessionId: string; feedback: string }[] = []
   const runner: AgentRunner & { transcriptDir(jobId: string, runNumber?: number): string } = {
     transcriptDir: (jobId, runNumber) =>
       runNumber === undefined ? join(runsDir, jobId) : join(runsDir, jobId, String(runNumber)),
@@ -131,10 +142,12 @@ function makeRunner(options: { failStart?: Error } = {}): FakeRunner {
       writer.writeOrchestrator('started', { jobId: job.id })
       return { sessionId: `fake-${job.id}` }
     },
-    async resume(): Promise<void> {},
+    async resume(sessionId, feedback): Promise<void> {
+      resumes.push({ sessionId, feedback })
+    },
     async cancel(): Promise<void> {},
   }
-  return Object.assign(runner, { starts, runNumbers })
+  return Object.assign(runner, { starts, runNumbers, resumes })
 }
 
 type Enqueued = { jobId: string; delayMs?: number }
@@ -669,14 +682,6 @@ describe('processJob', () => {
     expect(await heldSlots(db)).toEqual([])
   })
 
-  it('stores the session id the runner returns on the run, for a later resume', async () => {
-    const job = await createJob()
-
-    await processJob(makeDeps(), job.id)
-
-    expect(await latestSessionId(db, job.id)).toBe(`fake-${job.id}`)
-  })
-
   it('treats a git failure as infra and retries', async () => {
     const job = await createJob()
     // Git refuses a branch that another worktree already has checked out.
@@ -727,6 +732,119 @@ describe('processJob', () => {
       failureKind: 'infra',
       reason: 'original failure',
     })
+    expect(await heldSlots(db)).toEqual([])
+  })
+})
+
+describe('resumeJob', () => {
+  it('resumes the stored session and leaves the job back on its pull request, in a new run', async () => {
+    const job = await createJob()
+    const runner = makeRunner()
+    const deps = makeDeps({ runner })
+    // Run 1 up to its pull request, with the session the first real run stored.
+    await transitionJob(db, job.id, 'claiming', { now: T0 })
+    await transitionJob(db, job.id, 'running', { now: T0 })
+    await setRunSessionId(db, job.id, 1, 'session-1')
+    await transitionJob(db, job.id, 'pr_open', { now: T0 })
+    await transitionJob(db, job.id, 'in_review', { now: T0 })
+    await transitionJob(db, job.id, 'changes_requested', { now: T0, reason: 'tighten the copy' })
+
+    await resumeJob(deps, job.id, 'tighten the copy')
+
+    expect(runner.resumes).toEqual([{ sessionId: 'session-1', feedback: 'tighten the copy' }])
+    expect(await getJob(db, job.id)).toMatchObject({ state: 'pr_open' })
+    expect(await heldSlots(db)).toEqual([])
+    expect((await listRuns(db, job.id)).map((run) => run.number)).toEqual([1, 2])
+  })
+
+  it('ignores a job that is not waiting on work', async () => {
+    const job = await createJob()
+    const runner = makeRunner()
+
+    await resumeJob(makeDeps({ runner }), job.id, 'feedback')
+
+    expect(runner.resumes).toEqual([])
+    expect(await getJob(db, job.id)).toMatchObject({ state: 'queued' })
+  })
+
+  it('starts the agent fresh with the feedback when no session was ever stored, never parking the job', async () => {
+    const job = await createJob()
+    await transitionJob(db, job.id, 'claiming', { now: T0 })
+    await transitionJob(db, job.id, 'running', { now: T0 })
+    await transitionJob(db, job.id, 'pr_open', { now: T0 })
+    await transitionJob(db, job.id, 'in_review', { now: T0 })
+    await transitionJob(db, job.id, 'ci_failed', { now: T0, reason: 'check failed' })
+    // The job has a run but no stored session, as after a crash before the id was written.
+    await db.execute(sql`update runs set session_id = null where job_id = ${job.id}`)
+    const runner = makeRunner()
+
+    await resumeJob(makeDeps({ runner }), job.id, 'fix the check')
+
+    expect(runner.resumes).toEqual([])
+    expect(runner.starts).toHaveLength(1)
+    expect(runner.starts[0]?.body).toContain('Feedback to address:\nfix the check')
+    expect(await getJob(db, job.id)).toMatchObject({ state: 'pr_open' })
+    expect(await heldSlots(db)).toEqual([])
+    expect(await latestSessionId(db, job.id)).toBe(`fake-${job.id}`)
+  })
+
+  it('puts the branch back in a worktree for the resume, and removes it afterwards', async () => {
+    const job = await createJob()
+    await transitionJob(db, job.id, 'claiming', { now: T0 })
+    await transitionJob(db, job.id, 'running', { now: T0 })
+    await setRunSessionId(db, job.id, 1, 'session-1')
+    await transitionJob(db, job.id, 'pr_open', { now: T0 })
+    await transitionJob(db, job.id, 'in_review', { now: T0 })
+    await transitionJob(db, job.id, 'changes_requested', { now: T0, reason: 'again' })
+    const seen: boolean[] = []
+    const runner: FakeRunner = Object.assign(makeRunner(), {
+      async resume(): Promise<void> {
+        seen.push(existsSync(join(runsDir, job.id, 'worktree', 'README.md')))
+      },
+    })
+
+    await resumeJob(makeDeps({ runner }), job.id, 'again')
+
+    expect(seen).toEqual([true])
+    expect(existsSync(join(runsDir, job.id, 'worktree'))).toBe(false)
+  })
+
+  it('goes back on the queue when no slot is free, leaving the job where it was', async () => {
+    const holder = await createJob({ externalId: 'ext-holder' })
+    await acquireSlot(db, holder.id, 1, T0)
+    const job = await createJob({ externalId: 'ext-waiting' })
+    await db.execute(sql`update jobs set state = 'changes_requested' where id = ${job.id}`)
+    const queue = makeQueue()
+    const runner = makeRunner()
+
+    await resumeJob(
+      makeDeps({ runner, queue: queue.queue, config: { slotCount: 1, repoPath, runsDir, backoff: BACKOFF } }),
+      job.id,
+      'feedback',
+    )
+
+    expect(queue.calls).toEqual([{ jobId: job.id, delayMs: 5000 }])
+    expect(runner.resumes).toEqual([])
+    expect(await getJob(db, job.id)).toMatchObject({ state: 'changes_requested' })
+  })
+
+  it('keeps the failure kind when the resumed run fails', async () => {
+    const job = await createJob()
+    await transitionJob(db, job.id, 'claiming', { now: T0 })
+    await transitionJob(db, job.id, 'running', { now: T0 })
+    await setRunSessionId(db, job.id, 1, 'session-1')
+    await transitionJob(db, job.id, 'pr_open', { now: T0 })
+    await transitionJob(db, job.id, 'in_review', { now: T0 })
+    await transitionJob(db, job.id, 'changes_requested', { now: T0, reason: 'go again' })
+
+    const failing: FakeRunner = Object.assign(makeRunner(), {
+      async resume(): Promise<void> {
+        throw new Error('provider overloaded')
+      },
+    })
+    await resumeJob(makeDeps({ runner: failing }), job.id, 'go again')
+
+    expect(await getJob(db, job.id)).toMatchObject({ state: 'queued', failureKind: 'infra' })
     expect(await heldSlots(db)).toEqual([])
   })
 })

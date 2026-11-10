@@ -5,7 +5,15 @@ import { join } from 'node:path'
 
 import { holdsSlot } from '../allocate'
 import { branchName } from '../branch-name'
-import { acquireSlot, getJob, latestRunNumber, releaseSlot, setRunSessionId, transitionJob } from '../db/store'
+import {
+  acquireSlot,
+  getJob,
+  latestRunNumber,
+  latestSessionId,
+  releaseSlot,
+  setRunSessionId,
+  transitionJob,
+} from '../db/store'
 import type { Db } from '../platform/db'
 import type {
   attachWorktree,
@@ -17,7 +25,7 @@ import type {
 } from '../platform/git'
 import { decideAfterFailure, type BackoffOptions } from '../retry-policy'
 import { createTranscriptWriter } from '../runner/transcript'
-import type { AgentRunner, FailureKind, Job } from '../types'
+import type { AgentRunner, FailureKind, Job, JobState } from '../types'
 
 export type ProcessJobDeps = {
   db: Db
@@ -207,7 +215,8 @@ async function prepareWorktree(
   const baseBranch = deps.baseBranch ?? 'main'
   await fetchBaseClassified(deps, baseBranch)
   logStep(deps, jobId, runNumber, 'base fetched', { baseBranch })
-  const branch = branchName(job.identifier)
+  // A claim stores the branch it pushed; before one exists it is derived from the ticket id.
+  const branch = job.branch ?? branchName(job.identifier)
   // A worker that died mid-run never ran its cleanup. Clear what it left, or `git worktree add`
   // refuses the path on every retry. The branch and its commits are not touched.
   await deps.git.removeWorktree(deps.config.repoPath, worktreePath)
@@ -232,6 +241,77 @@ async function prepareWorktree(
       baseRef: `origin/${baseBranch}`,
     })
     logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: false })
+  }
+}
+
+/** The states a job can be resumed from: its pull request asked for work, or a check went red. */
+const RESUMABLE_STATES: readonly JobState[] = ['changes_requested', 'ci_failed']
+
+/**
+ * Continues a job that already has a pull request: gets its branch back into a worktree, then
+ * resumes the agent's session with the feedback that moved the job. The slot was released when the
+ * job reached `changes_requested` or `ci_failed`, so this takes a new one and opens a new run, which
+ * is why the transcript stays per run. With no stored session there is nothing to continue, so the
+ * agent starts fresh on the same branch and is given the feedback in its prompt; it never leaves the
+ * job parked in `running`.
+ */
+export async function resumeJob(deps: ProcessJobDeps, jobId: string, feedback: string): Promise<void> {
+  const job = await getJob(deps.db, jobId)
+  if (job === null || !RESUMABLE_STATES.includes(job.state)) {
+    deps.log?.(`job ${jobId}: not resumable from ${job?.state ?? 'no job'}, ignoring`)
+    return
+  }
+
+  const slot = await acquireSlot(deps.db, jobId, deps.config.slotCount, deps.clock())
+  if (slot === null) {
+    deps.log?.(`job ${jobId}: no free slot, re-enqueued in 5000ms`)
+    await deps.queue.enqueue(jobId, 5000)
+    return
+  }
+
+  const worktreePath = join(deps.config.runsDir, jobId, 'worktree')
+  let current = job
+  let runNumber: number | null = null
+  try {
+    const sessionId = await latestSessionId(deps.db, jobId)
+    current = await transitionJob(deps.db, jobId, 'running', { now: deps.clock() })
+    runNumber = await latestRunNumber(deps.db, jobId)
+    if (runNumber === null) {
+      throw new Error(`Job ${jobId} is running but has no run row`)
+    }
+    logStep(deps, jobId, runNumber, 'running')
+    await prepareWorktree(deps, current, runNumber, worktreePath)
+
+    if (sessionId === null) {
+      deps.log?.(`job ${jobId}: no stored session, starting the agent fresh with the feedback`)
+      const withFeedback = { ...current, body: `${current.body ?? ''}\n\nFeedback to address:\n${feedback}` }
+      const started = await deps.runner.start(withFeedback, runNumber)
+      await setRunSessionId(deps.db, jobId, runNumber, started.sessionId)
+    } else {
+      await deps.runner.resume(sessionId, feedback, { jobId, jobIdentifier: current.identifier, runNumber })
+      // Kept on this run too, so the next resume continues from the newest conversation.
+      await setRunSessionId(deps.db, jobId, runNumber, sessionId)
+    }
+    // A resumed run ends back on its pull request: `running -> in_review` is not an edge, and the
+    // poller is what later moves a green pull request to review.
+    await transitionJob(deps.db, jobId, 'pr_open', { now: deps.clock() })
+    logStep(deps, jobId, runNumber, 'finished')
+    deps.log?.(`job ${jobId}: resumed, back on its pull request`)
+  } catch (error) {
+    await recordFailure(deps, jobId, current, runNumber, error)
+  } finally {
+    try {
+      await deps.git.removeWorktree(deps.config.repoPath, worktreePath)
+      logStep(deps, jobId, runNumber, 'worktree removed')
+    } catch (cleanupError) {
+      logCleanupError(deps, jobId, 'removing the worktree', cleanupError)
+    }
+    try {
+      await releaseSlot(deps.db, jobId)
+      logStep(deps, jobId, runNumber, 'slot released', { slot })
+    } catch (releaseError) {
+      logCleanupError(deps, jobId, 'releasing the slot', releaseError)
+    }
   }
 }
 
