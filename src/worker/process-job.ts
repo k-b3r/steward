@@ -188,6 +188,54 @@ async function recordFailure(
 }
 
 /**
+ * Gets the job's branch checked out in its own worktree, up to date with the base branch. Used by a
+ * first run and by a resume alike: a resume needs the tree too, because the agent's container
+ * mounts it, and it was removed when the earlier run ended.
+ */
+async function prepareWorktree(
+  deps: ProcessJobDeps,
+  job: Job,
+  runNumber: number | null,
+  worktreePath: string,
+): Promise<void> {
+  const jobId = job.id
+  if (!existsSync(deps.config.repoPath)) {
+    throw new SetupError(`Repository path does not exist: ${deps.config.repoPath}`)
+  }
+
+  // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
+  const baseBranch = deps.baseBranch ?? 'main'
+  await fetchBaseClassified(deps, baseBranch)
+  logStep(deps, jobId, runNumber, 'base fetched', { baseBranch })
+  const branch = branchName(job.identifier)
+  // A worker that died mid-run never ran its cleanup. Clear what it left, or `git worktree add`
+  // refuses the path on every retry. The branch and its commits are not touched.
+  await deps.git.removeWorktree(deps.config.repoPath, worktreePath)
+  if (await deps.git.branchExists(deps.config.repoPath, branch)) {
+    // An earlier attempt or an open pull request already owns this branch: continue on it,
+    // then bring it up to date. A conflict is left in place for the agent, not thrown away.
+    await deps.git.attachWorktree({ repoPath: deps.config.repoPath, worktreePath, branch })
+    logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: true })
+    const outcome = await deps.git.mergeIntoWorktree(worktreePath, `origin/${baseBranch}`)
+    if (outcome === 'conflict') {
+      logStep(deps, jobId, runNumber, 'merge conflict', { baseBranch })
+      // TODO(phase-2): hand the conflicted tree to the runner to resolve. The echo stub cannot, and
+      // finishing as `done` would report success and then throw the tree away.
+      throw new AgentError(`merge conflict with origin/${baseBranch}; the echo runner cannot resolve it`)
+    }
+    logStep(deps, jobId, runNumber, 'merged base into branch', { baseBranch })
+  } else {
+    await deps.git.createWorktree({
+      repoPath: deps.config.repoPath,
+      worktreePath,
+      branch,
+      baseRef: `origin/${baseBranch}`,
+    })
+    logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: false })
+  }
+}
+
+/**
  * Runs one job claimed from the queue. A queued job takes a slot, gets a
  * worktree, starts the runner and (in phase 1) finishes as `done`. Failures are
  * classified and routed through the retry policy. The slot and worktree are
@@ -219,40 +267,7 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
     // The transition to `claiming` opened this run in the same transaction (src/runs.ts).
     runNumber = await latestRunNumber(deps.db, jobId)
     logStep(deps, jobId, runNumber, 'claiming')
-    if (!existsSync(deps.config.repoPath)) {
-      throw new SetupError(`Repository path does not exist: ${deps.config.repoPath}`)
-    }
-
-    // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
-    const baseBranch = deps.baseBranch ?? 'main'
-    await fetchBaseClassified(deps, baseBranch)
-    logStep(deps, jobId, runNumber, 'base fetched', { baseBranch })
-    const branch = branchName(current.identifier)
-    // A worker that died mid-run never ran its cleanup. Clear what it left, or `git worktree add`
-    // refuses the path on every retry. The branch and its commits are not touched.
-    await deps.git.removeWorktree(deps.config.repoPath, worktreePath)
-    if (await deps.git.branchExists(deps.config.repoPath, branch)) {
-      // An earlier attempt or an open pull request already owns this branch: continue on it,
-      // then bring it up to date. A conflict is left in place for the agent, not thrown away.
-      await deps.git.attachWorktree({ repoPath: deps.config.repoPath, worktreePath, branch })
-      logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: true })
-      const outcome = await deps.git.mergeIntoWorktree(worktreePath, `origin/${baseBranch}`)
-      if (outcome === 'conflict') {
-        logStep(deps, jobId, runNumber, 'merge conflict', { baseBranch })
-        // TODO(phase-2): hand the conflicted tree to the runner to resolve. The echo stub cannot, and
-        // finishing as `done` would report success and then throw the tree away.
-        throw new AgentError(`merge conflict with origin/${baseBranch}; the echo runner cannot resolve it`)
-      }
-      logStep(deps, jobId, runNumber, 'merged base into branch', { baseBranch })
-    } else {
-      await deps.git.createWorktree({
-        repoPath: deps.config.repoPath,
-        worktreePath,
-        branch,
-        baseRef: `origin/${baseBranch}`,
-      })
-      logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: false })
-    }
+    await prepareWorktree(deps, current, runNumber, worktreePath)
     current = await transitionJob(deps.db, jobId, 'running', { now: deps.clock() })
     if (runNumber === null) {
       throw new Error(`Job ${jobId} is running but has no run row`)
