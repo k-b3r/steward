@@ -99,7 +99,7 @@ A person watches and acts through the Hono API (`src/api/`) and the dashboard (`
 `proposed → queued → claiming → running → (pr_open → in_review → merged → done)`, with
 `ci_failed`, `changes_requested`, `failed`, `cancelled` and `declined` on the side.
 Source: `src/transitions.ts`. **Only `claiming` and `running` hold a slot**, so open PRs waiting
-for review never starve the worker. Today the echo runner goes `running → done` and nothing sets
+for review never starve the worker. Today a run goes `running → done` (echo by default, Pi with `RUNNER=pi`) and nothing sets
 `ci_failed`.
 
 ## Records
@@ -112,7 +112,7 @@ for review never starve the worker. Today the echo runner goes `running → done
 
 | Real, tested                                               | Stubbed or missing                                                 |
 | ---------------------------------------------------------- | ------------------------------------------------------------------ |
-| State machine, retry policy, slot allocation, intake rules | The agent: echo runner stands in for Pi                            |
+| State machine, retry policy, slot allocation, intake rules | The agent by default: echo stands in; `RUNNER=pi` runs Pi          |
 | Postgres store, runs, transcripts, reconciler              | Any call to Linear or GitHub in anger (never run for real)         |
 | Hono API and dashboard                                     | Draft PR, validation, push, tracker writes (phases 3–4)            |
 | Deploy files (Quadlet, systemd units)                      | A build: `dist/` does not exist, so the units cannot start         |
