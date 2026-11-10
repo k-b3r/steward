@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { holdsSlot } from '../allocate'
 import { branchName } from '../branch-name'
-import { acquireSlot, getJob, latestRunNumber, releaseSlot, transitionJob } from '../db/store'
+import { acquireSlot, getJob, latestRunNumber, releaseSlot, setRunSessionId, transitionJob } from '../db/store'
 import type { Db } from '../platform/db'
 import type {
   attachWorktree,
@@ -273,7 +273,10 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
       throw new Error(`Job ${jobId} is running but has no run row`)
     }
     logStep(deps, jobId, runNumber, 'running')
-    await deps.runner.start(current, runNumber)
+    const { sessionId } = await deps.runner.start(current, runNumber)
+    // Kept so a later resume (review feedback, a red check) can continue this session even after
+    // the worker restarts; memory alone would lose it.
+    await setRunSessionId(deps.db, jobId, runNumber, sessionId)
     // TODO(phase-4): go to pr_open after validation and the draft pull request.
     await transitionJob(deps.db, jobId, 'done', { now: deps.clock() })
     logStep(deps, jobId, runNumber, 'finished')

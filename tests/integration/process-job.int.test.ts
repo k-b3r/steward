@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { migrateDb } from '../../src/db/migrate'
 import { jobEvents } from '../../src/db/schema'
-import { acquireSlot, getJob, heldSlots, insertJob, listRuns, transitionJob } from '../../src/db/store'
+import { acquireSlot, getJob, heldSlots, insertJob, latestSessionId, listRuns, transitionJob } from '../../src/db/store'
 import { closePool, createDb, createPool } from '../../src/platform/db'
 import {
   attachWorktree,
@@ -667,6 +667,14 @@ describe('processJob', () => {
       reason: `Repository path does not exist: ${missingRepo}`,
     })
     expect(await heldSlots(db)).toEqual([])
+  })
+
+  it('stores the session id the runner returns on the run, for a later resume', async () => {
+    const job = await createJob()
+
+    await processJob(makeDeps(), job.id)
+
+    expect(await latestSessionId(db, job.id)).toBe(`fake-${job.id}`)
   })
 
   it('treats a git failure as infra and retries', async () => {
