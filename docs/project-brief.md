@@ -168,7 +168,7 @@ The tree is a starting point. `/init-repo` and the fit check decide the final na
 5. Retry policy as pure code with tests (backoff, failure kinds).
 6. Transcript writer (both files) with tests.
 7. Hono API with auth, Host/Origin checks, confirm/decline, `GET /v1/jobs?state=…`, SSE tail with resume.
-8. Worker: take a queued job, make a git worktree for the configured repo path, run the echo runner, write transcripts, mark done. (Built; the echo runner is still the stand-in.)
+8. Worker: take a queued job, make a git worktree for the configured repo path, run the runner (echo by default, Pi with `RUNNER=pi`), write transcripts, mark done. (Built.)
 9. `deploy/`: systemd template unit (own user, `EnvironmentFile`), Quadlet units for Postgres and two Redis on a per-instance network.
 
 Out of scope for that phase: real agent runs, Podman worker launch, validation, push and PRs, claim, GitHub reads, ntfy, Linear writes, OpenCode, retention sweep. (The dashboard was out of scope then and has since been built.) Leave typed stubs and `TODO(phase-N)` markers.

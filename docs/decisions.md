@@ -724,11 +724,11 @@ when set, `--session <id>` when resuming, and the prompt last, after `--`.
 
 ### 37. The Pi runner
 
-`src/runner/pi.ts` implements `AgentRunner` over `buildPiRunArgs` and the event mapper. Nothing wires
-it in yet (`bootstrap.ts`, `src/composition/` and `process-job.ts` untouched), so the echo runner
-stays the stand-in. Effects are injected, so the rules are tested from fixtures.
+`src/runner/pi.ts` implements `AgentRunner` over `buildPiRunArgs` and the event mapper. Decision 40 wires it
+in: `RUNNER=pi` selects it in `bootstrap.ts`, and the echo runner stays the default. Effects are injected, so the rules are tested from fixtures.
 
-- `start` opens `runs/<jobId>/<runNumber>/`, creates `session/` (0700), writes `started`, and runs
+- `start` opens `runs/<jobId>/<runNumber>/`, creates the job's session folder `runs/<jobId>/session`
+  (0700; decision 40 moved it out of the run folder), writes `started`, and runs
   `podman` with the worktree at `/workspace` and the session at `/session`. stdout goes through the
   splitter and mapper (`writeAgent` per event, `invalid agent line` for unusable JSON); the session
   id comes from the header.
@@ -759,8 +759,9 @@ stays the stand-in. Effects are injected, so the rules are tested from fixtures.
   An aborted settle wins over the text: `aborted.jsonl` says `529 overloaded` and is still `agent`.
 - Defaults: turn cap 40, timeout 20 minutes (a cancellable race with the injected `sleep`); either
   one kills the child and the container.
-- `resume` re-runs the same run number with `--session <id>`, writes `resumed`, and appends to
-  that run's transcript (`seq` continues). A retry is still a new run. Unknown session: `agent`.
+- `resume` runs with `--session <id>` and writes `resumed`. Superseded by decision 40: it writes to
+  the new run the caller hands it (a new transcript, `seq` restarts at 1), and the runner remembers
+  no sessions, so there is no "unknown session" error. A retry is still a new run.
 - `cancel` writes `cancelled`, kills the child and runs `podman kill`; no active child, nothing.
 
 ### 38. The validation executor
