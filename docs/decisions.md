@@ -567,9 +567,11 @@ was run.
   `AttachmentConnection.nodes`, `Attachment.url`.
 - `UNVERIFIED:` the argument type of `Query.issue(id:)` (the code assumes `String!`), that `issue(id:)`
   accepts an identifier such as `CRM-19`, and any real write.
-- `UNVERIFIED:` the attachment lookup reads only the first page, because the query takes no `first`.
-  A ticket with more attachments than one page could miss an existing url and get a duplicate.
-  Add paging before the first caller.
+- Resolved in code: the attachment lookup paged only once, because the query took no `first`. It
+  now reads every page before deciding (see decision 41).
+- `UNVERIFIED:` the paged query against the real API. Only fakes were run, so
+  `attachments(first:, after:)`, `pageInfo.hasNextPage` and `pageInfo.endCursor` are unconfirmed on
+  a live ticket.
 
 Open for the maintainer: the 20% jitter band, the 60 s cap, and five tries are my choices, not
 taken from a measured Linear limit.
@@ -593,7 +595,8 @@ pushed. It reads no file and runs no command: the caller passes in the diff. Not
     overriding `forbiddenPaths` does not drop that exception.
   - `contract-test-changed`: a `*.contract.test.ts` that is modified, deleted or renamed, on its new
     or its old path. Adding one is fine.
-  - `lockfile-without-manifest`: a lockfile changed, and no `package.json` changed in the same diff.
+  - `lockfile-without-manifest`: a lockfile changed on its new or its old path, and no
+    `package.json` changed in the same diff.
 
 ### 34. The validation retry decision
 
@@ -653,6 +656,12 @@ passed; `pushEmptyClaim` pushed an empty commit on `INV-77`; `openDraftPr` opene
 returned its number; `listOpenPrsForTicket("INV-77")` found it and `"INV-7"` found nothing;
 `updatePrBody` changed the body. The PR was closed with `--delete-branch` and the temp clone
 deleted. Not in CI: it needs a real account and network.
+
+Paging verified live 2026-11-10 on `k-b3r/steward` (gh 2.103.3):
+`gh api --paginate --slurp 'repos/k-b3r/steward/pulls?state=open&per_page=2'` printed one array per
+page for three pages of a five-PR list, and every entry carried `number`, `head.ref`, `title`,
+`draft` and `user.login`. `--slurp` is what makes the pages one JSON document; without it gh prints
+them back to back. See decision 41 for the command the code builds.
 
 ### 36. The agent runs in a rootless Podman container, argv built in one pure function
 
@@ -874,6 +883,32 @@ else reads it. Nothing downstream knows which runner it has.
 
 Nothing calls `resumeJob` yet: the API route and the GitHub poller that would are later slices, so
 this changes no behavior until then.
+
+### 41. Three follow-ups from review: paging, paging, a renamed lockfile
+
+Three small fixes, each caught by a review or a real limit, none changing a running path.
+
+- **The Linear attachment lookup reads every page.** `attachPullRequest` asked for
+  `attachments` with no `first`, so it saw only the first page and could have attached the same
+  pull request twice on a ticket with many links. The query now takes `first: 100` and an `after`
+  cursor and the loop runs until `pageInfo.hasNextPage` is false, returning `'already'` as soon as
+  the url appears. `hasNextPage` without an `endCursor`, or a cursor served twice, throws instead of
+  looping or writing, and a failed write still makes no mutation. This closes the `UNVERIFIED:` in
+  decision 32.
+- **`listOpenPrsForTicket` pages through every open PR.** `gh pr list --limit 100` silently drops
+  PRs past the hundredth on a busy repository (issue #44), so a claim could open a second pull
+  request for a ticket that already had one. The lookup is now
+  `gh api --paginate --slurp repos/<repo>/pulls?state=open&per_page=100`, flattening one array per
+  page; the REST fields map to the same summary shape (`head.ref`, `draft`, `user.login`) and the
+  word-boundary rule is unchanged. `--slurp` keeps the output one JSON document, so a bad or
+  unexpected response still fails with the named action, redacted by the same `failure()` path.
+- **A lockfile renamed away from its name still needs a manifest change.** `lockfile-without-manifest`
+  judged only `path`, so `pnpm-lock.yaml` renamed to another name left the diff without a
+  `package.json` change and passed. A rename is now judged on its old path too, the same way
+  `forbidden-path` and `contract-test-changed` already were; the violation names the lockfile.
+
+No behavior change in the running stack: nothing calls `attachPullRequest` or
+`listOpenPrsForTicket` yet, and `checkDiff` only classifies a diff for the validation executor.
 
 ## Unverified
 
