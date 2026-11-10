@@ -11,6 +11,7 @@ import {
   openDraftPr,
   pushBranch,
   pushEmptyClaim,
+  remoteBranchExists,
   updatePrBody,
 } from './github'
 
@@ -425,5 +426,56 @@ describe('the token stays out of arguments across a whole claim', () => {
     const gh = calls.filter((call) => call.cmd === 'gh')
     expect(gh.filter((call) => call.args[0] === 'auth')).toHaveLength(3)
     for (const call of gh.filter((call) => call.args[0] !== 'auth')) expect(call.opts?.env?.GH_TOKEN).toBe(TOKEN)
+  })
+})
+
+describe('remoteBranchExists', () => {
+  const input = { repoPath: '/clone', repo: REPO, branch: BRANCH, ghAccount: ACCOUNT }
+  const lsExec = (reply: Reply) => fakeExec((cmd) => (cmd === 'gh' ? TOKEN_REPLY : reply))
+
+  it('is true when ls-remote prints the ref, false when it prints nothing', async () => {
+    const present = lsExec({ stdout: `abc123\trefs/heads/${BRANCH}\n` })
+    const absent = lsExec({})
+
+    await expect(remoteBranchExists({ exec: present.exec }, input)).resolves.toBe(true)
+    await expect(remoteBranchExists({ exec: absent.exec }, input)).resolves.toBe(false)
+  })
+
+  it('asks for exactly that ref with the token only in the env', async () => {
+    const { exec, calls } = lsExec({})
+
+    await remoteBranchExists({ exec }, input)
+
+    const call = calls.find((c) => c.cmd === 'git')
+    expect(call?.args).toEqual([
+      '-c',
+      'credential.helper=',
+      '-c',
+      'credential.helper=!gh auth git-credential',
+      'ls-remote',
+      '--heads',
+      `https://github.com/${REPO}.git`,
+      `refs/heads/${BRANCH}`,
+    ])
+    expect(call?.opts?.env).toEqual({ GH_TOKEN: TOKEN, GIT_TERMINAL_PROMPT: '0' })
+    expect(JSON.stringify(calls.map((c) => c.args))).not.toContain(TOKEN)
+  })
+
+  it('throws, redacted, when ls-remote fails instead of reading it as absent', async () => {
+    const { exec } = lsExec({ code: 128, stderr: `fatal: could not read ${TOKEN}` })
+
+    const error = await rejection(remoteBranchExists({ exec }, input))
+
+    expect(error.message).toContain('git ls-remote failed (exit 128)')
+    expect(error.message).not.toContain(TOKEN)
+  })
+
+  it('refuses an unsafe branch or repo before running anything', async () => {
+    const { exec, calls } = lsExec({})
+
+    await rejection(remoteBranchExists({ exec }, { ...input, branch: '--upload-pack=x' }))
+    await rejection(remoteBranchExists({ exec }, { ...input, repo: 'a b' }))
+
+    expect(calls).toEqual([])
   })
 })

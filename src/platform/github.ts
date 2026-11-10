@@ -154,6 +154,28 @@ export async function pushBranch(deps: { exec: Exec }, input: PushInput): Promis
   if (result.code !== 0) throw failure('git push', result, [token])
 }
 
+/**
+ * True when `refs/heads/<branch>` exists on the repo. A claim that pushed but failed to open the PR
+ * leaves the branch behind, and the retry must not push it again. Exit 0 with no output means absent;
+ * a non-zero exit (no network, no access) throws, so it is never read as "absent".
+ */
+export async function remoteBranchExists(
+  deps: { exec: Exec },
+  input: { repoPath: string; repo: string; branch: string; ghAccount: string },
+): Promise<boolean> {
+  assertSafe(input.repo, 'repository name', REPO)
+  assertSafe(input.branch, 'branch name', BRANCH)
+  const token = await requireToken(deps.exec, input.ghAccount, { cwd: input.repoPath })
+  const url = `https://github.com/${input.repo}.git`
+  const result = await deps.exec(
+    'git',
+    ['-c', 'credential.helper=', '-c', CREDENTIAL_HELPER, 'ls-remote', '--heads', url, `refs/heads/${input.branch}`],
+    { cwd: input.repoPath, env: { GH_TOKEN: token, GIT_TERMINAL_PROMPT: '0' } },
+  )
+  if (result.code !== 0) throw failure('git ls-remote', result, [token])
+  return result.stdout.trim() !== ''
+}
+
 /** Makes the empty commit that is the claim, then pushes it. */
 export async function pushEmptyClaim(deps: { exec: Exec }, input: PushInput & { message: string }): Promise<void> {
   assertSafe(input.branch, 'branch name', BRANCH)
