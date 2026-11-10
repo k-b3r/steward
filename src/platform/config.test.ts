@@ -81,6 +81,17 @@ describe('loadConfig', () => {
     expect(config.PI_MODEL).toBe('opencode-go/x')
   })
 
+  it('refuses the claim without a workspace repo, and accepts a valid one', () => {
+    expect(errorMessage(() => loadConfig(env({ CLAIM_ENABLED: 'true' })))).toContain('WORKSPACE_REPO must be set')
+    expect(loadConfig(env()).WORKSPACE_REPO).toBeUndefined()
+    expect(loadConfig(env({ CLAIM_ENABLED: 'true', WORKSPACE_REPO: 'k-b3r/steward-scratch' })).WORKSPACE_REPO).toBe(
+      'k-b3r/steward-scratch',
+    )
+    for (const bad of ['steward', '-x/y', 'a/b/c', 'a/--help ', 'a b/c']) {
+      expect(errorMessage(() => loadConfig(env({ WORKSPACE_REPO: bad })))).toContain('WORKSPACE_REPO')
+    }
+  })
+
   it('maps the model key to a provider variable the container allowlist accepts', () => {
     expect(loadConfig(env()).PI_MODEL_API_KEY_ENV).toBe('OPENCODE_API_KEY')
     expect(loadConfig(env({ PI_MODEL_API_KEY_ENV: 'ANTHROPIC_API_KEY' })).PI_MODEL_API_KEY_ENV).toBe(

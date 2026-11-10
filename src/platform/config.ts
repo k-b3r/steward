@@ -68,6 +68,8 @@ export type Config = {
   PI_MODEL_API_KEY?: string
   /** The provider's own variable name the container reads that key from, e.g. `OPENCODE_API_KEY`. */
   PI_MODEL_API_KEY_ENV: string
+  /** `owner/name` of the repository the claim pushes to and opens the draft PR on. */
+  WORKSPACE_REPO?: string
   /** Open a draft pull request as the claim, before the agent starts. */
   CLAIM_ENABLED: boolean
   /** Run the config's checks after the agent and before any push. */
@@ -231,6 +233,13 @@ const configSchema = z.object({
     (value) => (value === undefined || value === '' ? 'OPENCODE_API_KEY' : value),
     z.enum(MODEL_KEY_ENV_NAMES as [string, ...string[]]),
   ),
+  WORKSPACE_REPO: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9._-]+$/, 'must be owner/name')
+      .optional(),
+  ),
   CLAIM_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
   VALIDATION_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
 })
@@ -290,6 +299,7 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     PI_TIMEOUT_MS: pick('PI_TIMEOUT_MS', env, file),
     PI_MODEL_API_KEY: pick('PI_MODEL_API_KEY', env, file),
     PI_MODEL_API_KEY_ENV: pick('PI_MODEL_API_KEY_ENV', env, file),
+    WORKSPACE_REPO: pick('WORKSPACE_REPO', env, file),
     CLAIM_ENABLED: pick('CLAIM_ENABLED', env, file),
     VALIDATION_ENABLED: pick('VALIDATION_ENABLED', env, file),
   }
@@ -313,6 +323,9 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
       'PI_MODEL_API_KEY must be set when RUNNER=pi: the agent container needs the model provider key ' +
         '(the LLM API key, for example an OpenCode Go key)',
     )
+  }
+  if (config.CLAIM_ENABLED && config.WORKSPACE_REPO === undefined) {
+    throw new Error('WORKSPACE_REPO must be set when CLAIM_ENABLED=true: the claim needs the owner/name to push to')
   }
   return config
 }
