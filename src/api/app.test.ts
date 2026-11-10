@@ -13,7 +13,7 @@ import {
   retryJob,
   type CommandStore,
 } from '../jobs-commands'
-import { getJob, listActions, listEvents, listJobs, listRuns, type QueryStore } from '../jobs-queries'
+import { getDigest, getJob, listActions, listEvents, listJobs, listRuns, type QueryStore } from '../jobs-queries'
 import { createApp, type ApiCommands, type ApiReads, type AppDeps } from './app'
 
 const TOKEN = 'test-token-0123456789abcdef0123456789'
@@ -182,6 +182,7 @@ function setup(
     listActions: (filter) => listActions({ store }, filter),
     listRuns: (jobId) => listRuns({ store }, jobId),
     listEvents: (jobId) => listEvents({ store }, jobId),
+    digest: () => getDigest({ store }, CLOCK),
   }
   const commandDeps = {
     store: store as unknown as CommandStore,
@@ -404,6 +405,73 @@ describe('GET /v1/jobs', () => {
     const response = await request(app, '/v1/jobs?state=bogus')
 
     expect(response.status).toBe(400)
+  })
+})
+
+describe('GET /v1/digest', () => {
+  it('needs the token like every other route', async () => {
+    const { app } = setup()
+
+    expect((await request(app, '/v1/digest', { token: null })).status).toBe(401)
+    expect((await request(app, '/v1/digest')).status).toBe(200)
+  })
+
+  it('summarizes what waits on a person, oldest first', async () => {
+    const { app } = setup({
+      jobs: [
+        makeJob({ identifier: 'TST-2', state: 'pr_open' }),
+        makeJob({ id: OTHER_JOB_ID, identifier: 'TST-1', state: 'proposed' }),
+        makeJob({ id: MISSING_JOB_ID, identifier: 'TST-3', state: 'failed', failureKind: 'agent' }),
+        makeJob({ id: '55555555-5555-4555-8555-555555555555', identifier: 'TST-4', state: 'running' }),
+      ],
+    })
+
+    const response = await request(app, '/v1/digest')
+
+    expect(response.status).toBe(200)
+    expect(await json(response)).toEqual({
+      counts: { proposals: 1, reviewing: 1, failed: 1 },
+      items: [
+        {
+          identifier: 'TST-1',
+          title: 'A job for the ticket',
+          state: 'proposed',
+          ageDays: 0,
+          url: 'https://example.test/TST-1',
+        },
+        {
+          identifier: 'TST-2',
+          title: 'A job for the ticket',
+          state: 'pr_open',
+          ageDays: 0,
+          url: 'https://example.test/TST-1',
+        },
+        {
+          identifier: 'TST-3',
+          title: 'A job for the ticket',
+          state: 'failed',
+          ageDays: 0,
+          url: 'https://example.test/TST-1',
+        },
+      ],
+      text: [
+        'TST-1 A job for the ticket: draft waiting 0 days',
+        'TST-2 A job for the ticket: pull request open for 0 days',
+        'TST-3 A job for the ticket: failed 0 days ago',
+      ].join('\n'),
+    })
+  })
+
+  it('answers an empty digest when nothing waits', async () => {
+    const { app } = setup({ jobs: [makeJob({ state: 'done' })] })
+    const response = await request(app, '/v1/digest')
+
+    expect(response.status).toBe(200)
+    expect(await json(response)).toEqual({
+      counts: { proposals: 0, reviewing: 0, failed: 0 },
+      items: [],
+      text: 'Nothing is waiting on you.',
+    })
   })
 })
 

@@ -2,6 +2,7 @@
 // else from `src/`, so it must stay free of server code: zod plus type-only imports.
 import { z } from 'zod'
 
+import type { Digest } from '../digest'
 import type { ActionSummary, JobEventSummary, JobSummary, RunSummary } from '../jobs-queries'
 import type { ActionStatus, RunOutcome } from '../types'
 import type { Envelope, TranscriptKind } from '../runner/transcript'
@@ -132,6 +133,26 @@ export const transcriptEnvelopeSchema = z.object({
   data: z.unknown(),
 })
 
+/** One job waiting on a person, as the digest lists it. @public */
+export const digestItemSchema = z.object({
+  identifier: z.string(),
+  title: z.string(),
+  state: jobStateSchema,
+  ageDays: z.number().int().nonnegative(),
+  url: z.string(),
+})
+
+/** Everything waiting on a person, with the same items already rendered as plain text. @public */
+export const digestResponseSchema = z.object({
+  counts: z.object({
+    proposals: z.number().int().nonnegative(),
+    reviewing: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+  }),
+  items: z.array(digestItemSchema),
+  text: z.string(),
+})
+
 /** @public */
 export const errorResponseSchema = z.object({
   error: z.string(),
@@ -152,6 +173,8 @@ const _jobResponseMatchesReadLayer: z.ZodType<JobSummary> = jobResponseSchema
 const _actionResponseMatchesReadLayer: z.ZodType<ActionSummary> = actionResponseSchema
 const _runResponseMatchesReadLayer: z.ZodType<RunSummary> = runResponseSchema
 const _eventResponseMatchesReadLayer: z.ZodType<JobEventSummary> = jobEventResponseSchema
+const _digestResponseMatchesPureCore: z.ZodType<Digest> = digestResponseSchema
+void _digestResponseMatchesPureCore
 void _eventResponseMatchesReadLayer
 void _runResponseMatchesReadLayer
 void _jobResponseMatchesReadLayer

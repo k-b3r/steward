@@ -936,6 +936,38 @@ them yet. Slice 3 of the wiring plan wires them.
 - **`WORKSPACE_REPO`** (`owner/name`) is required when `CLAIM_ENABLED=true`; the config refuses to
   load without it.
 
+### 44. One summary of what waits on a person, as data only
+
+`src/digest.ts` is pure: `buildDigest({ jobs, now })` takes the rows and the time and returns
+`{ counts, items, text }`. No clock, no I/O, no tracker markup and no LLM, so the same input always
+gives the same digest.
+
+- **Three groups, in this order.** `proposals` is `proposed` (waiting for a confirm); `reviewing`
+  is `pr_open`, `in_review`, `changes_requested` and `ci_failed` (a draft waits on a person);
+  `failed` is `failed`. Every other state belongs to the orchestrator or another system and is
+  ignored, so the caller may pass a broad read.
+- **Oldest first inside a group, ties by identifier.** The longest wait reads first in its group,
+  and the same input reads the same twice.
+- **`ageDays` is whole days from `jobs.createdAt`, floored, never negative.** `now` is an argument;
+  the module never reads a clock.
+- **The text is plain English.** One line per item, `<identifier> <title>: <what it waits for>`,
+  for example `INV-26 Add a footer: draft waiting 3 days`; an empty digest says
+  `Nothing is waiting on you.` The title is copied verbatim: no markup is added, nothing is
+  escaped and nothing is prefixed. Whitespace is folded so a title that spans lines stays one
+  line, and items keep the title exactly as the tracker sent it.
+- **The API is the only delivery.** `GET /v1/digest` reads every row in each waiting state through
+  the normal read layer and answers the structure the contract exports, so the dashboard imports
+  the type and nothing else. No cap: the store returns newest first, so a limit would drop the
+  oldest rows, which the digest lists first. Same bearer token as every other `/v1` route: no new
+  config key, no new auth, and nothing is written.
+- **The ntfy message is not built.** Its hosting is an open decision: self-hosted or hosted, what
+  ticket text may leave the box, and how a phone action reaches an API bound to `127.0.0.1`
+  (decision log, "Open items" item 4). The digest's `text` is the shape such a message would send,
+  so the transport is the only missing piece.
+
+`failed` keeps its immediate notification; the digest is an addition, not a replacement. The
+dashboard is untouched: the route exists for it to read when it is ready.
+
 ## Unverified
 
 Each item still needs a run on the box.

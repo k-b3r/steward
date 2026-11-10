@@ -7,7 +7,7 @@ import { sleep } from '../platform/delay'
 import { closePool } from '../platform/db'
 import { readTranscript } from '../runner/transcript'
 import * as store from '../db/store'
-import { getJob, listActions, listEvents, listJobs, listRuns } from '../jobs-queries'
+import { getDigest, getJob, listActions, listEvents, listJobs, listRuns } from '../jobs-queries'
 import { cancelJob, confirmJob, decideAction, declineJob, reconsiderJob, retryJob } from '../jobs-commands'
 import { createApp } from '../api/app'
 import { staticResponse } from '../platform/static'
@@ -53,6 +53,7 @@ export function composeApi(
       listActions: (filter) => listActions({ store: queryStore }, filter),
       listRuns: (jobId) => listRuns({ store: queryStore }, jobId),
       listEvents: (jobId) => listEvents({ store: queryStore }, jobId),
+      digest: () => getDigest({ store: queryStore }, ctx.clock()),
     },
     commands: {
       confirm: (id) => confirmJob(commandDeps, id),

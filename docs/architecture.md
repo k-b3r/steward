@@ -111,6 +111,9 @@ each has a row in `runs`: job, run number, slot, start and end time, outcome and
   run's transcript. Without `run` the log follows the newest run at the time the stream opens
   and stays on it. A resume (`after` or `Last-Event-ID` above 0) must name the run once the job
   has runs, because a `seq` only means something inside one run.
+- `GET /v1/digest` lists every job waiting on a person (proposed, the draft states, failed),
+  oldest first, with a whole-day age and the same list already rendered as plain text. It is
+  read-only: nothing is notified from it yet.
 
 ## Failure kinds and retry rules
 
@@ -238,6 +241,7 @@ src/
   intake-policy.ts   pure intake rules: proposal, queued, baseline, burst cap
   linear-map.ts      pure tracker JSON to WorkItem
   runs.ts            pure rules for when a run opens, closes and how it ended
+  digest.ts          pure digest of everything waiting on a person
   subagent-policy.ts pure sub-agent spawn limits and reap rules
   validation-policy.ts pure validator: diff rules, retry or fail after a run
   validate-git.ts    pure diff parsers: name-status and numstat records

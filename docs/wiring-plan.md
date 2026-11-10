@@ -70,9 +70,12 @@ nothing a person sees; the last three change what a confirmed ticket does.
 - `confirmJob` moves the ticket to the first of `ALLOWED_STATUSES` (`In Progress`) and records a
   pending action if the write fails, so a failure can be retried by a person. The API stays the
   same; the side effect is on the command.
-- One daily digest of everything waiting on a person (proposals, `pr_open` drafts, `failed` jobs),
-  as decided. `failed` keeps its immediate notification.
-- Proven by: unit tests with a fake writer; a real move on one ticket, then undone by hand.
+- One digest of everything waiting on a person (proposals, the draft states, `failed` jobs), as
+  decided, is read at `GET /v1/digest`: the items, their counts, and the same list as plain text
+  (decision 44). Delivering it (ntfy) is not built, because the message hosting is an open
+  decision. `failed` keeps its immediate notification.
+- Proven by: unit tests with a fake writer; a real move on one ticket, then undone by hand. The
+  digest adds unit and route tests for its ordering, ages, wording and empty case.
 - Behavior change: confirming a ticket moves it in Linear.
 
 ## Not in this plan
