@@ -9,6 +9,7 @@ does not do.
 
 - Agent containers get no GitHub and no tracker credentials. They cannot push, open pull
   requests, or write to the tracker.
+- A pull request by another account never blocks the claim: only our own account's PRs for a ticket are considered, so a stranger cannot stall a ticket by opening one.
 - The orchestrator alone pushes commits, opens pull requests, and writes to the tracker.
   Those writes are phase 4. The API and worker hold the credentials; agent containers do not.
 - The phase 2 container launch passes no host environment into the container, with one

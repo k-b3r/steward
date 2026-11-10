@@ -910,6 +910,32 @@ Three small fixes, each caught by a review or a real limit, none changing a runn
 No behavior change in the running stack: nothing calls `attachPullRequest` or
 `listOpenPrsForTicket` yet, and `checkDiff` only classifies a diff for the validation executor.
 
+### 42. The claim module, not wired
+
+`claimJob` (`src/claim.ts`) and the pure `decideClaim` (`src/claim-policy.ts`) exist; nothing calls
+them yet. Slice 3 of the wiring plan wires them.
+
+- **Only our own account's PRs count.** A PR by another account is ignored, even with the exact
+  ticket id: on a public repo a stranger could otherwise stall a ticket by opening a PR. Authors are
+  compared case-insensitively.
+- **Our own PRs.** The job's stored `pr_number` while that PR is open, or any open PR whose number
+  is stored on some job (`knownPullRequestNumbers`), is reused. An open PR by our account that no
+  job stored was opened by hand: the claim skips, naming it. A draft that was opened but whose
+  number was never stored (a crash between the two) also reads as "by hand" and skips; clear it by
+  closing that PR.
+- **Storage.** `jobs.pr_number` and `jobs.pr_url`, set together with `branch` by
+  `setJobPullRequest`, so a job never has a branch without its PR.
+- **The push is idempotent.** Before pushing, `remoteBranchExists` (`git ls-remote --heads`, token in
+  the child env only) checks the branch. A draft PR that failed after the push leaves the branch, and
+  the retry opens the PR without a second push. A failing `ls-remote` throws; it is never read as
+  "absent". When wired, the worktree must attach to that existing remote branch (the existing-branch
+  rule) so the later push stays a fast-forward.
+- **The PR body is the ticket link and one fixed line**, nothing else from the ticket: the ticket
+  body is untrusted text and the PR can be public.
+- **A wrong identity throws `ClaimSetupError`** (`kind: 'setup'`), never retried.
+- **`WORKSPACE_REPO`** (`owner/name`) is required when `CLAIM_ENABLED=true`; the config refuses to
+  load without it.
+
 ## Unverified
 
 Each item still needs a run on the box.
