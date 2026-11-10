@@ -21,10 +21,11 @@ Other documents hold the reasons. This one holds the state.
 ## In one paragraph
 
 Steward turns tracker tickets into jobs and runs them in a safe order. Phase 1 is done: the
-whole control loop works, from reading Linear to a finished job, with a stand-in "echo" runner
-instead of a real coding agent. No real agent has run yet. Nothing is pushed to GitHub and
-nothing is written back to Linear. The next big step is phase 2: a Podman container with a real
-Pi run.
+whole control loop works, from reading Linear to a finished job. The default runner is a stand-in
+"echo" stub; `RUNNER=pi` runs the real Pi agent in a Podman container (a real run on 2026-11-08 and
+a real resume on 2026-11-10 are recorded as fixtures). The agent edits its worktree only: nothing is
+committed or pushed to GitHub and nothing is written back to Linear. `resumeJob` exists, but nothing
+calls it yet. The next steps are the claim, validation and the push, in `docs/wiring-plan.md`.
 
 ## What works today
 
@@ -109,7 +110,7 @@ Counts move with every pull request, so run `pnpm check`, `pnpm test:integration
 | Build script and host systemd units             | missing: `dist/` does not exist |
 | A trigger for `ci_failed`                       | state exists, nothing sets it   |
 
-Confirming a proposal today only moves it to `queued` and starts the echo runner. It does not
+Confirming a proposal today only moves it to `queued` and starts the runner (the echo stub by default, Pi with `RUNNER=pi`). It does not
 touch Linear or GitHub.
 
 ## To do
@@ -174,7 +175,7 @@ These need a decision from a person.
    steward do it when a draft is ready? Assumed: the owner.
 3. **Unsaved work.** Does an agent commit as it goes? A crash recovery clears the worktree and
    drops uncommitted edits. Phase 2 must choose.
-4. **Merge conflicts.** The echo runner cannot resolve one, so the job fails as `agent` today.
+4. **Merge conflicts.** Neither runner is handed a conflicted tree yet, so the job fails as `agent` today.
    What does the real runner do, and when does it give up?
 5. **Network for job containers.** Which outside hosts may an agent reach? Only the model API,
    or also package registries? Not decided.

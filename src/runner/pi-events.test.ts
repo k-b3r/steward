@@ -210,3 +210,18 @@ describe('a real run (recorded 2026-11-08, Pi 1.5.0, opencode-go/deepseek-v4.1-f
     expect(lines.filter((line) => countTurn(JSON.parse(line))).length).toBe(2)
   })
 })
+
+describe('a real resume (recorded 2026-11-10, Pi 1.5.2, a second container sharing the session folder)', () => {
+  // `--session <id>` from a new container continued the first run's conversation: the model answered
+  // the word it had been told in run 1. The header carries the same session id as run 1.
+  it('keeps the original session id in its header and ends settled', () => {
+    const lines = records('real-resume.jsonl')
+
+    expect(sessionIdFromHeader(JSON.parse(lines[0] ?? '{}'))).toBe('01a1c632-dbed-70dd-a8ec-909e9d10dfae')
+    expect(isSettled(JSON.parse(lines[lines.length - 1] ?? '{}'))).toEqual({ aborted: false })
+  })
+
+  it('maps to the header, the answer and the result: a resume does not re-emit the system prompt', () => {
+    expect(kinds('real-resume.jsonl')).toEqual(['system', 'assistant', 'result'])
+  })
+})

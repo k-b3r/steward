@@ -5,7 +5,15 @@ import { join } from 'node:path'
 
 import { holdsSlot } from '../allocate'
 import { branchName } from '../branch-name'
-import { acquireSlot, getJob, latestRunNumber, releaseSlot, transitionJob } from '../db/store'
+import {
+  acquireSlot,
+  getJob,
+  latestRunNumber,
+  latestSessionId,
+  releaseSlot,
+  setRunSessionId,
+  transitionJob,
+} from '../db/store'
 import type { Db } from '../platform/db'
 import type {
   attachWorktree,
@@ -17,7 +25,7 @@ import type {
 } from '../platform/git'
 import { decideAfterFailure, type BackoffOptions } from '../retry-policy'
 import { createTranscriptWriter } from '../runner/transcript'
-import type { AgentRunner, FailureKind, Job } from '../types'
+import type { AgentRunner, FailureKind, Job, JobState } from '../types'
 
 export type ProcessJobDeps = {
   db: Db
@@ -188,6 +196,127 @@ async function recordFailure(
 }
 
 /**
+ * Gets the job's branch checked out in its own worktree, up to date with the base branch. Used by a
+ * first run and by a resume alike: a resume needs the tree too, because the agent's container
+ * mounts it, and it was removed when the earlier run ended.
+ */
+async function prepareWorktree(
+  deps: ProcessJobDeps,
+  job: Job,
+  runNumber: number | null,
+  worktreePath: string,
+): Promise<void> {
+  const jobId = job.id
+  if (!existsSync(deps.config.repoPath)) {
+    throw new SetupError(`Repository path does not exist: ${deps.config.repoPath}`)
+  }
+
+  // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
+  const baseBranch = deps.baseBranch ?? 'main'
+  await fetchBaseClassified(deps, baseBranch)
+  logStep(deps, jobId, runNumber, 'base fetched', { baseBranch })
+  // A claim stores the branch it pushed; before one exists it is derived from the ticket id.
+  const branch = job.branch ?? branchName(job.identifier)
+  // A worker that died mid-run never ran its cleanup. Clear what it left, or `git worktree add`
+  // refuses the path on every retry. The branch and its commits are not touched.
+  await deps.git.removeWorktree(deps.config.repoPath, worktreePath)
+  if (await deps.git.branchExists(deps.config.repoPath, branch)) {
+    // An earlier attempt or an open pull request already owns this branch: continue on it,
+    // then bring it up to date. A conflict is left in place for the agent, not thrown away.
+    await deps.git.attachWorktree({ repoPath: deps.config.repoPath, worktreePath, branch })
+    logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: true })
+    const outcome = await deps.git.mergeIntoWorktree(worktreePath, `origin/${baseBranch}`)
+    if (outcome === 'conflict') {
+      logStep(deps, jobId, runNumber, 'merge conflict', { baseBranch })
+      // TODO(phase-2): hand the conflicted tree to the runner to resolve. Until then the limit is the
+      // orchestrator's, not the runner's: finishing as `done` would report success and then throw
+      // the tree away.
+      throw new AgentError(`merge conflict with origin/${baseBranch}; resolving it is not wired yet`)
+    }
+    logStep(deps, jobId, runNumber, 'merged base into branch', { baseBranch })
+  } else {
+    await deps.git.createWorktree({
+      repoPath: deps.config.repoPath,
+      worktreePath,
+      branch,
+      baseRef: `origin/${baseBranch}`,
+    })
+    logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: false })
+  }
+}
+
+/** The states a job can be resumed from: its pull request asked for work, or a check went red. */
+const RESUMABLE_STATES: readonly JobState[] = ['changes_requested', 'ci_failed']
+
+/**
+ * Continues a job that already has a pull request: gets its branch back into a worktree, then
+ * resumes the agent's session with the feedback that moved the job. The slot was released when the
+ * job reached `changes_requested` or `ci_failed`, so this takes a new one and opens a new run, which
+ * is why the transcript stays per run. With no stored session there is nothing to continue, so the
+ * agent starts fresh on the same branch and is given the feedback in its prompt; it never leaves the
+ * job parked in `running`.
+ */
+export async function resumeJob(deps: ProcessJobDeps, jobId: string, feedback: string): Promise<void> {
+  const job = await getJob(deps.db, jobId)
+  if (job === null || !RESUMABLE_STATES.includes(job.state)) {
+    deps.log?.(`job ${jobId}: not resumable from ${job?.state ?? 'no job'}, ignoring`)
+    return
+  }
+
+  const slot = await acquireSlot(deps.db, jobId, deps.config.slotCount, deps.clock())
+  if (slot === null) {
+    deps.log?.(`job ${jobId}: no free slot, re-enqueued in 5000ms`)
+    await deps.queue.enqueue(jobId, 5000)
+    return
+  }
+
+  const worktreePath = join(deps.config.runsDir, jobId, 'worktree')
+  let current = job
+  let runNumber: number | null = null
+  try {
+    const sessionId = await latestSessionId(deps.db, jobId)
+    current = await transitionJob(deps.db, jobId, 'running', { now: deps.clock() })
+    runNumber = await latestRunNumber(deps.db, jobId)
+    if (runNumber === null) {
+      throw new Error(`Job ${jobId} is running but has no run row`)
+    }
+    logStep(deps, jobId, runNumber, 'running')
+    await prepareWorktree(deps, current, runNumber, worktreePath)
+
+    if (sessionId === null) {
+      deps.log?.(`job ${jobId}: no stored session, starting the agent fresh with the feedback`)
+      const withFeedback = { ...current, body: `${current.body ?? ''}\n\nFeedback to address:\n${feedback}` }
+      const started = await deps.runner.start(withFeedback, runNumber)
+      await setRunSessionId(deps.db, jobId, runNumber, started.sessionId)
+    } else {
+      await deps.runner.resume(sessionId, feedback, { jobId, jobIdentifier: current.identifier, runNumber })
+      // Kept on this run too, so the next resume continues from the newest conversation.
+      await setRunSessionId(deps.db, jobId, runNumber, sessionId)
+    }
+    // A resumed run ends back on its pull request: `running -> in_review` is not an edge, and the
+    // poller is what later moves a green pull request to review.
+    await transitionJob(deps.db, jobId, 'pr_open', { now: deps.clock() })
+    logStep(deps, jobId, runNumber, 'finished')
+    deps.log?.(`job ${jobId}: resumed, back on its pull request`)
+  } catch (error) {
+    await recordFailure(deps, jobId, current, runNumber, error)
+  } finally {
+    try {
+      await deps.git.removeWorktree(deps.config.repoPath, worktreePath)
+      logStep(deps, jobId, runNumber, 'worktree removed')
+    } catch (cleanupError) {
+      logCleanupError(deps, jobId, 'removing the worktree', cleanupError)
+    }
+    try {
+      await releaseSlot(deps.db, jobId)
+      logStep(deps, jobId, runNumber, 'slot released', { slot })
+    } catch (releaseError) {
+      logCleanupError(deps, jobId, 'releasing the slot', releaseError)
+    }
+  }
+}
+
+/**
  * Runs one job claimed from the queue. A queued job takes a slot, gets a
  * worktree, starts the runner and (in phase 1) finishes as `done`. Failures are
  * classified and routed through the retry policy. The slot and worktree are
@@ -219,46 +348,16 @@ export async function processJob(deps: ProcessJobDeps, jobId: string): Promise<v
     // The transition to `claiming` opened this run in the same transaction (src/runs.ts).
     runNumber = await latestRunNumber(deps.db, jobId)
     logStep(deps, jobId, runNumber, 'claiming')
-    if (!existsSync(deps.config.repoPath)) {
-      throw new SetupError(`Repository path does not exist: ${deps.config.repoPath}`)
-    }
-
-    // A new branch starts from what is on origin now, never from whatever HEAD happens to be.
-    const baseBranch = deps.baseBranch ?? 'main'
-    await fetchBaseClassified(deps, baseBranch)
-    logStep(deps, jobId, runNumber, 'base fetched', { baseBranch })
-    const branch = branchName(current.identifier)
-    // A worker that died mid-run never ran its cleanup. Clear what it left, or `git worktree add`
-    // refuses the path on every retry. The branch and its commits are not touched.
-    await deps.git.removeWorktree(deps.config.repoPath, worktreePath)
-    if (await deps.git.branchExists(deps.config.repoPath, branch)) {
-      // An earlier attempt or an open pull request already owns this branch: continue on it,
-      // then bring it up to date. A conflict is left in place for the agent, not thrown away.
-      await deps.git.attachWorktree({ repoPath: deps.config.repoPath, worktreePath, branch })
-      logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: true })
-      const outcome = await deps.git.mergeIntoWorktree(worktreePath, `origin/${baseBranch}`)
-      if (outcome === 'conflict') {
-        logStep(deps, jobId, runNumber, 'merge conflict', { baseBranch })
-        // TODO(phase-2): hand the conflicted tree to the runner to resolve. The echo stub cannot, and
-        // finishing as `done` would report success and then throw the tree away.
-        throw new AgentError(`merge conflict with origin/${baseBranch}; the echo runner cannot resolve it`)
-      }
-      logStep(deps, jobId, runNumber, 'merged base into branch', { baseBranch })
-    } else {
-      await deps.git.createWorktree({
-        repoPath: deps.config.repoPath,
-        worktreePath,
-        branch,
-        baseRef: `origin/${baseBranch}`,
-      })
-      logStep(deps, jobId, runNumber, 'worktree ready', { branch, reused: false })
-    }
+    await prepareWorktree(deps, current, runNumber, worktreePath)
     current = await transitionJob(deps.db, jobId, 'running', { now: deps.clock() })
     if (runNumber === null) {
       throw new Error(`Job ${jobId} is running but has no run row`)
     }
     logStep(deps, jobId, runNumber, 'running')
-    await deps.runner.start(current, runNumber)
+    const { sessionId } = await deps.runner.start(current, runNumber)
+    // Kept so a later resume (review feedback, a red check) can continue this session even after
+    // the worker restarts; memory alone would lose it.
+    await setRunSessionId(deps.db, jobId, runNumber, sessionId)
     // TODO(phase-4): go to pr_open after validation and the draft pull request.
     await transitionJob(deps.db, jobId, 'done', { now: deps.clock() })
     logStep(deps, jobId, runNumber, 'finished')

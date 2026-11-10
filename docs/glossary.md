@@ -18,7 +18,7 @@ Describes the state after #36 (branch named for the ticket).
 | **Transcript**              | The record of one run: `transcript.jsonl` (served by the API) and `raw.jsonl` (never served).                                                              |
 | **Slot**                    | One of `SLOT_COUNT` places a job can run. Held only in `claiming` and `running`.                                                                           |
 | **Worktree**                | A git working folder for one job, on the branch named for the ticket (for example `INV-12`).                                                               |
-| **Runner** (`AgentRunner`)  | The thing that starts, resumes or cancels the agent. Today a stub (echo). Later Pi.                                                                        |
+| **Runner** (`AgentRunner`)  | The thing that starts, resumes or cancels the agent. The echo stub by default; Pi with `RUNNER=pi`.                                                        |
 | **Agent**                   | The coding AI (Pi). It works inside one job. Steward's own logic has no AI in it.                                                                          |
 | **Sub-agent**               | A one-shot helper agent that steward spawns and reaps, never the lead agent.                                                                               |
 | **Action** (pending action) | Something steward wants to do that needs a person's approval first.                                                                                        |

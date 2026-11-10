@@ -29,8 +29,12 @@ function withoutRawResponses(logger: Logger, dryRun: boolean): Logger {
   return { ...logger, info: (msg, fields) => (msg === RAW_RESPONSE_MESSAGE ? undefined : logger.info(msg, fields)) }
 }
 
-export function composeWorker(config: Config, write: (line: string) => void) {
-  const ctx = createContext(config, write)
+export function composeWorker(
+  config: Config,
+  write: (line: string) => void,
+  ambient: Readonly<Record<string, string | undefined>> = {},
+) {
+  const ctx = createContext(config, write, ambient)
   const { db, queue, runner, logger, clock } = ctx
   let stopping = false
 

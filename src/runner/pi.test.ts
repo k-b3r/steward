@@ -162,9 +162,9 @@ describe('pi runner', () => {
     const args = h.calls[0]?.args ?? []
     expect(args).toContain(`steward-personal-job-${job.id}-1`)
     expect(args).toContain(`${join(h.runsDir, 'worktrees', job.id)}:/workspace:rw`)
-    expect(args).toContain(`${join(dirOf(h, job.id), 'session')}:/session:rw`)
+    expect(args).toContain(`${join(h.runsDir, job.id, 'session')}:/session:rw`)
     expect(args.at(-1)).toBe(buildPrompt(job))
-    expect(statSync(join(dirOf(h, job.id), 'session')).mode & 0o777).toBe(0o700)
+    expect(statSync(join(h.runsDir, job.id, 'session')).mode & 0o777).toBe(0o700)
     expect(h.sleeps[0]?.cancelled).toBe(true)
   })
 
@@ -237,7 +237,7 @@ describe('pi runner', () => {
     expect(existsSync(join(h.runsDir, 'never-ran'))).toBe(false)
   })
 
-  it('resumes on the same transcript, with --session and the feedback as the prompt', async () => {
+  it('resumes in the run it is given, with --session and the feedback as the prompt', async () => {
     const resumed = [
       JSON.stringify({ type: 'session', version: 3, id: SESSION }),
       JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [], stopReason: 'stop' } }),
@@ -248,16 +248,41 @@ describe('pi runner', () => {
     const job = makeJob()
     const { sessionId } = await h.runner.start(job, 1)
 
-    await h.runner.resume(sessionId, 'please add a test')
+    await h.runner.resume(sessionId, 'please add a test', {
+      jobId: job.id,
+      jobIdentifier: job.identifier,
+      runNumber: 2,
+    })
 
     const args = h.calls[1]?.args ?? []
     expect(args).toContain('--session')
     expect(args).toContain(sessionId)
     expect(args.at(-1)).toBe('please add a test')
-    const envelopes = readTranscript(dirOf(h, job.id), 0)
-    expect(envelopes.map((envelope) => envelope.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-    expect(envelopes[6]?.data).toMatchObject({ msg: 'resumed' })
-    await expect(h.runner.resume('missing', 'feedback')).rejects.toMatchObject({ kind: 'agent' })
+    expect(args).toContain(`steward-personal-job-${job.id}-2`)
+    expect(readTranscript(join(h.runsDir, job.id, '2'), 0).map((envelope) => envelope.data)).toContainEqual(
+      expect.objectContaining({ msg: 'resumed' }),
+    )
+    // The conversation stays in one folder, so run 2 finds what run 1 wrote.
+    const mounts = args.filter((arg) => arg.endsWith(':/session:rw'))
+    expect(mounts).toEqual([`${join(h.runsDir, job.id, 'session')}:/session:rw`])
+    expect(h.calls[0]?.args.filter((arg) => arg.endsWith(':/session:rw'))).toEqual(mounts)
+  })
+
+  it('resumes after a restart: a fresh runner needs only the ids it is handed', async () => {
+    const resumed = [
+      JSON.stringify({ type: 'session', version: 3, id: SESSION }),
+      JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [], stopReason: 'stop' } }),
+      JSON.stringify({ type: 'agent_settled', aborted: false }),
+      '',
+    ].join('\n')
+    const h = harness([{ stdout: resumed }])
+
+    await expect(
+      h.runner.resume(SESSION, 'after restart', { jobId: 'job-9', jobIdentifier: 'TST-9', runNumber: 3 }),
+    ).resolves.toBeUndefined()
+
+    expect(h.calls[0]?.args).toContain('--session')
+    expect(h.calls[0]?.args).toContain(SESSION)
   })
 
   it('fails with infra when podman cannot be spawned', async () => {

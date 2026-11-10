@@ -8,7 +8,7 @@ text, or team keys in the repo.
 
 Status: phase 1 is done. The state machine, retry policy, slots, tracker intake, queue,
 worker, API, dashboard, and deploy files are built and tested, with an echo runner standing in
-for a real agent. No real agent has run yet. There is no build script yet, so the systemd units
+for a real agent; `RUNNER=pi` runs the real agent in a container, with no commit or push yet. There is no build script yet, so the systemd units
 cannot start until one exists. See [docs/status.md](docs/status.md) for what works, what is
 left, and what is still open. Phases are listed in [docs/architecture.md](docs/architecture.md).
 
@@ -146,9 +146,7 @@ Three more keys, all non-secret. `BASE_BRANCH` is the branch each job starts fro
 
 ### Which agent runs a job
 
-These keys are parsed and validated now, but **nothing reads them yet**: the worker still builds the echo runner, and the wiring lands in the slices of [docs/wiring-plan.md](docs/wiring-plan.md). Setting `RUNNER=pi` today still runs the stub.
-
-The agent runner will be chosen by `RUNNER`: `echo` (the default, a stub that writes a fixed transcript) or `pi`, which runs the real agent in a Podman container. `pi` requires `PI_MODEL_API_KEY`, the **model provider key** the agent uses to call the LLM (for example an OpenCode Go key, which serves DeepSeek, or an Anthropic key; it is not the Linear key or the GitHub token). It is a secret: set it in the environment only, never in the config file, and it reaches the container as `PI_MODEL_API_KEY_ENV` (default `OPENCODE_API_KEY`). `pi` also takes `PI_IMAGE` (default `steward-pi:1.5.0`), `PI_MODEL` (unset means Pi's own default), `PI_TURN_CAP` (default 40 turns) and `PI_TIMEOUT_MS` (default 20 minutes). Two switches are off by default and will change what a confirmed ticket does once wired: `CLAIM_ENABLED` opens a draft pull request before the agent starts, and `VALIDATION_ENABLED` runs the configured checks after the agent and before any push.
+The worker picks its agent runner from `RUNNER`: `echo` (the default, a stub that writes a fixed transcript) or `pi`, which runs the real agent in a Podman container. `pi` requires `PI_MODEL_API_KEY`, the **model provider key** the agent uses to call the LLM (for example an OpenCode Go key, which serves DeepSeek, or an Anthropic key; it is not the Linear key or the GitHub token). It is a secret: set it in the environment only, never in the config file, and it reaches the container as `PI_MODEL_API_KEY_ENV` (default `OPENCODE_API_KEY`). `pi` also takes `PI_IMAGE` (default `steward-pi:1.5.0`), `PI_MODEL` (unset means Pi's own default), `PI_TURN_CAP` (default 40 turns) and `PI_TIMEOUT_MS` (default 20 minutes). `RUNNER=pi` is live: the agent runs, edits the worktree and writes its transcript, but nothing is committed or pushed yet. Two switches are off by default and **not wired yet**: `CLAIM_ENABLED` (a draft pull request before the agent starts) and `VALIDATION_ENABLED` (the configured checks after the agent and before any push). They are parsed and validated now; the wiring lands in the slices of [docs/wiring-plan.md](docs/wiring-plan.md).
 
 ### Point an instance at a repo
 

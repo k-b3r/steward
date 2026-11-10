@@ -45,8 +45,8 @@ interface WorkFeed {
 }
 
 interface AgentRunner {
-  start(job: Job): Promise<{ sessionId: string }>
-  resume(sessionId: string, feedback: string): Promise<void>
+  start(job: Job, runNumber: number): Promise<{ sessionId: string }>
+  resume(sessionId: string, feedback: string, run: RunRef): Promise<void>
   cancel(jobId: string): Promise<void>
 }
 ```
@@ -54,7 +54,7 @@ interface AgentRunner {
 - `WorkFeed` is the only way work enters the system. The tracker adapter implements it.
 - A status reporter (tracker and chat writes) is added in phase 4, when something implements it.
 - `AgentRunner` starts, resumes and cancels one agent run. The Pi runner (`src/runner/pi.ts`,
-  decision 37) is built but not wired yet; `src/runner/echo.ts` stays the stand-in.
+  decision 37) runs the real agent when `RUNNER=pi`; `src/runner/echo.ts` is the default stub.
 
 ## Job states and transitions
 
@@ -62,21 +62,21 @@ The source of truth is `src/transitions.ts`. One function, `assertTransition`, e
 these edges. Every state has an entry, so a missing or extra state is a type error.
 Self-transitions are never legal.
 
-| From                | Allowed next states                                               | Note                                                      |
-| ------------------- | ----------------------------------------------------------------- | --------------------------------------------------------- |
-| `proposed`          | `queued`, `declined`                                              | A person confirms or declines a proposal.                 |
-| `declined`          | `proposed`                                                        | A declined job can be reconsidered.                       |
-| `queued`            | `claiming`, `cancelled`, `failed`                                 | A queued job can fail before it claims a slot.            |
-| `claiming`          | `running`, `queued`, `failed`, `cancelled`                        | `queued` is the automatic infra retry with backoff.       |
-| `running`           | `pr_open`, `done`, `queued`, `failed`, `cancelled`                | `done` is reached by the echo runner only today.          |
-| `pr_open`           | `in_review`, `ci_failed`, `failed`, `cancelled`                   | The draft pull request is the visible claim.              |
-| `ci_failed`         | `running`, `in_review`, `failed`, `cancelled`                     | A check failed on this PR. Still ongoing; see below.      |
-| `in_review`         | `changes_requested`, `ci_failed`, `merged`, `failed`, `cancelled` | A review asks for changes or approves.                    |
-| `changes_requested` | `in_review`, `running`, `failed`, `cancelled`                     | Feedback can start another run.                           |
-| `merged`            | `done`                                                            | A merged pull request is closed out.                      |
-| `done`              | none                                                              | Final.                                                    |
-| `failed`            | `queued`, `cancelled`                                             | Failed means retries are exhausted. Retry reuses the row. |
-| `cancelled`         | `queued`                                                          | A cancelled job can be retried.                           |
+| From                | Allowed next states                                               | Note                                                                 |
+| ------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `proposed`          | `queued`, `declined`                                              | A person confirms or declines a proposal.                            |
+| `declined`          | `proposed`                                                        | A declined job can be reconsidered.                                  |
+| `queued`            | `claiming`, `cancelled`, `failed`                                 | A queued job can fail before it claims a slot.                       |
+| `claiming`          | `running`, `queued`, `failed`, `cancelled`                        | `queued` is the automatic infra retry with backoff.                  |
+| `running`           | `pr_open`, `done`, `queued`, `failed`, `cancelled`                | `done` is reached by a finished run today, echo or Pi (decision 40). |
+| `pr_open`           | `in_review`, `ci_failed`, `failed`, `cancelled`                   | The draft pull request is the visible claim.                         |
+| `ci_failed`         | `running`, `in_review`, `failed`, `cancelled`                     | A check failed on this PR. Still ongoing; see below.                 |
+| `in_review`         | `changes_requested`, `ci_failed`, `merged`, `failed`, `cancelled` | A review asks for changes or approves.                               |
+| `changes_requested` | `in_review`, `running`, `failed`, `cancelled`                     | Feedback can start another run.                                      |
+| `merged`            | `done`                                                            | A merged pull request is closed out.                                 |
+| `done`              | none                                                              | Final.                                                               |
+| `failed`            | `queued`, `cancelled`                                             | Failed means retries are exhausted. Retry reuses the row.            |
+| `cancelled`         | `queued`                                                          | A cancelled job can be retried.                                      |
 
 Notes:
 
@@ -161,7 +161,7 @@ The startup reconciler runs before the worker takes new work:
 ## Transcripts
 
 Each run has its own folder: `~/steward-instances/<instance>/runs/<job-id>/<run-number>/`, mode 0700. A retry is a new run, so each attempt's transcript stays apart and `seq` restarts at 1 in
-each. A resume re-runs the same Pi session and appends to the run's transcript, so `seq` continues.
+each. A resume opens a new run, so its transcript is a new folder and `seq` restarts at 1; the Pi session itself continues, because its folder is one per job (`runs/<job-id>/session`) and not per run.
 A job that ran before runs existed keeps its flat `runs/<job-id>/transcript.jsonl`, which the API
 still serves when the job has no runs.
 

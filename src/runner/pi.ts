@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-import type { AgentRunner, Job } from '../types'
+import type { AgentRunner, Job, RunRef } from '../types'
 import { MODEL_KEY_ENV_NAMES, buildPiRunArgs } from './pi-command'
 import { countTurn, createPiLineSplitter, isSettled, mapPiLine, sessionIdFromHeader } from './pi-events'
 import { createTranscriptWriter } from './transcript'
@@ -101,7 +101,6 @@ export function createPiRunner(deps: PiRunnerDeps): AgentRunner & {
     cancelled: boolean
   }
   const active = new Map<string, Active>()
-  const sessions = new Map<string, { jobId: string; runNumber: number; jobIdentifier: string }>()
 
   const redact = (text: string): string => {
     let result = text
@@ -146,7 +145,6 @@ export function createPiRunner(deps: PiRunnerDeps): AgentRunner & {
       const header = sessionIdFromHeader(record)
       if (header !== null) {
         sessionId = header
-        sessions.set(header, { jobId: spec.jobId, runNumber: spec.runNumber, jobIdentifier: spec.jobIdentifier })
       }
       const settle = isSettled(record)
       if (settle !== null) settled = settle
@@ -225,7 +223,9 @@ export function createPiRunner(deps: PiRunnerDeps): AgentRunner & {
 
   async function execute(spec: RunSpec): Promise<{ sessionId: string }> {
     const dir = transcriptDir(spec.jobId, spec.runNumber)
-    const sessionDir = join(dir, 'session')
+    // One session folder per job, not per run: a resume opens a new run but continues the same
+    // conversation, and Pi finds a session by id only inside the folder it was written to.
+    const sessionDir = join(config.runsDir, spec.jobId, 'session')
     mkdirSync(sessionDir, { recursive: true, mode: 0o700 })
 
     const writer = createTranscriptWriter({ dir, clock, secrets })
@@ -279,12 +279,17 @@ export function createPiRunner(deps: PiRunnerDeps): AgentRunner & {
       })
     },
 
-    async resume(sessionId: string, feedback: string): Promise<void> {
-      const known = sessions.get(sessionId)
-      if (known === undefined) {
-        throw new PiRunError('agent', `unknown Pi session ${JSON.stringify(sessionId)}`)
-      }
-      await execute({ ...known, prompt: feedback, resumeSessionId: sessionId, verb: 'resumed' })
+    async resume(sessionId: string, feedback: string, run: RunRef): Promise<void> {
+      // The session id and the run come from the caller, who read them from the database, so a
+      // worker that just restarted can resume as well as one that has been up all along.
+      await execute({
+        jobId: run.jobId,
+        jobIdentifier: run.jobIdentifier,
+        runNumber: run.runNumber,
+        prompt: feedback,
+        resumeSessionId: sessionId,
+        verb: 'resumed',
+      })
     },
 
     async cancel(jobId: string): Promise<void> {
