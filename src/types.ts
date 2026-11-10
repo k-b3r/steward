@@ -83,10 +83,18 @@ export interface WorkFeed {
   poll(): AsyncIterable<WorkItem>
 }
 
+/** The run an agent call belongs to, as the database knows it. */
+export type RunRef = { jobId: string; jobIdentifier: string; runNumber: number }
+
 export interface AgentRunner {
   /** `runNumber` is the job's open run (src/runs.ts): the runner keeps that run's output apart. */
   start(job: Job, runNumber: number): Promise<{ sessionId: string }>
-  resume(sessionId: string, feedback: string): Promise<void>
+  /**
+   * Continues a session with feedback. `run` is the run the caller opened for this resume: the
+   * runner writes to it and names its container after it, and it must not rely on remembering the
+   * session, because a worker restart forgets everything but the database.
+   */
+  resume(sessionId: string, feedback: string, run: RunRef): Promise<void>
   cancel(jobId: string): Promise<void>
 }
 

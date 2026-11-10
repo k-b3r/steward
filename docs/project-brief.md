@@ -48,10 +48,10 @@ interface StatusReporter {
   reportState(job: Job, state: JobState): Promise<void>
 } // stub in phase 1, TODO(phase-4)
 interface AgentRunner {
-  start(job: Job): Promise<{ sessionId: string }>
-  resume(sessionId: string, feedback: string): Promise<void>
+  start(job: Job, runNumber: number): Promise<{ sessionId: string }>
+  resume(sessionId: string, feedback: string, run: RunRef): Promise<void>
   cancel(jobId: string): Promise<void>
-}
+} // RunRef: the run the caller opened { jobId, jobIdentifier, runNumber }
 ```
 
 Linear types never leave the Linear adapter. The state machine only knows `WorkItem`.

@@ -45,8 +45,8 @@ interface WorkFeed {
 }
 
 interface AgentRunner {
-  start(job: Job): Promise<{ sessionId: string }>
-  resume(sessionId: string, feedback: string): Promise<void>
+  start(job: Job, runNumber: number): Promise<{ sessionId: string }>
+  resume(sessionId: string, feedback: string, run: RunRef): Promise<void>
   cancel(jobId: string): Promise<void>
 }
 ```

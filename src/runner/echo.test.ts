@@ -29,6 +29,9 @@ function makeJob(overrides: Partial<Job> = {}): Job {
   }
 }
 
+// The echo runner finds its own folder from the session id, so the run it is handed is not used.
+const RUN = { jobId: 'unused', jobIdentifier: 'TST-0', runNumber: 1 }
+
 describe('echo runner', () => {
   let runsDir: string
 
@@ -94,7 +97,7 @@ describe('echo runner', () => {
     await runner.start(job, 1)
     const { sessionId } = await runner.start(job, 2)
 
-    await runner.resume(sessionId, 'please add a test')
+    await runner.resume(sessionId, 'please add a test', RUN)
 
     expect(readTranscript(runner.transcriptDir(job.id, 1), 0)).toHaveLength(4)
     const envelopes = readTranscript(runner.transcriptDir(job.id, 2), 0)
@@ -170,7 +173,7 @@ describe('echo runner', () => {
     const { sessionId } = await first.start(job, 1)
 
     const second = createEchoRunner({ runsDir, clock })
-    await second.resume(sessionId, 'feedback after restart')
+    await second.resume(sessionId, 'feedback after restart', RUN)
 
     const envelopes = readTranscript(second.transcriptDir(job.id, 1), 0)
     expect(envelopes).toHaveLength(5)
@@ -180,12 +183,12 @@ describe('echo runner', () => {
   it('rejects resuming a session that is not an echo session', async () => {
     const runner = createEchoRunner({ runsDir, clock })
 
-    await expect(runner.resume('missing-session', 'feedback')).rejects.toThrow(/unknown echo session/i)
+    await expect(runner.resume('missing-session', 'feedback', RUN)).rejects.toThrow(/unknown echo session/i)
   })
 
   it('rejects resuming a session whose job has no run to resume', async () => {
     const runner = createEchoRunner({ runsDir, clock })
 
-    await expect(runner.resume('echo-never-ran', 'feedback')).rejects.toThrow(/no run/i)
+    await expect(runner.resume('echo-never-ran', 'feedback', RUN)).rejects.toThrow(/no run/i)
   })
 })
