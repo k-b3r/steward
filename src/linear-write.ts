@@ -34,11 +34,15 @@ const ISSUE_STATE_QUERY = `query StewardIssueState($id: String!) {
   }
 }`
 
-const ISSUE_ATTACHMENTS_QUERY = `query StewardIssueAttachments($id: String!) {
+const ISSUE_ATTACHMENTS_QUERY = `query StewardIssueAttachments($id: String!, $after: String) {
   issue(id: $id) {
-    attachments {
+    attachments(first: 100, after: $after) {
       nodes {
         url
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -207,15 +211,35 @@ export function createLinearWriter(options: LinearWriterOptions): LinearWriter {
   }
 
   async function attachPullRequest(issueId: string, url: string, title: string): Promise<'attached' | 'already'> {
-    const existing = readData(
-      await request('issueAttachments', ISSUE_ATTACHMENTS_QUERY, { id: issueId }),
-      'issueAttachments',
-      'issue',
-    )
-    const attachments = existing.attachments
-    const nodes: unknown = isJsonObject(attachments) ? attachments.nodes : undefined
-    if (Array.isArray(nodes) && nodes.some((node) => isJsonObject(node) && node.url === url)) {
-      return 'already'
+    // Every page is read before writing: a ticket with more attachments than one page must not get
+    // a second link to the same pull request.
+    let after: string | null = null
+    const seen = new Set<string>()
+    for (;;) {
+      const existing = readData(
+        await request('issueAttachments', ISSUE_ATTACHMENTS_QUERY, { id: issueId, after }),
+        'issueAttachments',
+        'issue',
+      )
+      const attachments = existing.attachments
+      const nodes: unknown = isJsonObject(attachments) ? attachments.nodes : undefined
+      if (Array.isArray(nodes) && nodes.some((node) => isJsonObject(node) && node.url === url)) {
+        return 'already'
+      }
+
+      const pageInfo: unknown = isJsonObject(attachments) ? attachments.pageInfo : undefined
+      if (!isJsonObject(pageInfo) || pageInfo.hasNextPage !== true) break
+      const endCursor: unknown = pageInfo.endCursor
+      if (typeof endCursor !== 'string' || endCursor === '') {
+        throw new Error(`Linear issueAttachments failed: hasNextPage without an endCursor for ${issueId}`)
+      }
+      // A cursor the server already served would make this loop run forever, so it is a failure,
+      // not something to retry.
+      if (seen.has(endCursor)) {
+        throw new Error(`Linear issueAttachments failed: repeated endCursor for ${issueId}`)
+      }
+      seen.add(endCursor)
+      after = endCursor
     }
 
     const payload = readData(
