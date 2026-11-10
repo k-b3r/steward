@@ -8,5 +8,6 @@
     "dashboard": {
       "project": ["src/**/*.{ts,tsx}"]
     }
-  }
+  },
+  "ignoreBinaries": ["podman"]
 }

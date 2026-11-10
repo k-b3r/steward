@@ -9,7 +9,7 @@ const configFile = process.env.STEWARD_CONFIG_FILE
 const file: Record<string, unknown> | undefined =
   configFile === undefined ? undefined : (JSON.parse(readFileSync(configFile, 'utf8')) as Record<string, unknown>)
 const config = loadConfig(process.env, file)
-const worker = composeWorker(config, (line) => process.stdout.write(`${line}\n`))
+const worker = composeWorker(config, (line) => process.stdout.write(`${line}\n`), process.env)
 
 async function shutdown(): Promise<void> {
   await worker.close()

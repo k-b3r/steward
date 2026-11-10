@@ -1,7 +1,7 @@
 // The real Podman effects the Pi runner needs: a spawned container and a kill. All the process
 // work lives here, so the runner itself stays a state machine over injected effects. The ambient
 // environment is passed in by the composition root; this file reads no environment of its own.
-import { spawn as spawnProcess } from 'node:child_process'
+import { execFile, spawn as spawnProcess } from 'node:child_process'
 
 import type { PiChild } from './pi'
 
@@ -58,4 +58,14 @@ export function createPodmanSpawn(ambient: Readonly<Record<string, string | unde
       },
     }
   }
+}
+
+/** Runs one `podman` command to completion and reports its exit code, never throwing on failure. */
+export function execPodman(args: string[]): Promise<{ code: number }> {
+  return new Promise((resolve) => {
+    execFile('podman', args, (error) => {
+      const code = error === null ? 0 : typeof error.code === 'number' ? error.code : 1
+      resolve({ code })
+    })
+  })
 }

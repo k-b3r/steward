@@ -12,8 +12,12 @@ import { cancelJob, confirmJob, decideAction, declineJob, reconsiderJob, retryJo
 import { createApp } from '../api/app'
 import { staticResponse } from '../platform/static'
 
-export function composeApi(config: Config, write: (line: string) => void) {
-  const ctx = createContext(config, write)
+export function composeApi(
+  config: Config,
+  write: (line: string) => void,
+  ambient: Readonly<Record<string, string | undefined>> = {},
+) {
+  const ctx = createContext(config, write, ambient)
   const { db, runner, queue } = ctx
 
   // The composition root is the only place that knows both the database and the HTTP layer.

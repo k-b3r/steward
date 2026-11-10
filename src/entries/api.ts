@@ -11,7 +11,7 @@ const configFile = process.env.STEWARD_CONFIG_FILE
 const file: Record<string, unknown> | undefined =
   configFile === undefined ? undefined : (JSON.parse(readFileSync(configFile, 'utf8')) as Record<string, unknown>)
 const config = loadConfig(process.env, file)
-const { app, logger, close } = composeApi(config, (line) => process.stdout.write(`${line}\n`))
+const { app, logger, close } = composeApi(config, (line) => process.stdout.write(`${line}\n`), process.env)
 
 const server = serve({ fetch: app.fetch, port: config.API_PORT, hostname: '127.0.0.1' }, (info) => {
   logger.info('API listening', { instance: config.INSTANCE, address: info.address, port: info.port })
