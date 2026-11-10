@@ -12,6 +12,7 @@ export default [
     pureCorePaths: [
       'src/transitions.ts',
       'src/branch-name.ts',
+      'src/claim-policy.ts',
       'src/allocate.ts',
       'src/linear-map.ts',
       'src/retry-policy.ts',
