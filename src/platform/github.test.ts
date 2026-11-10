@@ -334,29 +334,32 @@ describe('updatePrBody', () => {
 })
 
 describe('listOpenPrsForTicket', () => {
+  type RestPr = {
+    number: number
+    head: { ref: string }
+    title: string
+    draft: boolean
+    user: { login: string }
+  }
+  const pr = (number: number, ref: string, title: string, draft: boolean, login: string): RestPr => ({
+    number,
+    head: { ref },
+    title,
+    draft,
+    user: { login },
+  })
   const prs = [
-    { number: 7, headRefName: BRANCH, title: 'INV-1: claim', isDraft: true, author: { login: 'k-b3r' } },
-    { number: 8, headRefName: 'agent/INV-12', title: 'INV-12: other', isDraft: false, author: { login: 'k-b3r' } },
-    { number: 9, headRefName: 'agent/INV-3', title: 'fix [inv-1] in prose', isDraft: true, author: { login: 'them' } },
-    {
-      number: 10,
-      headRefName: 'agent/INV-3',
-      title: 'XINV-1 is another ticket',
-      isDraft: false,
-      author: { login: 'them' },
-    },
-    {
-      number: 11,
-      headRefName: 'agent/INV-1-keep-tokens',
-      title: 'unrelated',
-      isDraft: true,
-      author: { login: 'them' },
-    },
+    pr(7, BRANCH, 'INV-1: claim', true, 'k-b3r'),
+    pr(8, 'agent/INV-12', 'INV-12: other', false, 'k-b3r'),
+    pr(9, 'agent/INV-3', 'fix [inv-1] in prose', true, 'them'),
+    pr(10, 'agent/INV-3', 'XINV-1 is another ticket', false, 'them'),
+    pr(11, 'agent/INV-1-keep-tokens', 'unrelated', true, 'them'),
   ]
   const input = { repo: REPO, identifier: 'INV-1', ghAccount: ACCOUNT }
 
-  it('keeps PRs that name the ticket, on word boundaries and case-insensitively', async () => {
-    const { exec, calls } = ghExec(() => ({ stdout: JSON.stringify(prs) }))
+  it('pages through every open PR and maps the REST fields to the summary shape', async () => {
+    // Two pages, as `gh api --paginate --slurp` prints them: one array per page.
+    const { exec, calls } = ghExec(() => ({ stdout: JSON.stringify([prs.slice(0, 4), prs.slice(4)]) }))
 
     const result = await listOpenPrsForTicket({ exec }, input)
 
@@ -365,37 +368,39 @@ describe('listOpenPrsForTicket', () => {
       { number: 9, headRefName: 'agent/INV-3', title: 'fix [inv-1] in prose', isDraft: true, author: 'them' },
       { number: 11, headRefName: 'agent/INV-1-keep-tokens', title: 'unrelated', isDraft: true, author: 'them' },
     ])
-    const list = calls.find((call) => call.args[1] === 'list')
-    expect(list?.args).toEqual([
-      'pr',
-      'list',
-      '--repo',
-      REPO,
-      '--state',
-      'open',
-      '--json',
-      'number,headRefName,title,isDraft,author',
-      '--limit',
-      '100',
-    ])
-    expect(list?.args).not.toContain(TOKEN)
-    expect(list?.opts?.env?.GH_TOKEN).toBe(TOKEN)
+    const api = calls.find((call) => call.args[0] === 'api')
+    expect(api?.args).toEqual(['api', '--paginate', '--slurp', `repos/${REPO}/pulls?state=open&per_page=100`])
+    expect(api?.args).not.toContain(TOKEN)
+    expect(api?.opts?.env?.GH_TOKEN).toBe(TOKEN)
     // A different ticket with the same prefix is not a match.
     await expect(listOpenPrsForTicket({ exec }, { ...input, identifier: 'INV-7' })).resolves.toEqual([])
     await expect(listOpenPrsForTicket({ exec }, { ...input, identifier: 'INV-12' })).resolves.toHaveLength(1)
   })
 
+  it('keeps the word-boundary rule for title and branch matches', async () => {
+    // A single page, as gh prints it when it does not have to slurp more than one.
+    const { exec } = ghExec(() => ({ stdout: JSON.stringify(prs) }))
+
+    await expect(listOpenPrsForTicket({ exec }, input)).resolves.toHaveLength(3)
+    await expect(listOpenPrsForTicket({ exec }, { ...input, identifier: 'INV-12' })).resolves.toEqual([
+      { number: 8, headRefName: 'agent/INV-12', title: 'INV-12: other', isDraft: false, author: 'k-b3r' },
+    ])
+  })
+
   it('treats regex characters in an identifier literally', async () => {
-    const miss = ghExec(() => ({ stdout: JSON.stringify([{ ...prs[0], title: 'AxB ticket' }]) }))
+    const miss = ghExec(() => ({ stdout: JSON.stringify([[{ ...prs[0], title: 'AxB ticket' }]]) }))
     await expect(listOpenPrsForTicket({ exec: miss.exec }, { ...input, identifier: 'A.B' })).resolves.toEqual([])
 
-    const hit = ghExec(() => ({ stdout: JSON.stringify([{ ...prs[0], title: 'fix A.B now' }]) }))
+    const hit = ghExec(() => ({ stdout: JSON.stringify([[{ ...prs[0], title: 'fix A.B now' }]]) }))
     await expect(listOpenPrsForTicket({ exec: hit.exec }, { ...input, identifier: 'A.B' })).resolves.toHaveLength(1)
   })
 
   it('fails clearly on bad JSON and redacts a failed list', async () => {
     const bad = ghExec(() => ({ stdout: 'not json' }))
     await expect(listOpenPrsForTicket({ exec: bad.exec }, input)).rejects.toThrow(/did not return JSON/)
+
+    const wrongShape = ghExec(() => ({ stdout: JSON.stringify([[{ number: 1 }]]) }))
+    await expect(listOpenPrsForTicket({ exec: wrongShape.exec }, input)).rejects.toThrow(/unexpected shape/)
 
     const failed = ghExec(() => ({ code: 1, stderr: `HTTP 401 for ${TOKEN}` }))
     const error = await rejection(listOpenPrsForTicket({ exec: failed.exec }, input))
