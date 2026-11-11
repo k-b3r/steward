@@ -231,6 +231,8 @@ Flat shape: pure decision files sit beside the shell files. See `CONTEXT.md`.
 src/
   transitions.ts     pure job state machine
   branch-name.ts     pure job branch name
+  claim-policy.ts    pure: reuse, skip or claim given the open PRs for a ticket
+  claim.ts           the claim: identity, existing PRs, empty commit push, draft PR
   retry-policy.ts    pure backoff and failure-kind routing
   allocate.ts        pure slot allocation
   intake-policy.ts   pure intake rules: proposal, queued, baseline, burst cap

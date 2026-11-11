@@ -51,6 +51,9 @@ export const jobs = pgTable(
     updatedAt: timestamptz('updated_at').notNull(),
     /** The branch the claim pushed, set once at claim time; never recomputed from the identifier. */
     branch: text('branch'),
+    /** The draft pull request the claim opened, set with the branch. */
+    prNumber: integer('pr_number'),
+    prUrl: text('pr_url'),
   },
   (table) => [
     uniqueIndex('jobs_source_external_id_key').on(table.source, table.externalId),

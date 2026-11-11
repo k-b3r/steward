@@ -43,11 +43,14 @@ nothing a person sees; the last three change what a confirmed ticket does.
 
 - In `process-job.ts`, after the worktree is ready and before the runner starts, when `CLAIM_ENABLED`:
   1. the identity check (`checkIdentity`): a mismatch is a `setup` failure;
-  2. if an open PR already exists for the ticket by another author, skip the job (cancel it, reason
-     `existing pull request`), the rule from the brief;
+  2. if the owner's own account already has an open PR for the ticket that steward did not open,
+     skip the job (cancel it, reason `existing pull request`). PRs by other accounts are ignored;
   3. push an empty commit on the job branch and open a draft PR, then store the branch and number
      on the job and attach the PR link in Linear.
 - A failed claim means no agent starts, so the slot is released in the `finally` as today.
+- Status: the module is built and not wired (`src/claim.ts`, `src/claim-policy.ts`, `jobs.pr_number`
+  and `jobs.pr_url`, `WORKSPACE_REPO`; decision 42). The `process-job.ts` call, the skip
+  transition and the Linear link are still to do.
 - Proven by: integration tests against a fake `Exec` and one real run on the scratch repo.
 - Behavior change: a draft PR appears when a confirmed ticket starts, if enabled.
 

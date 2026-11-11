@@ -23,6 +23,7 @@
   "PI_IMAGE": "steward-pi:1.5.0",
   "PI_TURN_CAP": 40,
   "PI_TIMEOUT_MS": 1200000,
+  "WORKSPACE_REPO": "",
   "CLAIM_ENABLED": false,
   "VALIDATION_ENABLED": false
 }

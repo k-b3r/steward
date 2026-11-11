@@ -34,12 +34,29 @@ function toJob(row: JobWithSlot): Job {
     nextRunAt: row.job.nextRunAt,
     failureKind: row.job.failureKind,
     branch: row.job.branch,
+    prNumber: row.job.prNumber,
+    prUrl: row.job.prUrl,
   }
 }
 
 /** Records the branch a claim pushed. Set once, and never recomputed from the identifier. */
 export async function setJobBranch(db: Db, jobId: string, branch: string): Promise<void> {
   await db.update(jobs).set({ branch }).where(eq(jobs.id, jobId))
+}
+
+/** Records the claim's branch and draft PR together, so a job never has a branch without its PR. */
+export async function setJobPullRequest(
+  db: Db,
+  jobId: string,
+  pr: { branch: string; number: number; url: string },
+): Promise<void> {
+  await db.update(jobs).set({ branch: pr.branch, prNumber: pr.number, prUrl: pr.url }).where(eq(jobs.id, jobId))
+}
+
+/** Every PR number a job has stored: the PRs steward itself opened. */
+export async function knownPullRequestNumbers(db: Db): Promise<Set<number>> {
+  const rows = await db.select({ prNumber: jobs.prNumber }).from(jobs).where(isNotNull(jobs.prNumber))
+  return new Set(rows.flatMap((row) => (row.prNumber === null ? [] : [row.prNumber])))
 }
 
 /** Records Pi's session id for a run, so a resume after a restart can continue it. */
@@ -137,6 +154,8 @@ export async function insertJob(
         nextRunAt: null,
         failureKind: null,
         branch: null,
+        prNumber: null,
+        prUrl: null,
         createdAt: input.now,
         updatedAt: input.now,
       })
