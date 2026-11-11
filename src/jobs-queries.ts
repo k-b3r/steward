@@ -1,5 +1,6 @@
 // What a caller may read, shaped for the wire. The HTTP layer validates and serializes; it never
 // decides which fields are public, how many rows come back, or which buttons a state allows.
+import { buildDigest, WAITING_STATES, type Digest } from './digest'
 import { allowedActionsFor, type JobAction } from './jobs-commands'
 import type { ActionStatus, FailureKind, Job, JobEvent, JobState, PendingAction, Run, RunOutcome } from './types'
 
@@ -156,4 +157,13 @@ export async function listActions(
     limit,
   })
   return actions.map(toActionSummary)
+}
+
+/**
+ * Everything waiting on a person, read-only. Every row in a waiting state is read, without a limit:
+ * the store returns newest first, so a cap would drop the oldest rows, which the digest lists first.
+ */
+export async function getDigest(deps: QueryDeps, now: Date): Promise<Digest> {
+  const lists = await Promise.all(WAITING_STATES.map((state) => deps.store.listJobs({ state })))
+  return buildDigest({ jobs: lists.flat(), now })
 }

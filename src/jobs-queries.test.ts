@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { allowedActionsFor } from './jobs-commands'
-import { getJob, listActions, listEvents, listJobs, listRuns, type QueryStore } from './jobs-queries'
+import { getDigest, getJob, listActions, listEvents, listJobs, listRuns, type QueryStore } from './jobs-queries'
 import { JOB_STATES, type Job, type JobEvent, type JobState, type PendingAction, type Run } from './types'
 
 const NOW = new Date('2026-01-02T03:04:05.000Z')
@@ -248,5 +248,29 @@ describe('action views', () => {
 
     expect(pending).toHaveLength(1)
     expect(pending[0]).toMatchObject({ status: 'pending', createdAt: NOW.toISOString(), decidedAt: null })
+  })
+})
+
+describe('getDigest', () => {
+  it('reads every waiting state without a limit, and drops the rest', async () => {
+    const { deps, calls } = setup([
+      makeJob({ identifier: 'TST-1', state: 'proposed' }),
+      makeJob({ identifier: 'TST-2', state: 'failed' }),
+      makeJob({ identifier: 'TST-3', state: 'running' }),
+    ])
+
+    const digest = await getDigest(deps, NOW)
+
+    // No limit: the store returns newest first, so a cap would drop the oldest rows.
+    expect(calls.map((call) => call.filter)).toEqual([
+      { state: 'proposed' },
+      { state: 'pr_open' },
+      { state: 'in_review' },
+      { state: 'changes_requested' },
+      { state: 'ci_failed' },
+      { state: 'failed' },
+    ])
+    expect(digest.counts).toEqual({ proposals: 1, reviewing: 0, failed: 1 })
+    expect(digest.items.map((item) => item.identifier)).toEqual(['TST-1', 'TST-2'])
   })
 })

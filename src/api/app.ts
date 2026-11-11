@@ -11,6 +11,7 @@ import type { PendingAction } from '../types'
 import { toActionSummary } from '../jobs-queries'
 import type { ActionSummary, JobEventSummary, JobSummary, RunSummary } from '../jobs-queries'
 import { ActionNotFoundError, ActionNotPendingError, JobNotFoundError } from '../jobs-commands'
+import type { Digest } from '../digest'
 import type { Envelope } from '../runner/transcript'
 import { IllegalTransitionError } from '../transitions'
 import { ACTION_STATUSES, JOB_STATES } from '../types'
@@ -34,6 +35,7 @@ export type ApiReads = {
   listRuns(jobId: string): Promise<RunSummary[]>
   listEvents(jobId: string): Promise<JobEventSummary[]>
   listActions(filter?: { status?: string; limit?: number }): Promise<ActionSummary[]>
+  digest(): Promise<Digest>
 }
 
 export type ApiCommands = {
@@ -255,6 +257,9 @@ export function createApp(deps: AppDeps) {
     .post('/v1/jobs/:id/reconsider', zValidator('param', idParamSchema, rejectInvalid), async (c) => {
       const job = await commands.reconsider(c.req.valid('param').id)
       return c.json(await reload(reads, job.id))
+    })
+    .get('/v1/digest', async (c) => {
+      return c.json(await reads.digest())
     })
     .get('/v1/actions', zValidator('query', actionFilterSchema, rejectInvalid), async (c) => {
       const { status, limit } = c.req.valid('query')

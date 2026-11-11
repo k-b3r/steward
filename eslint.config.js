@@ -19,6 +19,7 @@ export default [
       'src/intake-policy.ts',
       'src/subagent-policy.ts',
       'src/runs.ts',
+      'src/digest.ts',
       'src/runner/pi-events.ts',
       'src/validation-policy.ts',
       'src/validate-git.ts',
