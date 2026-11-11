@@ -102,6 +102,27 @@ describe('loadConfig', () => {
     )
   })
 
+  it('runs the checks in the agent image unless another one is named', () => {
+    expect(loadConfig(env()).VALIDATION_IMAGE).toBe('steward-pi:1.5.0')
+    expect(loadConfig(env({ PI_IMAGE: 'pi:9' })).VALIDATION_IMAGE).toBe('pi:9')
+    expect(loadConfig(env({ PI_IMAGE: 'pi:9', VALIDATION_IMAGE: 'checks:1' })).VALIDATION_IMAGE).toBe('checks:1')
+    expect(loadConfig(env({ VALIDATION_IMAGE: '' })).VALIDATION_IMAGE).toBe('steward-pi:1.5.0')
+  })
+
+  it('requires the validation config file when validation is on', () => {
+    const message = errorMessage(() => loadConfig(env({ VALIDATION_ENABLED: 'true' })))
+
+    expect(message).toContain('VALIDATION_CONFIG_FILE')
+    const config = loadConfig(
+      env({
+        VALIDATION_ENABLED: 'true',
+        VALIDATION_CONFIG_FILE: '/home/you/steward-instances/personal/validation.json',
+      }),
+    )
+    expect(config.VALIDATION_ENABLED).toBe(true)
+    expect(config.VALIDATION_CONFIG_FILE).toBe('/home/you/steward-instances/personal/validation.json')
+  })
+
   it('refuses an unknown runner and values that could read as options', () => {
     expect(errorMessage(() => loadConfig(env({ RUNNER: 'claude' })))).toContain('RUNNER')
     expect(errorMessage(() => loadConfig(env({ PI_IMAGE: '--privileged' })))).toContain('PI_IMAGE')
@@ -207,6 +228,8 @@ describe('loadConfig', () => {
       { ALLOWED_ORIGINS: 'https://example.com,,http://localhost' },
       'ALLOWED_ORIGINS',
     ],
+    ['VALIDATION_CONFIG_FILE relative', { VALIDATION_CONFIG_FILE: 'validation.json' }, 'VALIDATION_CONFIG_FILE'],
+    ['VALIDATION_IMAGE looks like an option', { VALIDATION_IMAGE: '--privileged' }, 'VALIDATION_IMAGE'],
   ])('rejects %s', (_name, overrides, key) => {
     expect(errorMessage(() => loadConfig(env(overrides)))).toContain(key)
   })

@@ -4,6 +4,7 @@ import type { Exec } from './platform/github'
 import { parseValidationConfig, type ValidationConfig } from './validation-policy'
 import {
   collectChangedFiles,
+  loadValidationConfig,
   type RunChecksInput,
   type RunExec,
   runChecks,
@@ -15,6 +16,7 @@ import {
 const STATUS = 'A\0src/new.ts\0M\0src/changed.ts\0'
 const NUMSTAT = '3\t1\tsrc/new.ts\0' + '-\t-\tsrc/changed.ts\0'
 const WT = '/runs/BUY-41/1/worktree'
+const CONFIG_PATH = '/home/you/steward-instances/personal/validation.json'
 const FILES = [
   { status: 'A', path: 'src/new.ts', added: 3, deleted: 1 },
   { status: 'M', path: 'src/changed.ts', added: 0, deleted: 0 },
@@ -217,5 +219,33 @@ describe('validateWorktree', () => {
       kind: 'agent',
       reason: 'still failing after 3 runs: node exit 1',
     })
+  })
+})
+
+describe('loadValidationConfig', () => {
+  const readFile = (contents: string) => () => contents
+
+  it('reads the file through the injected reader and parses it', () => {
+    const config = loadValidationConfig(
+      readFile(JSON.stringify({ commands: [{ name: 'test', run: 'pnpm test' }] })),
+      CONFIG_PATH,
+    )
+
+    expect(config.commands).toEqual([{ name: 'test', run: 'pnpm test' }])
+    expect(config.maxRetries).toBe(2)
+    expect(config.diff.maxChangedLines).toBe(800)
+  })
+
+  it('names the path, never the contents, for bad JSON, an unreadable file or a schema failure', () => {
+    const badJson = () => loadValidationConfig(readFile('{"commands": [ oops SECRET-VALUE'), CONFIG_PATH)
+
+    expect(badJson).toThrow(`the validation config ${CONFIG_PATH} is not valid JSON`)
+    expect(() =>
+      loadValidationConfig(() => {
+        throw new Error('ENOENT: no such file or directory')
+      }, CONFIG_PATH),
+    ).toThrow(CONFIG_PATH)
+    expect(() => loadValidationConfig(readFile('{"commands": []}'), CONFIG_PATH)).toThrow(CONFIG_PATH)
+    expect(() => loadValidationConfig(readFile('{"commands": []}'), CONFIG_PATH)).toThrow(/commands/)
   })
 })

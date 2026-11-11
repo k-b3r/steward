@@ -244,9 +244,11 @@ src/
   digest.ts          pure digest of everything waiting on a person
   subagent-policy.ts pure sub-agent spawn limits and reap rules
   validation-policy.ts pure validator: diff rules, retry or fail after a run
+  validation-report.ts pure Markdown report for the pull request body
   validate-git.ts    pure diff parsers: name-status and numstat records
   validate-command.ts pure argv for one validation check in the Pi image
   validate.ts        the validation executor: stage, read the diff, run the checks, decide
+  publish.ts         validate, commit, push and report: the publish step, not wired yet
   types.ts           WorkItem, Job, JobState, FailureKind, the interfaces
   intake.ts          one poll: read the tracker, apply the policy, write jobs
   linear.ts          WorkFeed implementation: the Linear client (read only)
