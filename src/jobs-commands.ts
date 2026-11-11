@@ -18,6 +18,15 @@ export type CommandStore = {
     decision: 'approved' | 'rejected',
     opts: { now: Date; reason?: string },
   ): Promise<PendingAction>
+  /** Ends an approved action as `done` or `failed`. Only an approved one can finish. */
+  finishAction(id: string, outcome: 'done' | 'failed', opts: { now: Date; reason?: string }): Promise<PendingAction>
+  createAction(input: {
+    jobId: string
+    kind: string
+    payload: unknown
+    now: Date
+    reason?: string
+  }): Promise<PendingAction>
 }
 
 export type CommandDeps = {
@@ -25,12 +34,31 @@ export type CommandDeps = {
   clock: () => Date
   enqueue: (jobId: string) => Promise<void>
   cancelRun: (jobId: string) => Promise<void>
+  /**
+   * The tracker write a confirm makes. Absent unless LINEAR_WRITES_ENABLED: a confirm then moves
+   * the ticket. The writer refuses any state outside the instance's allow list, so `targetState`
+   * is one of them by construction.
+   */
+  linear?: {
+    moveToState(issueId: string, stateName: string): Promise<'moved' | 'already'>
+    targetState: string
+  }
+  /** Only what a command needs from a log; the composition passes its redacting logger. */
+  logger?: { warn(message: string, fields?: Record<string, unknown>): void }
 }
 
 export class JobNotFoundError extends Error {
   constructor(jobId: string) {
     super(`Unknown job: ${jobId}`)
     this.name = 'JobNotFoundError'
+  }
+}
+
+/** An approval that cannot be carried out here, so it is refused and the action stays pending. */
+export class ActionNotExecutableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ActionNotExecutableError'
   }
 }
 
@@ -97,12 +125,45 @@ export function allowedActionsFor(state: JobState): JobAction[] {
   return actions
 }
 
+/**
+ * Moves the ticket once the job is queued. A failed write never fails the confirm: the job is
+ * already in the queue, so the move becomes a pending action a person can retry.
+ */
+async function moveTicket(deps: CommandDeps, job: Job): Promise<void> {
+  const linear = deps.linear
+  if (linear === undefined) return
+  try {
+    await linear.moveToState(job.externalId, linear.targetState)
+  } catch (error) {
+    // The writer never puts the API key in a message, and the composition's logger redacts what it
+    // knows, so the reason is safe for an operator and for the person retrying.
+    const reason = error instanceof Error ? error.message : String(error)
+    deps.logger?.warn('Linear move failed; recording a pending action', {
+      source: 'jobs-commands',
+      jobId: job.id,
+      issueId: job.externalId,
+      state: linear.targetState,
+      reason,
+    })
+    // Recording the action can fail on its own (a database error). That rejects the confirm, because
+    // a retry nobody recorded would be silently lost; the job is queued either way.
+    await deps.store.createAction({
+      jobId: job.id,
+      kind: 'linear_move',
+      payload: { issueId: job.externalId, state: linear.targetState },
+      now: deps.clock(),
+      reason,
+    })
+  }
+}
+
 /** A confirmed proposal becomes a queued job and is delivered to the queue. */
 export async function confirmJob(deps: CommandDeps, id: string): Promise<Job> {
   const job = await load(deps, id)
   requireFrom(job, 'queued', CONFIRMABLE)
   const updated = await deps.store.transitionJob(id, 'queued', { now: deps.clock(), reason: 'confirmed' })
   await deps.enqueue(id)
+  await moveTicket(deps, updated)
   return updated
 }
 
@@ -141,7 +202,19 @@ export async function cancelJob(deps: CommandDeps, id: string): Promise<Job> {
   return deps.store.transitionJob(id, 'cancelled', { now: deps.clock(), reason: 'cancelled by hand' })
 }
 
-/** Approve or reject a pending outside write. Only a pending action can be decided, once. */
+/** What a `linear_move` action carries, as `moveTicket` recorded it. */
+function linearMovePayload(payload: unknown): { issueId: string; state: string } | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const { issueId, state } = payload as Record<string, unknown>
+  if (typeof issueId !== 'string' || issueId === '' || typeof state !== 'string' || state === '') return null
+  return { issueId, state }
+}
+
+/**
+ * Approve or reject a pending outside write. Only a pending action can be decided, once. Approving a
+ * `linear_move` carries it out: the move is retried, and the action ends `done`, or `failed` with the
+ * reason, so the button on the dashboard does what it says. Any other kind is only recorded.
+ */
 export async function decideAction(
   deps: CommandDeps,
   id: string,
@@ -155,5 +228,27 @@ export async function decideAction(
   if (action.status !== 'pending') {
     throw new ActionNotPendingError(action.status)
   }
-  return deps.store.decideAction(id, decision, { now: deps.clock(), reason })
+  if (decision === 'rejected' || action.kind !== 'linear_move') {
+    return deps.store.decideAction(id, decision, { now: deps.clock(), reason })
+  }
+
+  // Refuse before approving, so an approval that cannot run does not use up the action.
+  const linear = deps.linear
+  if (linear === undefined) {
+    throw new ActionNotExecutableError('Linear writes are not enabled, so this move cannot be retried')
+  }
+  const move = linearMovePayload(action.payload)
+  if (move === null) {
+    throw new ActionNotExecutableError('This move has no issue id and state to retry')
+  }
+
+  await deps.store.decideAction(id, 'approved', { now: deps.clock(), reason })
+  try {
+    await linear.moveToState(move.issueId, move.state)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    deps.logger?.warn('Linear move retry failed', { source: 'jobs-commands', actionId: id, reason: detail })
+    return deps.store.finishAction(id, 'failed', { now: deps.clock(), reason: detail })
+  }
+  return deps.store.finishAction(id, 'done', { now: deps.clock() })
 }

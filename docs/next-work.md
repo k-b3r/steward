@@ -11,8 +11,8 @@ Settled in that discussion:
 - A job can be resumed and ends only when its PR is merged.
 - `failed` counts as ongoing: it still blocks the ticket.
 - Every run is kept as its own record.
-- The list of a ticket's jobs and runs is in the dashboard and API only. Nothing is written to
-  Linear.
+- The list of a ticket's jobs and runs is in the dashboard and API only. Linear is written only by
+  a confirm, and only when `LINEAR_WRITES_ENABLED` is on (default off).
 
 ## 1. Record the design: a `ci_failed` state and per-run records
 

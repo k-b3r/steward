@@ -24,8 +24,9 @@ Steward turns tracker tickets into jobs and runs them in a safe order. Phase 1 i
 whole control loop works, from reading Linear to a finished job. The default runner is a stand-in
 "echo" stub; `RUNNER=pi` runs the real Pi agent in a Podman container (a real run on 2026-11-08 and
 a real resume on 2026-11-10 are recorded as fixtures). The agent edits its worktree only: nothing is
-committed or pushed to GitHub and nothing is written back to Linear. `resumeJob` exists, but nothing
-calls it yet. The next steps are the claim, validation and the push, in `docs/wiring-plan.md`.
+committed or pushed to GitHub, and Linear is written only when `LINEAR_WRITES_ENABLED` (default off)
+lets a confirm move its ticket. `resumeJob` exists, but nothing calls it yet. The next steps are the
+claim, validation and the push, in `docs/wiring-plan.md`.
 
 ## What works today
 
@@ -203,8 +204,8 @@ Each of these needs a run on the real box.
 
 ## Known limits
 
-- `ALLOWED_STATUSES` is read and validated but nothing uses it. It limits tracker moves, and
-  steward makes none until phase 4.
+- `ALLOWED_STATUSES` limits tracker moves. Only a confirm reads it, and only when
+  `LINEAR_WRITES_ENABLED` is on (default off).
 - The dashboard route skips the Host check and the token. Nothing secret may go in
   `DASHBOARD_DIR`. A symlink inside it can point outside.
 - The reconciler assumes one worker per instance.

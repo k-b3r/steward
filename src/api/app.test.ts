@@ -24,6 +24,7 @@ const CLOCK = new Date('2026-01-02T03:04:05.000Z')
 const JOB_ID = '11111111-1111-4111-8111-111111111111'
 const OTHER_JOB_ID = '22222222-2222-4222-8222-222222222222'
 const ACTION_ID = '33333333-3333-4333-8333-333333333333'
+const CREATED_ACTION_ID = '44444444-4444-4444-8444-444444444444'
 const MISSING_JOB_ID = '99999999-9999-4999-8999-999999999999'
 const MISSING_ACTION_ID = '88888888-8888-4888-8888-888888888888'
 
@@ -143,6 +144,27 @@ function createFakeStore(
       actions.set(id, updated)
       decisions.push({ id, decision, reason: opts.reason })
       return updated
+    },
+    async finishAction(id, outcome, opts) {
+      const action = actions.get(id)
+      if (action === undefined) throw new Error(`Unknown pending action: ${id}`)
+      const updated = { ...action, status: outcome, reason: opts.reason ?? action.reason }
+      actions.set(id, updated)
+      return updated
+    },
+    async createAction(input) {
+      const action: PendingAction = {
+        id: CREATED_ACTION_ID,
+        jobId: input.jobId,
+        kind: input.kind,
+        payload: input.payload,
+        status: 'pending',
+        reason: input.reason ?? null,
+        createdAt: input.now,
+        decidedAt: null,
+      }
+      actions.set(action.id, action)
+      return action
     },
   }
 }
