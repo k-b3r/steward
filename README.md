@@ -144,7 +144,7 @@ There is one env file per instance, at `~/steward-instances/<instance>/.env` (fi
 
 Three more keys, all non-secret. `BASE_BRANCH` is the branch each job starts from: a new branch named for the ticket (for example `INV-12`) is cut from `origin/<BASE_BRANCH>`, and it defaults to `main`. `DASHBOARD_DIR` is optional: set it to the absolute path of the built `dashboard/dist` and the API serves it from its own origin; unset means the API answers only `/v1`. `ALLOWED_STATUSES` is a comma-separated list of the tracker statuses the orchestrator may move a ticket into, default `In Progress`, and an empty list is a config error; the Linear writer refuses any other status.
 
-`LINEAR_WRITES_ENABLED` (default `false`) is the switch for the first tracker write. On, confirming a proposal also moves its ticket to the first of `ALLOWED_STATUSES`; the job is queued either way, so a failed move is recorded as a pending action rather than failing the confirm. Off, a confirm only queues the job and Linear is never called.
+`LINEAR_WRITES_ENABLED` (default `false`) is the switch for the first tracker write. On, confirming a proposal also moves its ticket to the first of `ALLOWED_STATUSES`; the job is queued either way, so a failed move is recorded as a pending action rather than failing the confirm, and approving that action retries the move. Off, a confirm only queues the job and Linear is never called.
 
 ### Which agent runs a job
 

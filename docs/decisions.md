@@ -950,7 +950,7 @@ steward's own database.
 - **A failed move never fails the confirm.** The job is already queued and enqueued, so rolling it
   back would lose the person's decision, and the queue message would still be in Redis. The error
   message becomes a pending action (`kind: 'linear_move'`, payload `{ issueId, state }`, reason the
-  message) that a person can retry. `deps.store.createAction` gained an optional `reason` for that;
+  message) that a person can retry by approving it. `deps.store.createAction` gained an optional `reason` for that;
   nothing else writes one. The writer never puts the API key in a message, so the reason holds no
   secret. One gap: if recording the action itself throws (a database error), the confirm rejects,
   because a retry nobody recorded would be silently lost. The job is queued either way.
@@ -967,10 +967,22 @@ Verified by unit tests with a fake writer (moved, already, a throw, and no write
 integration test that a failed move leaves the job `queued` with one pending action. No real write
 was run: trying one ticket and undoing it by hand is the next step.
 
-Not built: a path that acts on an approved `linear_move` action. The action is the record a person
-reads, and retrying the move by hand is enough for the first real ticket. The dashboard lists any
-pending action with approve and reject (`dashboard/src/pages.tsx`), so a `linear_move` action looks
-actionable there; approving it does not retry the move yet.
+**Approving a `linear_move` action retries the move** (the maintainer's decision, after the first
+review: record-only was refused because the dashboard offers Approve on every pending action, so a
+button that did nothing would lie). `decideAction` approves the action, calls `moveToState` with the
+recorded `{ issueId, state }`, and ends it `done`, or `failed` with the reason if the retry throws;
+a failed retry is returned as the action, not as an error, so the dashboard shows why. An approval
+that cannot run is refused and the action stays pending: Linear writes are not enabled, or the
+payload is not an issue id and a state (`ActionNotExecutableError`, a 409). Rejecting never calls
+Linear, and any other action kind is still only recorded. `finishAction` ends an approved action
+once, so a double click cannot overwrite an outcome. Nothing retries on its own: only a person
+approving does.
+
+One known gap: the action is approved, then the move runs, then `finishAction` records the outcome.
+If the process dies, or `finishAction` throws, between the approve and the finish, the action stays
+`approved`: off the pending list, with no outcome, and the move may or may not have happened.
+`GET /v1/actions?status=approved` lists them. Rare and visible, so it is left; a person checks the
+ticket in Linear.
 
 ### 44. One summary of what waits on a person, as data only
 
