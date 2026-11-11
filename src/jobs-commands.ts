@@ -18,6 +18,8 @@ export type CommandStore = {
     decision: 'approved' | 'rejected',
     opts: { now: Date; reason?: string },
   ): Promise<PendingAction>
+  /** Ends an approved action as `done` or `failed`. Only an approved one can finish. */
+  finishAction(id: string, outcome: 'done' | 'failed', opts: { now: Date; reason?: string }): Promise<PendingAction>
   createAction(input: {
     jobId: string
     kind: string
@@ -49,6 +51,14 @@ export class JobNotFoundError extends Error {
   constructor(jobId: string) {
     super(`Unknown job: ${jobId}`)
     this.name = 'JobNotFoundError'
+  }
+}
+
+/** An approval that cannot be carried out here, so it is refused and the action stays pending. */
+export class ActionNotExecutableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ActionNotExecutableError'
   }
 }
 
@@ -192,7 +202,19 @@ export async function cancelJob(deps: CommandDeps, id: string): Promise<Job> {
   return deps.store.transitionJob(id, 'cancelled', { now: deps.clock(), reason: 'cancelled by hand' })
 }
 
-/** Approve or reject a pending outside write. Only a pending action can be decided, once. */
+/** What a `linear_move` action carries, as `moveTicket` recorded it. */
+function linearMovePayload(payload: unknown): { issueId: string; state: string } | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const { issueId, state } = payload as Record<string, unknown>
+  if (typeof issueId !== 'string' || issueId === '' || typeof state !== 'string' || state === '') return null
+  return { issueId, state }
+}
+
+/**
+ * Approve or reject a pending outside write. Only a pending action can be decided, once. Approving a
+ * `linear_move` carries it out: the move is retried, and the action ends `done`, or `failed` with the
+ * reason, so the button on the dashboard does what it says. Any other kind is only recorded.
+ */
 export async function decideAction(
   deps: CommandDeps,
   id: string,
@@ -206,5 +228,27 @@ export async function decideAction(
   if (action.status !== 'pending') {
     throw new ActionNotPendingError(action.status)
   }
-  return deps.store.decideAction(id, decision, { now: deps.clock(), reason })
+  if (decision === 'rejected' || action.kind !== 'linear_move') {
+    return deps.store.decideAction(id, decision, { now: deps.clock(), reason })
+  }
+
+  // Refuse before approving, so an approval that cannot run does not use up the action.
+  const linear = deps.linear
+  if (linear === undefined) {
+    throw new ActionNotExecutableError('Linear writes are not enabled, so this move cannot be retried')
+  }
+  const move = linearMovePayload(action.payload)
+  if (move === null) {
+    throw new ActionNotExecutableError('This move has no issue id and state to retry')
+  }
+
+  await deps.store.decideAction(id, 'approved', { now: deps.clock(), reason })
+  try {
+    await linear.moveToState(move.issueId, move.state)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    deps.logger?.warn('Linear move retry failed', { source: 'jobs-commands', actionId: id, reason: detail })
+    return deps.store.finishAction(id, 'failed', { now: deps.clock(), reason: detail })
+  }
+  return deps.store.finishAction(id, 'done', { now: deps.clock() })
 }

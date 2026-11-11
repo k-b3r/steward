@@ -145,6 +145,13 @@ function createFakeStore(
       decisions.push({ id, decision, reason: opts.reason })
       return updated
     },
+    async finishAction(id, outcome, opts) {
+      const action = actions.get(id)
+      if (action === undefined) throw new Error(`Unknown pending action: ${id}`)
+      const updated = { ...action, status: outcome, reason: opts.reason ?? action.reason }
+      actions.set(id, updated)
+      return updated
+    },
     async createAction(input) {
       const action: PendingAction = {
         id: CREATED_ACTION_ID,

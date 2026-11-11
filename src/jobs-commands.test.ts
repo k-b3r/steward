@@ -8,6 +8,7 @@ import {
   cancelJob,
   confirmJob,
   decideAction,
+  ActionNotExecutableError,
   declineJob,
   reconsiderJob,
   retryJob,
@@ -81,6 +82,14 @@ function setup(input: { job?: Job; action?: PendingAction | null } = {}) {
       const updated = { ...action, status: decision, decidedAt: opts.now, reason: opts.reason ?? null }
       actions.set(id, updated)
       calls.push(`decide ${decision}`)
+      return updated
+    },
+    async finishAction(id, outcome, opts) {
+      const action = actions.get(id)
+      if (action === undefined) throw new Error(`Unknown pending action: ${id}`)
+      const updated = { ...action, status: outcome, reason: opts.reason ?? action.reason }
+      actions.set(id, updated)
+      calls.push(`finish ${outcome}`)
       return updated
     },
     async createAction(input) {
@@ -334,5 +343,83 @@ describe('decideAction', () => {
     const { deps } = setup({ action: makeAction({ status: 'approved' }) })
 
     await expect(decideAction(deps, makeAction().id, 'rejected')).rejects.toBeInstanceOf(ActionNotPendingError)
+  })
+})
+
+describe('decideAction on a linear_move', () => {
+  const MOVE = makeAction({ kind: 'linear_move', payload: { issueId: 'issue-1', state: 'In Progress' } })
+
+  function withLinear(moveToState: (issueId: string, state: string) => Promise<'moved' | 'already'>) {
+    const { deps, calls, actions } = setup({ action: MOVE })
+    return { deps: { ...deps, linear: { moveToState, targetState: 'In Progress' } }, calls, actions }
+  }
+
+  it('retries the recorded move when approved, and marks the action done', async () => {
+    const moves: [string, string][] = []
+    const { deps, calls } = withLinear(async (issueId, state) => {
+      moves.push([issueId, state])
+      return 'moved'
+    })
+
+    const action = await decideAction(deps, MOVE.id, 'approved')
+
+    expect(moves).toEqual([['issue-1', 'In Progress']])
+    expect(action.status).toBe('done')
+    expect(calls).toEqual(['decide approved', 'finish done'])
+  })
+
+  it('treats an already-moved ticket as done', async () => {
+    const { deps } = withLinear(async () => 'already')
+
+    expect((await decideAction(deps, MOVE.id, 'approved')).status).toBe('done')
+  })
+
+  it('marks the action failed with the reason when the retry throws, instead of rejecting the request', async () => {
+    const { deps, calls } = withLinear(async () => {
+      throw new Error('Linear is down')
+    })
+
+    const action = await decideAction(deps, MOVE.id, 'approved')
+
+    expect(action).toMatchObject({ status: 'failed', reason: 'Linear is down' })
+    expect(calls).toEqual(['decide approved', 'finish failed'])
+  })
+
+  it('does not move anything when rejected', async () => {
+    const moves: string[] = []
+    const { deps } = withLinear(async (issueId) => {
+      moves.push(issueId)
+      return 'moved'
+    })
+
+    const action = await decideAction(deps, MOVE.id, 'rejected', 'not now')
+
+    expect(action.status).toBe('rejected')
+    expect(moves).toEqual([])
+  })
+
+  it('refuses to approve, and leaves it pending, when Linear writes are not enabled', async () => {
+    const { deps, actions } = setup({ action: MOVE })
+
+    await expect(decideAction(deps, MOVE.id, 'approved')).rejects.toBeInstanceOf(ActionNotExecutableError)
+
+    expect(actions.get(MOVE.id)?.status).toBe('pending')
+  })
+
+  it('refuses a payload that is not an issue id and a state, and leaves it pending', async () => {
+    const bad = makeAction({ kind: 'linear_move', payload: { issueId: 5 } })
+    const { deps, actions } = setup({ action: bad })
+    const linear = { moveToState: async () => 'moved' as const, targetState: 'In Progress' }
+
+    await expect(decideAction({ ...deps, linear }, bad.id, 'approved')).rejects.toBeInstanceOf(ActionNotExecutableError)
+
+    expect(actions.get(bad.id)?.status).toBe('pending')
+  })
+
+  it('still just records an approval for a kind with no executor', async () => {
+    const { deps, calls } = setup({ action: makeAction() })
+
+    expect((await decideAction(deps, makeAction().id, 'approved')).status).toBe('approved')
+    expect(calls).toEqual(['decide approved'])
   })
 })

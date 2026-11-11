@@ -47,6 +47,8 @@ export function composeApi(
       ) => store.transitionJob(db, id, to, opts),
       decideAction: (id: string, decision: 'approved' | 'rejected', opts: { now: Date; reason?: string }) =>
         store.decideAction(db, id, decision, opts),
+      finishAction: (id: string, outcome: 'done' | 'failed', opts: { now: Date; reason?: string }) =>
+        store.finishAction(db, id, outcome, opts),
       createAction: (input: Parameters<typeof store.createAction>[1]) => store.createAction(db, input),
     },
     clock: ctx.clock,

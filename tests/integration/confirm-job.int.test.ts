@@ -2,8 +2,17 @@ import { sql } from 'drizzle-orm'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { migrateDb } from '../../src/db/migrate'
-import { createAction, getJob, insertJob, listActions, transitionJob } from '../../src/db/store'
-import { confirmJob, type CommandDeps, type CommandStore } from '../../src/jobs-commands'
+import {
+  createAction,
+  decideAction as storeDecideAction,
+  getAction,
+  finishAction as storeFinishAction,
+  getJob,
+  insertJob,
+  listActions,
+  transitionJob,
+} from '../../src/db/store'
+import { confirmJob, decideAction, type CommandDeps, type CommandStore } from '../../src/jobs-commands'
 import { closePool, createDb, createPool } from '../../src/platform/db'
 import type { WorkItem } from '../../src/types'
 
@@ -52,9 +61,10 @@ function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
 function commandDeps(overrides: Partial<CommandDeps> = {}): CommandDeps {
   const store: CommandStore = {
     getJob: (id) => getJob(db, id),
-    getAction: () => Promise.resolve(null),
+    getAction: (id) => getAction(db, id),
     transitionJob: (id, to, opts) => transitionJob(db, id, to, opts),
-    decideAction: () => Promise.reject(new Error('not used here')),
+    decideAction: (id, decision, opts) => storeDecideAction(db, id, decision, opts),
+    finishAction: (id, outcome, opts) => storeFinishAction(db, id, outcome, opts),
     createAction: (input) => createAction(db, input),
   }
   return {
@@ -108,5 +118,67 @@ describe('confirmJob', () => {
 
     expect((await getJob(db, job.id))?.state).toBe('queued')
     expect(await listActions(db)).toEqual([])
+  })
+})
+
+describe('approving a linear_move action', () => {
+  async function failedMove() {
+    const { job } = await insertJob(db, { item: makeItem(), state: 'proposed', maxAttempts: 3, now: T0 })
+    await confirmJob(
+      commandDeps({
+        linear: { targetState: 'In Progress', moveToState: () => Promise.reject(new Error('Linear is down')) },
+      }),
+      job.id,
+    )
+    const [action] = await listActions(db, { status: 'pending' })
+    return { job, action: action! }
+  }
+
+  it('retries the move and ends the action done, so it leaves the pending list', async () => {
+    const { action } = await failedMove()
+    const moves: [string, string][] = []
+
+    const result = await decideAction(
+      commandDeps({
+        linear: {
+          targetState: 'In Progress',
+          moveToState: (issueId, state) => {
+            moves.push([issueId, state])
+            return Promise.resolve('moved')
+          },
+        },
+      }),
+      action.id,
+      'approved',
+    )
+
+    expect(moves).toEqual([['issue-42', 'In Progress']])
+    expect(result.status).toBe('done')
+    expect(await listActions(db, { status: 'pending' })).toEqual([])
+    expect((await listActions(db, { status: 'done' })).map((a) => a.id)).toEqual([action.id])
+  })
+
+  it('ends the action failed, with the reason, when the retry fails too', async () => {
+    const { action } = await failedMove()
+
+    const result = await decideAction(
+      commandDeps({
+        linear: { targetState: 'In Progress', moveToState: () => Promise.reject(new Error('still down')) },
+      }),
+      action.id,
+      'approved',
+    )
+
+    expect(result).toMatchObject({ status: 'failed', reason: 'still down' })
+  })
+
+  it('cannot finish an action twice', async () => {
+    const { action } = await failedMove()
+    await storeDecideAction(db, action.id, 'approved', { now: T0 })
+    await storeFinishAction(db, action.id, 'done', { now: T0 })
+
+    await expect(storeFinishAction(db, action.id, 'failed', { now: T0, reason: 'late' })).rejects.toThrow(
+      /not approved/,
+    )
   })
 })
