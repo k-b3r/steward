@@ -37,6 +37,7 @@ function config(overrides: Partial<Config> = {}): Config {
     PI_MODEL_API_KEY_ENV: 'OPENCODE_API_KEY',
     CLAIM_ENABLED: false,
     VALIDATION_ENABLED: false,
+    VALIDATION_IMAGE: 'steward-pi:1.5.0',
     ...overrides,
   }
 }
