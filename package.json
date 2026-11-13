@@ -94,7 +94,7 @@
     ]
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.5",
+    "@hono/node-server": "^2.1.6",
     "@hono/zod-validator": "^0.9.1",
     "bullmq": "^6.5.0",
     "drizzle-orm": "^0.45.4",
