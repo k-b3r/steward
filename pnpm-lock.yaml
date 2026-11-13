@@ -13,8 +13,8 @@ importers:
   .:
     dependencies:
       '@hono/node-server':
-        specifier: ^2.1.5
-        version: 2.1.5(hono@4.13.14)
+        specifier: ^2.1.6
+        version: 2.1.6(hono@4.13.14)
       '@hono/zod-validator':
         specifier: ^0.9.1
         version: 0.9.1(hono@4.13.14)(zod@4.6.7)
@@ -45,7 +45,7 @@ importers:
         version: 10.0.1(eslint@10.13.0(jiti@2.7.0))
       '@k-b3r/agent-config':
         specifier: github:k-b3r/agent-config
-        version: https://codeload.github.com/k-b3r/agent-config/tar.gz/2d4f1fd9cd99f0d059e2f0aa4bc9e04f6fbd0dff(@eslint-community/eslint-plugin-eslint-comments@4.8.1(eslint@10.13.0(jiti@2.7.0)))(@eslint/js@10.0.1(eslint@10.13.0(jiti@2.7.0)))(dependency-cruiser@18.7.0)(eslint-config-prettier@10.1.8(eslint@10.13.0(jiti@2.7.0)))(eslint@10.13.0(jiti@2.7.0))(globals@17.13.0)(typescript-eslint@8.72.1(eslint@10.13.0(jiti@2.7.0))(typescript@5.9.3))(typescript@5.9.3)
+        version: https://codeload.github.com/k-b3r/agent-config/tar.gz/0a6245dbd6973080d0113ef452fed3c31b3d3b59(@eslint-community/eslint-plugin-eslint-comments@4.8.1(eslint@10.13.0(jiti@2.7.0)))(@eslint/js@10.0.1(eslint@10.13.0(jiti@2.7.0)))(dependency-cruiser@18.7.0)(eslint-config-prettier@10.1.8(eslint@10.13.0(jiti@2.7.0)))(eslint@10.13.0(jiti@2.7.0))(globals@17.13.0)(typescript-eslint@8.72.1(eslint@10.13.0(jiti@2.7.0))(typescript@5.9.3))(typescript@5.9.3)
       '@stryker-mutator/core':
         specifier: ^10.1.1
         version: 10.1.1(@types/node@22.20.5)
@@ -788,8 +788,8 @@ packages:
   '@fontsource/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==}
 
-  '@hono/node-server@2.1.5':
-    resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
+  '@hono/node-server@2.1.6':
+    resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4 || ^5.0.0-0
@@ -976,8 +976,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@k-b3r/agent-config@https://codeload.github.com/k-b3r/agent-config/tar.gz/2d4f1fd9cd99f0d059e2f0aa4bc9e04f6fbd0dff':
-    resolution: {tarball: https://codeload.github.com/k-b3r/agent-config/tar.gz/2d4f1fd9cd99f0d059e2f0aa4bc9e04f6fbd0dff}
+  '@k-b3r/agent-config@https://codeload.github.com/k-b3r/agent-config/tar.gz/0a6245dbd6973080d0113ef452fed3c31b3d3b59':
+    resolution: {tarball: https://codeload.github.com/k-b3r/agent-config/tar.gz/0a6245dbd6973080d0113ef452fed3c31b3d3b59}
     version: 0.1.0
     hasBin: true
     peerDependencies:
@@ -2362,6 +2362,7 @@ packages:
 
   node-abort-controller@3.1.1:
     resolution: {integrity: sha512-AGK2yQKIjRuqnc6VkX2Xj5d+QW8xZ87pa1UK6yA6ouUyuxfHuMP6umE5QK7UmTeOAymo+Zx1Fxiuw9rVx8taHQ==}
+    deprecated: This package is no longer needed on supported Node.js versions. Node.js 16+ includes AbortController and AbortSignal as built-in globals. All Node.js versions requiring this polyfill are end-of-life. Use the built-in globals instead.
 
   node-gyp-build-optional-packages@5.2.2:
     resolution: {integrity: sha512-s+w+rBWnpTMwSFbaE0UXsRlg7hU4FjekKU4eyAih5T8nJuNZT1nNsskXpxmeqSK9UzkBl6UgRlnKc8hz8IEqOw==}
@@ -3482,7 +3483,7 @@ snapshots:
 
   '@fontsource/jetbrains-mono@5.3.0': {}
 
-  '@hono/node-server@2.1.5(hono@4.13.14)':
+  '@hono/node-server@2.1.6(hono@4.13.14)':
     dependencies:
       hono: 4.13.14
 
@@ -3652,7 +3653,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@k-b3r/agent-config@https://codeload.github.com/k-b3r/agent-config/tar.gz/2d4f1fd9cd99f0d059e2f0aa4bc9e04f6fbd0dff(@eslint-community/eslint-plugin-eslint-comments@4.8.1(eslint@10.13.0(jiti@2.7.0)))(@eslint/js@10.0.1(eslint@10.13.0(jiti@2.7.0)))(dependency-cruiser@18.7.0)(eslint-config-prettier@10.1.8(eslint@10.13.0(jiti@2.7.0)))(eslint@10.13.0(jiti@2.7.0))(globals@17.13.0)(typescript-eslint@8.72.1(eslint@10.13.0(jiti@2.7.0))(typescript@5.9.3))(typescript@5.9.3)':
+  '@k-b3r/agent-config@https://codeload.github.com/k-b3r/agent-config/tar.gz/0a6245dbd6973080d0113ef452fed3c31b3d3b59(@eslint-community/eslint-plugin-eslint-comments@4.8.1(eslint@10.13.0(jiti@2.7.0)))(@eslint/js@10.0.1(eslint@10.13.0(jiti@2.7.0)))(dependency-cruiser@18.7.0)(eslint-config-prettier@10.1.8(eslint@10.13.0(jiti@2.7.0)))(eslint@10.13.0(jiti@2.7.0))(globals@17.13.0)(typescript-eslint@8.72.1(eslint@10.13.0(jiti@2.7.0))(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
       '@eslint-community/eslint-plugin-eslint-comments': 4.8.1(eslint@10.13.0(jiti@2.7.0))
       '@eslint/js': 10.0.1(eslint@10.13.0(jiti@2.7.0))
