@@ -42,6 +42,26 @@
       "src/validate-command.ts",
       "src/runner/pi-command.ts"
     ],
+    "claudeReviewPaths": [
+      "src/transitions.ts",
+      "src/allocate.ts",
+      "src/linear-map.ts",
+      "src/retry-policy.ts",
+      "src/intake-policy.ts",
+      "src/subagent-policy.ts",
+      "src/runs.ts",
+      "src/validation-policy.ts",
+      "src/validate-git.ts",
+      "src/validate-command.ts",
+      "src/claim.ts",
+      "src/claim-policy.ts",
+      "src/worker/**",
+      "src/db/store.ts",
+      "src/db/intake-queries.ts",
+      "src/db/schema.ts",
+      "src/api/auth.ts",
+      "src/runner/pi-command.ts"
+    ],
     "generatedPaths": [
       "src/db/migrations/**",
       "dashboard/**"
