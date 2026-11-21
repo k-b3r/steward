@@ -9,6 +9,7 @@ import { readTranscript } from '../runner/transcript'
 import * as store from '../db/store'
 import { getDigest, getJob, listActions, listEvents, listJobs, listRuns } from '../jobs-queries'
 import { cancelJob, confirmJob, decideAction, declineJob, reconsiderJob, retryJob } from '../jobs-commands'
+import { createLinearWriter } from '../linear-write'
 import { createApp } from '../api/app'
 import { staticResponse } from '../platform/static'
 
@@ -19,6 +20,20 @@ export function composeApi(
 ) {
   const ctx = createContext(config, write, ambient)
   const { db, runner, queue } = ctx
+
+  // LINEAR_WRITES_ENABLED is the switch for the first tracker write: absent, a confirm moves
+  // nothing and behaves exactly as before.
+  const linearWriter = config.LINEAR_WRITES_ENABLED
+    ? createLinearWriter({
+        apiKey: config.LINEAR_API_KEY,
+        teamKey: config.LINEAR_TEAM_KEY,
+        allowedStatuses: config.ALLOWED_STATUSES,
+        fetch,
+        logger: ctx.logger,
+        sleep,
+        rand: Math.random,
+      })
+    : undefined
 
   // The composition root is the only place that knows both the database and the HTTP layer.
   const commandDeps = {
@@ -32,10 +47,22 @@ export function composeApi(
       ) => store.transitionJob(db, id, to, opts),
       decideAction: (id: string, decision: 'approved' | 'rejected', opts: { now: Date; reason?: string }) =>
         store.decideAction(db, id, decision, opts),
+      finishAction: (id: string, outcome: 'done' | 'failed', opts: { now: Date; reason?: string }) =>
+        store.finishAction(db, id, outcome, opts),
+      createAction: (input: Parameters<typeof store.createAction>[1]) => store.createAction(db, input),
     },
     clock: ctx.clock,
+    logger: ctx.logger,
     enqueue: (jobId: string) => queue.enqueue(jobId),
     cancelRun: (jobId: string) => runner.cancel(jobId),
+    ...(linearWriter === undefined
+      ? {}
+      : {
+          linear: {
+            moveToState: (issueId: string, stateName: string) => linearWriter.moveToState(issueId, stateName),
+            targetState: config.ALLOWED_STATUSES[0],
+          },
+        }),
   }
 
   const queryStore = {

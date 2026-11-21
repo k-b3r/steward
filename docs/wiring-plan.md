@@ -9,7 +9,9 @@ nothing a person sees; the last three change what a confirmed ticket does.
 - `src/runner/pi.ts` is the real runner. `src/bootstrap.ts` still builds `createEchoRunner`.
 - `src/validate.ts` runs the config's checks but nothing calls it.
 - `src/platform/github.ts` can push, open a draft PR and list a ticket's PRs; nothing calls it.
-- `src/linear-write.ts` can move a ticket's state and attach a PR link; nothing calls it.
+- `src/linear-write.ts` can move a ticket's state and attach a PR link. A confirm calls
+  `moveToState` when `LINEAR_WRITES_ENABLED` is on (decision 43); the PR-link attach still has
+  no caller.
 - `process-job.ts` does: slot, claim, worktree, run the runner, `done`. No PR, no push, no checks.
 - `jobs` has no `branch` and `runs` has no `sessionId`, so a claim and a resume have nowhere to live.
 
@@ -17,8 +19,9 @@ nothing a person sees; the last three change what a confirmed ticket does.
 
 - Config keys, all with defaults that keep today's behavior: `RUNNER` (`echo` | `pi`), `PI_IMAGE`
   (`steward-pi:1.5.0`), `PI_MODEL`, `PI_TURN_CAP` (40), `PI_TIMEOUT_MS` (20 min), `CLAIM_ENABLED`
-  (false), `VALIDATION_ENABLED` (false). `PI_MODEL_API_KEY` is a secret: environment only, like the others,
-  redacted and never logged.
+  (false), `VALIDATION_ENABLED` (false), and `LINEAR_WRITES_ENABLED` (false), the switch for the
+  confirm's Linear move (decision 43, added with that slice). `PI_MODEL_API_KEY` is a secret:
+  environment only, like the others, redacted and never logged.
 - Slices 3 and 4 add what only they need: `WORKSPACE_REPO` (the `owner/name` a claim opens the PR
   on) in slice 3, and `VALIDATION_CONFIG_FILE` plus `VALIDATION_IMAGE` in slice 4.
 - Migration: `jobs.branch` (text, null), `runs.session_id` (text, null). Drizzle schema plus the

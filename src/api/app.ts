@@ -10,7 +10,12 @@ import type { Context } from 'hono'
 import type { PendingAction } from '../types'
 import { toActionSummary } from '../jobs-queries'
 import type { ActionSummary, JobEventSummary, JobSummary, RunSummary } from '../jobs-queries'
-import { ActionNotFoundError, ActionNotPendingError, JobNotFoundError } from '../jobs-commands'
+import {
+  ActionNotExecutableError,
+  ActionNotFoundError,
+  ActionNotPendingError,
+  JobNotFoundError,
+} from '../jobs-commands'
 import type { Digest } from '../digest'
 import type { Envelope } from '../runner/transcript'
 import { IllegalTransitionError } from '../transitions'
@@ -162,7 +167,11 @@ export function createApp(deps: AppDeps) {
     if (error instanceof JobNotFoundError || error instanceof ActionNotFoundError) {
       return c.json({ error: 'not found' }, 404)
     }
-    if (error instanceof IllegalTransitionError || error instanceof ActionNotPendingError) {
+    if (
+      error instanceof IllegalTransitionError ||
+      error instanceof ActionNotPendingError ||
+      error instanceof ActionNotExecutableError
+    ) {
       return c.json({ error: error.message }, 409)
     }
     if (error instanceof HTTPException) {

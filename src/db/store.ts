@@ -398,7 +398,7 @@ export async function releaseLeakedSlots(db: Db): Promise<number[]> {
 
 export async function createAction(
   db: Db,
-  input: { jobId: string; kind: string; payload: unknown; now: Date },
+  input: { jobId: string; kind: string; payload: unknown; now: Date; reason?: string },
 ): Promise<PendingAction> {
   const [row] = await db
     .insert(pendingActions)
@@ -407,7 +407,7 @@ export async function createAction(
       kind: input.kind,
       payload: input.payload,
       status: 'pending',
-      reason: null,
+      reason: input.reason ?? null,
       createdAt: input.now,
       decidedAt: null,
     })
@@ -443,6 +443,27 @@ export async function decideAction(
     throw new Error(`Unknown pending action: ${id}`)
   }
   throw new Error(`Pending action ${id} is ${existing.status}, not pending`)
+}
+
+/**
+ * Records how an approved action ended: `done` or `failed`, with the reason a person needs. Only an
+ * approved action can finish, once, so a double click cannot overwrite an outcome.
+ */
+export async function finishAction(
+  db: Db,
+  id: string,
+  outcome: 'done' | 'failed',
+  opts: { now: Date; reason?: string },
+): Promise<PendingAction> {
+  const [row] = await db
+    .update(pendingActions)
+    .set({ status: outcome, reason: opts.reason ?? null, decidedAt: opts.now })
+    .where(and(eq(pendingActions.id, id), eq(pendingActions.status, 'approved')))
+    .returning()
+  if (row === undefined) {
+    throw new Error(`Pending action ${id} is not approved, so it cannot finish`)
+  }
+  return toPendingAction(row)
 }
 
 export async function listActions(db: Db, filter: { status?: string; limit?: number } = {}): Promise<PendingAction[]> {

@@ -124,7 +124,8 @@ for review never starve the worker. Today a run goes `running → done` (echo by
   parallel. Raising it touches the "one worker per instance" assumption in the reconciler.
 - **No LLM in steward's control loop.** The lead and sub-agent split lives inside one job.
 - **The agent is Pi**, sub-agents are one-shot and spawned and reaped by steward.
-- **Nothing is written to Linear** yet; the draft PR is the visible claim (decision 7).
+- **Linear is written only by a confirm**, and only when `LINEAR_WRITES_ENABLED` is on (default
+  off); the draft PR is still the visible claim (decision 7).
 
 ## Check yourself
 

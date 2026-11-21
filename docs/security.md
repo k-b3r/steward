@@ -146,7 +146,7 @@ The work instance and the personal instance share the box but not state:
 - Before any push, the worker checks the clone's local `user.name`, `user.email` and
   `steward.account` against the instance config, and that gh holds a token for `GH_ACCOUNT`
   (`checkIdentity` in `src/platform/github.ts`). A mismatch fails the job with kind `setup`,
-  which is never retried. Nothing calls this yet; the write path is phase 4.
+  which is never retried. Nothing calls `checkIdentity` yet; the claim that does is not wired.
 
 The shared things are the box, the OS user, and the app checkout. The checkout is code only;
 every instance's data lives in its own folder.
