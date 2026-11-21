@@ -61,6 +61,10 @@ nothing a person sees; the last three change what a confirmed ticket does.
   the feedback (at most twice, in the same run). Exhausted: `agent` failure, nothing pushed.
 - The index: `collectChangedFiles` stages with `git add -A`, so the commit step must commit what is
   staged, not assume an empty index.
+- The module is in (`src/publish.ts`, decision `TBD-publish`): the loop, the commit of the staged
+  index, the push and the report, tested against a fake `Exec` and run once for real on the scratch
+  repo. What is left is the worker wiring, which is what this slice's behavior change describes:
+  point `processJob` at it and move the job to `pr_open`.
 - Proven by: integration tests for pass, retry twice, exhausted, and a forbidden path (no checks
   run, nothing pushed).
 - Behavior change: the draft PR now has the agent's commit and a report; the job ends at `pr_open`.

@@ -74,6 +74,13 @@ export type Config = {
   CLAIM_ENABLED: boolean
   /** Run the config's checks after the agent and before any push. */
   VALIDATION_ENABLED: boolean
+  /**
+   * The instance's validation config, an absolute path outside the target repo: the agent works in a
+   * worktree and must not be able to edit the checks it is judged by. Required when validation is on.
+   */
+  VALIDATION_CONFIG_FILE?: string
+  /** The image the checks run in; the agent image unless the instance names another one. */
+  VALIDATION_IMAGE: string
 }
 
 const RUNNER_KINDS = ['echo', 'pi'] as const
@@ -242,6 +249,23 @@ const configSchema = z.object({
   ),
   CLAIM_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
   VALIDATION_ENABLED: z.preprocess((value) => parseBoolean(value, false), z.boolean()),
+  VALIDATION_CONFIG_FILE: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .min(1, 'must not be empty')
+      .refine((value) => isAbsolute(value), 'must be an absolute path')
+      .optional(),
+  ),
+  // Unset means the agent image, which is filled in below: the default is another key's value, so
+  // it cannot be a schema default.
+  VALIDATION_IMAGE: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/, 'must be an image reference, not an option')
+      .optional(),
+  ),
 })
 
 /**
@@ -302,6 +326,8 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     WORKSPACE_REPO: pick('WORKSPACE_REPO', env, file),
     CLAIM_ENABLED: pick('CLAIM_ENABLED', env, file),
     VALIDATION_ENABLED: pick('VALIDATION_ENABLED', env, file),
+    VALIDATION_CONFIG_FILE: pick('VALIDATION_CONFIG_FILE', env, file),
+    VALIDATION_IMAGE: pick('VALIDATION_IMAGE', env, file),
   }
 
   const parsed = configSchema.safeParse(raw)
@@ -314,7 +340,11 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
     throw new Error(redactSecrets(message, providedSecretValues(env, file)))
   }
 
-  const config = parsed.data
+  const config: Config = {
+    ...parsed.data,
+    // The checks run in the agent image unless the instance names one for them.
+    VALIDATION_IMAGE: parsed.data.VALIDATION_IMAGE ?? parsed.data.PI_IMAGE,
+  }
   if (config.REDIS_QUEUE_URL === config.REDIS_SLOT_URL) {
     throw new Error('REDIS_QUEUE_URL and REDIS_SLOT_URL must point to different Redis instances')
   }
@@ -326,6 +356,12 @@ export function loadConfig(env: Record<string, string | undefined>, file: Record
   }
   if (config.CLAIM_ENABLED && config.WORKSPACE_REPO === undefined) {
     throw new Error('WORKSPACE_REPO must be set when CLAIM_ENABLED=true: the claim needs the owner/name to push to')
+  }
+  if (config.VALIDATION_ENABLED && config.VALIDATION_CONFIG_FILE === undefined) {
+    throw new Error(
+      'VALIDATION_CONFIG_FILE must be set when VALIDATION_ENABLED=true: the checks live in a JSON file in ' +
+        'the instance folder, outside the repo, so the agent cannot edit the checks it is judged by',
+    )
   }
   return config
 }

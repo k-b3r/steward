@@ -10,6 +10,7 @@ import {
   decideValidation,
   type DiffViolation,
   NEVER_RETRIED,
+  parseValidationConfig,
   type ValidationConfig,
   type ValidationDecision,
 } from './validation-policy'
@@ -17,6 +18,9 @@ import { buildCheckRunArgs, checkContainerName } from './validate-command'
 import { joinChangedFiles, parseDiffNameStatus, parseNumstat } from './validate-git'
 
 export type RunExec = (cmd: string, args: string[]) => Promise<{ code: number; output: string }>
+
+/** Reads one file. Injected, so this module touches no filesystem and the composition root owns it. */
+export type ReadFile = (path: string) => string
 
 type CheckLimits = { cpus: number; memoryMb: number; pidsLimit: number }
 type Clock = { clock: () => Date; sleep: (ms: number) => Promise<void> }
@@ -88,6 +92,10 @@ export async function collectChangedFiles(
   const nameStatus = await git(deps.exec, [...diff, '--name-status', '-z', input.baseRef])
   const numstat = await git(deps.exec, [...diff, '--numstat', '-z', input.baseRef])
   return joinChangedFiles(parseDiffNameStatus(nameStatus), parseNumstat(numstat))
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function keepTail(text: string): string {
@@ -178,5 +186,33 @@ export async function validateWorktree(
     decision: decideValidation({ results, violations, attempt: input.attempt, maxRetries: input.config.maxRetries }),
     results,
     violations,
+  }
+}
+
+/**
+ * Reads and parses the validation config at `path`, which lives in the instance folder and never in
+ * the repo: the agent must not be able to edit the checks that judge it. Bad JSON, a schema failure
+ * and an unreadable path all throw an Error naming the path and never the file's text.
+ */
+export function loadValidationConfig(readFile: ReadFile, path: string): ValidationConfig {
+  let contents: string
+  try {
+    contents = readFile(path)
+  } catch (error) {
+    throw new Error(`could not read the validation config ${path}: ${errorMessage(error)}`, { cause: error })
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(contents)
+  } catch {
+    // The parser's own message quotes the input, so it is dropped rather than reported.
+    throw new Error(`the validation config ${path} is not valid JSON`)
+  }
+
+  try {
+    return parseValidationConfig(parsed)
+  } catch (error) {
+    throw new Error(`the validation config ${path} is invalid: ${errorMessage(error)}`, { cause: error })
   }
 }

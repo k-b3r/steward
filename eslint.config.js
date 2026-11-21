@@ -22,6 +22,7 @@ export default [
       'src/digest.ts',
       'src/runner/pi-events.ts',
       'src/validation-policy.ts',
+      'src/validation-report.ts',
       'src/validate-git.ts',
       'src/validate-command.ts',
       'src/runner/pi-command.ts',

@@ -4,7 +4,7 @@ A running document. It says what steward can do today, what is left to do, and w
 decided or checked yet. Update it in the same pull request that changes the answer. Do not let
 it drift: a stale line here is worse than no line.
 
-Last updated: 2026-11-07, against `main` at `3830788`.
+Last updated: 2026-11-11, against `main` at `c61f021`.
 
 Other documents hold the reasons. This one holds the state.
 
@@ -47,7 +47,9 @@ Counts move with every pull request, so run `pnpm check`, `pnpm test:integration
   agent. Nothing spawns one yet.
 - A pure validation policy (`src/validation-policy.ts`): config, the diff rules and the retry
   decision. Its executor (`src/validate.ts`, with `src/validate-git.ts` and `src/validate-command.ts`)
-  exists and nothing calls it yet.
+  exists and nothing calls it yet. The publish step (`src/publish.ts`, with the pure
+  `src/validation-report.ts`) chains a validated worktree to a commit, a push and the PR report;
+  nothing calls it yet either.
 
 ### Data and queue
 
